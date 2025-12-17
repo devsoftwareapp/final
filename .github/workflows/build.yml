@@ -1,6 +1,9 @@
 name: Flutter Android Release APK
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -10,21 +13,51 @@ jobs:
       # 1️⃣ Repo klonla
       - uses: actions/checkout@v3
 
-      # 2️⃣ Flutter kurulumu
+      # 2️⃣ Flutter SDK’yı manuel indir ve PATH ekle
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: stable
+        run: |
+          git clone -b stable https://github.com/flutter/flutter.git $HOME/flutter
+          export PATH="$HOME/flutter/bin:$PATH"
+          flutter --version
 
-      # 3️⃣ Flutter bağımlılıklarını yükle
+      # 3️⃣ Tek sayfalık Flutter projesi oluştur (boşsa)
+      - name: Create minimal Flutter app
+        run: |
+          if [ ! -f "pubspec.yaml" ]; then
+            flutter create .
+            cat > lib/main.dart << 'EOF'
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Tek Sayfa Flutter')),
+        body: const Center(child: Text('Merhaba Flutter!')),
+      ),
+    );
+  }
+}
+EOF
+          fi
+
+      # 4️⃣ Flutter bağımlılıklarını yükle
       - name: Get dependencies
         run: flutter pub get
 
-      # 4️⃣ Temiz build ve release APK üret
+      # 5️⃣ Temiz build ve release APK üret
       - name: Build Android APK
         run: flutter build apk --release --target-platform android-arm64
 
-      # 5️⃣ APK’yı artifact olarak yükle
+      # 6️⃣ APK’yı artifact olarak yükle
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
