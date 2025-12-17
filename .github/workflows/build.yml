@@ -1,42 +1,32 @@
-name: Flutter Debug APK (arm64-v8a)
+name: Flutter Android Release APK
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
-  build_debug_arm64:
+  build-android:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      # 1️⃣ Repo klonla
+      - uses: actions/checkout@v3
 
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y curl unzip xz-utils git
+      # 2️⃣ Flutter kurulumu
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: stable
 
-      - name: Setup Flutter and build debug APK
-        run: |
-          # Flutter'ı clone et
-          git clone https://github.com/flutter/flutter.git -b stable --depth 1 $HOME/flutter
-          
-          # PATH'e ekle
-          export PATH="$HOME/flutter/bin:$PATH"
-          
-          # Flutter versiyon kontrolü
-          flutter --version
-          
-          # Paketleri yükle
-          flutter pub get
-          
-          # Debug APK üret
-          flutter build apk --debug --target-platform android-arm64
-        shell: bash
+      # 3️⃣ Flutter bağımlılıklarını yükle
+      - name: Get dependencies
+        run: flutter pub get
 
-      - name: Upload debug APK (arm64-v8a)
+      # 4️⃣ Temiz build ve release APK üret
+      - name: Build Android APK
+        run: flutter build apk --release --target-platform android-arm64
+
+      # 5️⃣ APK’yı artifact olarak yükle
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: debug-apk-arm64
-          path: build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
+          name: app-release-arm64
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
