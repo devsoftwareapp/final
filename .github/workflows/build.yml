@@ -1,0 +1,32 @@
+name: Flutter Debug APK (arm64-v8a)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build_debug_arm64:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build debug APK (arm64-v8a)
+        run: flutter build apk --debug --target-platform android-arm64
+
+      - name: Upload debug APK (arm64-v8a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk-arm64
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
