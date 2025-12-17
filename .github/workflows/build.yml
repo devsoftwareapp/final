@@ -25,7 +25,8 @@ jobs:
         run: |
           if [ ! -f "pubspec.yaml" ]; then
             flutter create .
-            cat > lib/main.dart << 'EOF'
+            mkdir -p lib
+            cat > lib/main.dart <<'EOF'
 import 'package:flutter/material.dart';
 
 void main() {
