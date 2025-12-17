@@ -17,17 +17,23 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y curl unzip xz-utils git
 
-      - name: Setup Flutter manually
+      - name: Setup Flutter and build debug APK
         run: |
+          # Flutter'ı clone et
           git clone https://github.com/flutter/flutter.git -b stable --depth 1 $HOME/flutter
-          echo "$HOME/flutter/bin" >> $GITHUB_PATH
+          
+          # PATH'e ekle
+          export PATH="$HOME/flutter/bin:$PATH"
+          
+          # Flutter versiyon kontrolü
           flutter --version
-
-      - name: Install Flutter packages
-        run: flutter pub get
-
-      - name: Build debug APK (arm64-v8a)
-        run: flutter build apk --debug --target-platform android-arm64
+          
+          # Paketleri yükle
+          flutter pub get
+          
+          # Debug APK üret
+          flutter build apk --debug --target-platform android-arm64
+        shell: bash
 
       - name: Upload debug APK (arm64-v8a)
         uses: actions/upload-artifact@v4
