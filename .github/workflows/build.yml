@@ -14,12 +14,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: stable
-
       - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y curl unzip xz-utils git
+
+      - name: Setup Flutter manually
+        run: |
+          git clone https://github.com/flutter/flutter.git -b stable --depth 1 $HOME/flutter
+          echo "$HOME/flutter/bin" >> $GITHUB_PATH
+          flutter --version
+
+      - name: Install Flutter packages
         run: flutter pub get
 
       - name: Build debug APK (arm64-v8a)
