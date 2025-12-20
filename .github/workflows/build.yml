@@ -21,7 +21,13 @@ jobs:
           if [ -f assets.zip ]; then
             mkdir -p /tmp/assets_zip
             unzip -o assets.zip -d /tmp/assets_zip
-            cp -r /tmp/assets_zip/* assets/
+
+            if [ -d /tmp/assets_zip/assets ]; then
+              cp -r /tmp/assets_zip/assets/* assets/
+            else
+              cp -r /tmp/assets_zip/* assets/
+            fi
+
             rm -rf /tmp/assets_zip
             rm -f assets.zip
           fi
