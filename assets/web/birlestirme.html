@@ -1,0 +1,1487 @@
+<!doctype html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>PDF Birleştirme | PDF Reader</title>
+  
+  <style>
+    /* Material Symbols Rounded - Local WebView Font */
+    @font-face {
+        font-family: 'Material Symbols Rounded';
+        src: url('fonts/MaterialSymbolsRounded.woff2') format('woff2');
+        font-weight: 100 700;
+        font-style: normal;
+    }
+
+    .material-symbols-rounded {
+        font-family: 'Material Symbols Rounded';
+        font-weight: normal;
+        font-style: normal;
+        font-size: 24px;
+        display: inline-block;
+        line-height: 1;
+        text-transform: none;
+        letter-spacing: normal;
+        word-wrap: normal;
+        white-space: nowrap;
+        direction: ltr;
+        -webkit-font-smoothing: antialiased;
+        font-variation-settings:
+            'FILL' 0,
+            'wght' 400,
+            'GRAD' 0,
+            'opsz' 48;
+    }
+    
+    /* --- 1. DEĞİŞKENLER --- */
+    :root {
+      --background: #e8e8e8;
+      --surface: #e8e8e8;
+      --primary: #E53935;
+      --secondary: #B71C1C;
+      --success: #4cc9f0;
+      --error: #f94144;
+      --text-primary: #0f172a;
+      --text-secondary: #64748b;
+      --border: #d4d4d4; 
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      --transition-fast: 150ms ease;
+      --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+      
+      --header-height: 64px;
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-full: 9999px;
+    }
+
+    [data-theme="dark"] {
+      --background: #0f172a;
+      --surface: #1e293b;
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --border: #334155;
+    }
+
+    /* --- 2. TEMEL AYARLAR --- */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; font-family: 'Roboto', sans-serif; background-color: var(--background); color: var(--text-primary); overflow: hidden; }
+    body { display: flex; flex-direction: column; }
+    .material-symbols-rounded { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; user-select: none; }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .gap-sm { gap: var(--spacing-sm); }
+    .font-semibold { font-weight: 600; }
+    .text-secondary { color: var(--text-secondary); }
+    .text-sm { font-size: 14px; }
+    .justify-between { justify-content: space-between; }
+    .flex-col { flex-direction: column; }
+    .mt-2 { margin-top: 8px; }
+    .mt-3 { margin-top: 12px; }
+    .mb-2 { margin-bottom: 8px; }
+    .text-center { text-align: center; }
+    .hidden { display: none !important; }
+
+    /* --- 3. ÜST BAR (HEADER) --- */
+    .top-bar-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: var(--header-height);
+        z-index: 100;
+        background: var(--surface);
+        transition: transform 0.3s ease, background-color 0.3s ease;
+        box-shadow: var(--shadow-md);
+    }
+    .app-header { 
+        height: var(--header-height); 
+        padding: 0 var(--spacing-lg); 
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between; 
+        border-bottom: 1px solid var(--border);
+        position: relative; 
+    }
+
+    .logo { 
+        width: 36px; 
+        height: 36px; 
+        border-radius: 50%; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        overflow: hidden; 
+        flex-shrink: 0;
+    } 
+    .logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .app-title { 
+      font-size: 20px; 
+      font-weight: 700; 
+      background: linear-gradient(to right, #B71C1C, #FF6961); 
+      -webkit-background-clip: text; 
+      -webkit-text-fill-color: transparent; 
+      background-clip: text; 
+    }
+    .icon-button { width: 40px; height: 40px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; transition: all var(--transition-fast); }
+    .icon-button:hover { background: rgba(0, 0, 0, 0.05); color: var(--text-primary); }
+    .icon-button.primary { background: var(--primary); color: white; }
+
+    /* --- 4. ANA İÇERİK ALANI --- */
+    .main-content {
+        padding-top: var(--header-height);
+        padding-bottom: 20px;
+        height: 100vh;
+        width: 100%;
+        overflow-y: auto; 
+        position: relative;
+        z-index: 1;
+        transition: padding 0.3s ease;
+    }
+    
+    .container {
+        max-width: 100%;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    /* --- 5. SEÇİM ALANI --- */
+    .selection-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding: 16px;
+        background: var(--surface);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+    }
+    
+    .selection-info {
+        font-size: 14px;
+        color: var(--text-primary);
+    }
+    
+    .selection-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .selection-action-btn {
+        padding: 8px 16px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text-primary);
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all var(--transition-fast);
+        white-space: nowrap;
+    }
+    
+    .selection-action-btn:hover {
+        background: rgba(0, 0, 0, 0.05);
+    }
+    
+    .selection-action-btn.primary {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+    
+    .selection-action-btn.primary:hover {
+        background: var(--secondary);
+    }
+
+    /* --- 6. PDF LİSTESİ --- */
+    .pdf-list-container {
+        margin: 20px 0;
+        max-height: 400px;
+        overflow-y: auto;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        background: var(--surface);
+    }
+    
+    .pdf-list {
+        padding: 16px;
+    }
+    
+    .pdf-item {
+        display: flex;
+        align-items: center;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        margin: 8px 0;
+        background: var(--surface);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+    
+    .pdf-item:hover {
+        background: rgba(0, 0, 0, 0.02);
+    }
+    
+    .pdf-item.selected {
+        background: rgba(229, 57, 53, 0.1);
+        border-color: var(--primary);
+    }
+    
+    .pdf-checkbox {
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--text-secondary);
+        border-radius: 4px;
+        margin-right: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    
+    .pdf-item.selected .pdf-checkbox {
+        background: var(--primary);
+        border-color: var(--primary);
+    }
+    
+    .pdf-item.selected .pdf-checkbox::after {
+        content: '✓';
+        color: white;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    
+    .pdf-info {
+        flex-grow: 1;
+        min-width: 0;
+    }
+    
+    .pdf-name {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 4px;
+    }
+    
+    .pdf-meta {
+        font-size: 11px;
+        color: var(--text-secondary);
+        display: flex;
+        gap: 8px;
+    }
+
+    /* --- 7. SEÇİLEN DOSYA LİSTESİ --- */
+    .selected-files-container {
+        margin: 20px 0;
+    }
+    
+    .selected-header {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 12px;
+        color: var(--text-primary);
+    }
+    
+    .selected-list {
+        margin: 12px 0;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    
+    .selected-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        margin: 8px 0;
+        background: var(--surface);
+        transition: all var(--transition-fast);
+    }
+    
+    .selected-name {
+        flex-grow: 1;
+        font-size: 14px;
+        word-break: break-all;
+        color: var(--text-primary);
+    }
+    
+    .remove-btn {
+        background: var(--error);
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        margin-left: 10px;
+        font-weight: 500;
+    }
+    
+    .remove-btn:active {
+        opacity: 0.8;
+    }
+
+    /* --- 8. BUTONLAR --- */
+    .button-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 24px;
+    }
+    
+    .btn {
+        background: var(--primary);
+        color: white;
+        border: none;
+        padding: 16px 20px;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all var(--transition-fast);
+        text-align: center;
+        width: 100%;
+    }
+    
+    .btn:disabled {
+        background: var(--text-secondary);
+        cursor: not-allowed;
+        opacity: 0.5;
+    }
+    
+    .btn:active:not(:disabled) {
+        transform: scale(0.98);
+        background: var(--secondary);
+    }
+    
+    .btn-secondary {
+        background: var(--text-secondary);
+    }
+    
+    .btn-success {
+        background: var(--success);
+    }
+
+    /* --- 9. İLERLEME VE BAŞARI MESAJLARI --- */
+    .progress {
+        margin: 20px 0;
+        text-align: center;
+        padding: 20px;
+        background: rgba(229, 57, 53, 0.1);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+    }
+    
+    .success {
+        margin: 20px 0;
+        text-align: center;
+        padding: 20px;
+        background: rgba(76, 201, 240, 0.1);
+        border-radius: var(--radius-md);
+        color: var(--success);
+        border: 1px solid var(--success);
+    }
+    
+    .success h3 {
+        margin-bottom: 8px;
+        font-size: 16px;
+    }
+    
+    .success p {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-top: 4px;
+    }
+
+    /* --- 10. BOŞ DURUM MESAJI --- */
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: var(--text-secondary);
+    }
+    
+    .empty-icon {
+        font-size: 48px;
+        margin-bottom: 16px;
+        opacity: 0.5;
+    }
+    
+    .empty-text {
+        font-size: 14px;
+    }
+
+    /* --- 11. DARK MOD ADJUSTMENTS --- */
+    [data-theme="dark"] .pdf-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    [data-theme="dark"] .btn {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+    
+    [data-theme="dark"] .progress {
+        background: rgba(255, 105, 97, 0.1);
+    }
+    
+    [data-theme="dark"] .success {
+        background: rgba(76, 201, 240, 0.15);
+    }
+
+    @media (min-width: 768px) {
+        .container {
+            max-width: 500px;
+        }
+        
+        .button-group {
+            flex-direction: row;
+        }
+        
+        .btn {
+            width: auto;
+            flex: 1;
+        }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="top-bar-container" id="topBar">
+    <header class="app-header">
+      <div class="flex items-center gap-sm">
+        <button class="icon-button" onclick="goBack()">
+          <span class="material-symbols-rounded">arrow_back</span>
+        </button>
+        <div class="logo">
+            <img src="logo/logo.png" alt="PDF Reader Logo">
+        </div>
+        <h1 class="app-title" id="pageTitle">PDF Birleştirme</h1>
+      </div>
+      <div class="flex items-center gap-sm">
+        <button class="icon-button" onclick="refreshPDFList()">
+          <span class="material-symbols-rounded">refresh</span>
+        </button>
+      </div>
+    </header>
+  </div>
+
+  <main class="main-content" id="mainContent">
+    <div class="container">
+      <!-- Seçim Header -->
+      <div class="selection-header">
+        <div class="selection-info" id="selectionInfo">PDF seçin (en az 2)</div>
+        <div class="selection-actions">
+          <button class="selection-action-btn" onclick="selectAllPDFs()" id="selectAllBtn">Tümünü Seç</button>
+          <button class="selection-action-btn" onclick="deselectAllPDFs()" id="deselectAllBtn">Seçimi Temizle</button>
+          <button class="selection-action-btn primary" onclick="selectFilesFromWebView()" id="selectFilesBtn">Dosya Seç</button>
+        </div>
+      </div>
+
+      <!-- Cihaz PDF Listesi -->
+      <div class="pdf-list-container">
+        <div class="pdf-list" id="pdfList">
+          <!-- PDF'ler buraya eklenecek -->
+        </div>
+      </div>
+
+      <!-- Seçilen Dosyalar Listesi -->
+      <div class="selected-files-container">
+        <div class="selected-header" id="selectedHeader">Seçilen PDF'ler: <span id="selectedCount">0</span></div>
+        <div class="selected-list" id="selectedList">
+          <!-- Seçilen PDF'ler buraya eklenecek -->
+        </div>
+      </div>
+
+      <!-- İlerleme Durumu -->
+      <div class="progress" id="progress" style="display: none;">
+        <p id="mergingPdfText">PDF'ler birleştiriliyor... <span id="progressText">0%</span></p>
+      </div>
+
+      <!-- Başarılı Mesajı -->
+      <div class="success" id="success" style="display: none;">
+        <h3 id="successMessage">PDF başarıyla birleştirildi!</h3>
+        <p id="savedToText">Download/PDF Reader klasörüne kaydedildi</p>
+      </div>
+
+      <!-- Butonlar -->
+      <div class="button-group">
+        <button class="btn" id="mergeBtn" disabled onclick="mergePDFs()">PDF BİRLEŞTİR</button>
+        <button class="btn btn-secondary" id="clearBtn" onclick="clearSelection()">SEÇİMİ TEMİZLE</button>
+        <button class="btn btn-success" id="saveBtn" style="display: none;" onclick="saveMergedPDF()">KAYDET</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Gizli File Input -->
+  <input type="file" id="webviewFileInput" multiple accept=".pdf" class="hidden">
+
+  <script src="pdf-lib.min.js"></script>
+  <script src="lang.js"></script>
+  <script>
+    // --- DEĞİŞKENLER ---
+    let devicePDFs = []; // Cihazdaki PDF'ler
+    let selectedPDFs = []; // Seçilen PDF'ler (fileObject içerir)
+    let mergedPdfBlob = null;
+
+    // --- TÜM DİL ÇEVİRİLERİ ---
+    const translations = {
+        "ar": {
+            "pageTitle": "دمج PDF",
+            "selectInfo": "اختر ملفات PDF (اثنان على الأقل)",
+            "selectAll": "اختر الكل",
+            "deselectAll": "مسح التحديد",
+            "selectedPDFs": "ملفات PDF المحددة:",
+            "mergingPdf": "جاري دمج ملفات PDF...",
+            "mergeSuccess": "تم دمج PDF بنجاح!",
+            "saveSuccess": "تم حفظ PDF بنجاح",
+            "remove": "إزالة",
+            "selectAtLeast2": "اختر ملفين PDF على الأقل!",
+            "savedTo": "تم الحفظ في مجلد التنزيلات/PDF Reader",
+            "mergeBtn": "دمج PDF",
+            "clearBtn": "مسح التحديد",
+            "saveBtn": "حفظ",
+            "noPDFs": "لم يتم العثور على ملفات PDF في جهازك",
+            "refresh": "تحديث",
+            "loadingPDFs": "جاري تحميل ملفات PDF...",
+            "errorLoading": "خطأ في تحميل ملفات PDF",
+            "permissionRequired": "يتطلب الوصول إلى ملفات PDF إذنًا",
+            "grantPermission": "منح الإذن",
+            "selectFiles": "اختر الملفات"
+        },
+        "bn": {
+            "pageTitle": "PDF মার্জ",
+            "selectInfo": "PDF নির্বাচন করুন (অন্তত 2)",
+            "selectAll": "সব নির্বাচন করুন",
+            "deselectAll": "নির্বাচন পরিষ্কার করুন",
+            "selectedPDFs": "নির্বাচিত PDF:",
+            "mergingPdf": "PDF মার্জ করা হচ্ছে...",
+            "mergeSuccess": "PDF সফলভাবে মার্জ হয়েছে!",
+            "saveSuccess": "PDF সফলভাবে সংরক্ষিত হয়েছে",
+            "remove": "অপসারণ",
+            "selectAtLeast2": "অন্তত 2টি PDF ফাইল নির্বাচন করুন!",
+            "savedTo": "ডাউনলোড/PDF রিডার ফোল্ডারে সংরক্ষিত",
+            "mergeBtn": "PDF মার্জ করুন",
+            "clearBtn": "নির্বাচন পরিষ্কার করুন",
+            "saveBtn": "সংরক্ষণ করুন",
+            "noPDFs": "আপনার ডিভাইসে কোন PDF পাওয়া যায়নি",
+            "refresh": "রিফ্রেশ করুন",
+            "loadingPDFs": "PDF লোড হচ্ছে...",
+            "errorLoading": "PDF লোড করতে ত্রুটি",
+            "permissionRequired": "PDF ফাইল অ্যাক্সেসের জন্য অনুমতি প্রয়োজন",
+            "grantPermission": "অনুমতি দিন",
+            "selectFiles": "ফাইল নির্বাচন করুন"
+        },
+        "de": {
+            "pageTitle": "PDF Zusammenführen",
+            "selectInfo": "PDFs auswählen (mindestens 2)",
+            "selectAll": "Alle auswählen",
+            "deselectAll": "Auswahl löschen",
+            "selectedPDFs": "Ausgewählte PDFs:",
+            "mergingPdf": "PDFs werden zusammengeführt...",
+            "mergeSuccess": "PDF erfolgreich zusammengeführt!",
+            "saveSuccess": "PDF erfolgreich gespeichert",
+            "remove": "Entfernen",
+            "selectAtLeast2": "Wählen Sie mindestens 2 PDF-Dateien aus!",
+            "savedTo": "Im Download/PDF Reader-Ordner gespeichert",
+            "mergeBtn": "PDF ZUSAMMENFÜHREN",
+            "clearBtn": "AUSWAHL LÖSCHEN",
+            "saveBtn": "SPEICHERN",
+            "noPDFs": "Keine PDFs auf Ihrem Gerät gefunden",
+            "refresh": "Aktualisieren",
+            "loadingPDFs": "PDFs werden geladen...",
+            "errorLoading": "Fehler beim Laden der PDFs",
+            "permissionRequired": "Zugriff auf PDF-Dateien erfordert Berechtigung",
+            "grantPermission": "Berechtigung erteilen",
+            "selectFiles": "Dateien auswählen"
+        },
+        "en": {
+            "pageTitle": "PDF Merge",
+            "selectInfo": "Select PDFs (at least 2)",
+            "selectAll": "Select All",
+            "deselectAll": "Clear Selection",
+            "selectedPDFs": "Selected PDFs:",
+            "mergingPdf": "Merging PDFs...",
+            "mergeSuccess": "PDF merged successfully!",
+            "saveSuccess": "PDF Successfully Saved",
+            "remove": "Remove",
+            "selectAtLeast2": "Select at least 2 PDF files!",
+            "savedTo": "Saved to Download/PDF Reader folder",
+            "mergeBtn": "MERGE PDF",
+            "clearBtn": "CLEAR SELECTION",
+            "saveBtn": "SAVE",
+            "noPDFs": "No PDFs found on your device",
+            "refresh": "Refresh",
+            "loadingPDFs": "Loading PDFs...",
+            "errorLoading": "Error loading PDFs",
+            "permissionRequired": "PDF file access requires permission",
+            "grantPermission": "Grant Permission",
+            "selectFiles": "Select Files"
+        },
+        "es": {
+            "pageTitle": "Combinar PDF",
+            "selectInfo": "Seleccionar PDFs (al menos 2)",
+            "selectAll": "Seleccionar todo",
+            "deselectAll": "Limpiar selección",
+            "selectedPDFs": "PDFs seleccionados:",
+            "mergingPdf": "Combinando PDFs...",
+            "mergeSuccess": "¡PDF combinado exitosamente!",
+            "saveSuccess": "PDF guardado exitosamente",
+            "remove": "Eliminar",
+            "selectAtLeast2": "¡Seleccione al menos 2 archivos PDF!",
+            "savedTo": "Guardado en carpeta Descargar/PDF Reader",
+            "mergeBtn": "COMBINAR PDF",
+            "clearBtn": "LIMPIAR SELECCIÓN",
+            "saveBtn": "GUARDAR",
+            "noPDFs": "No se encontraron PDFs en su dispositivo",
+            "refresh": "Actualizar",
+            "loadingPDFs": "Cargando PDFs...",
+            "errorLoading": "Error al cargar PDFs",
+            "permissionRequired": "El acceso a archivos PDF requiere permiso",
+            "grantPermission": "Conceder permiso",
+            "selectFiles": "Seleccionar archivos"
+        },
+        "fr": {
+            "pageTitle": "Fusionner PDF",
+            "selectInfo": "Sélectionner des PDF (au moins 2)",
+            "selectAll": "Tout sélectionner",
+            "deselectAll": "Effacer la sélection",
+            "selectedPDFs": "PDFs sélectionnés:",
+            "mergingPdf": "Fusion des PDF...",
+            "mergeSuccess": "PDF fusionné avec succès !",
+            "saveSuccess": "PDF enregistré avec succès",
+            "remove": "Supprimer",
+            "selectAtLeast2": "Sélectionnez au moins 2 fichiers PDF !",
+            "savedTo": "Enregistré dans le dossier Télécharger/PDF Reader",
+            "mergeBtn": "FUSIONNER PDF",
+            "clearBtn": "EFFACER SÉLECTION",
+            "saveBtn": "ENREGISTRER",
+            "noPDFs": "Aucun PDF trouvé sur votre appareil",
+            "refresh": "Actualiser",
+            "loadingPDFs": "Chargement des PDF...",
+            "errorLoading": "Erreur de chargement des PDF",
+            "permissionRequired": "L'accès aux fichiers PDF nécessite une autorisation",
+            "grantPermission": "Accorder l'autorisation",
+            "selectFiles": "Sélectionner des fichiers"
+        },
+        "hi": {
+            "pageTitle": "PDF मर्ज",
+            "selectInfo": "PDF चुनें (कम से कम 2)",
+            "selectAll": "सभी चुनें",
+            "deselectAll": "चयन साफ करें",
+            "selectedPDFs": "चयनित PDF:",
+            "mergingPdf": "PDF मर्ज किए जा रहे हैं...",
+            "mergeSuccess": "PDF सफलतापूर्वक मर्ज हो गया!",
+            "saveSuccess": "PDF सफलतापूर्वक सहेजा गया",
+            "remove": "हटाएं",
+            "selectAtLeast2": "कम से कम 2 PDF फ़ाइलें चुनें!",
+            "savedTo": "डाउनलोड/PDF रीडर फोल्डर में सहेजा गया",
+            "mergeBtn": "PDF मर्ज करें",
+            "clearBtn": "चयन साफ करें",
+            "saveBtn": "सहेजें",
+            "noPDFs": "आपके डिवाइस पर कोई PDF नहीं मिला",
+            "refresh": "ताज़ा करें",
+            "loadingPDFs": "PDF लोड हो रहे हैं...",
+            "errorLoading": "PDF लोड करने में त्रुटि",
+            "permissionRequired": "PDF फ़ाइल पहुंच के लिए अनुमति आवश्यक है",
+            "grantPermission": "अनुमति दें",
+            "selectFiles": "फ़ाइलें चुनें"
+        },
+        "id": {
+            "pageTitle": "Gabungkan PDF",
+            "selectInfo": "Pilih PDF (minimal 2)",
+            "selectAll": "Pilih Semua",
+            "deselectAll": "Hapus Pilihan",
+            "selectedPDFs": "PDF Terpilih:",
+            "mergingPdf": "Menggabungkan PDF...",
+            "mergeSuccess": "PDF berhasil digabungkan!",
+            "saveSuccess": "PDF Berhasil Disimpan",
+            "remove": "Hapus",
+            "selectAtLeast2": "Pilih setidaknya 2 file PDF!",
+            "savedTo": "Disimpan di folder Unduh/PDF Reader",
+            "mergeBtn": "GABUNGKAN PDF",
+            "clearBtn": "HAPUS PILIHAN",
+            "saveBtn": "SIMPAN",
+            "noPDFs": "Tidak ada PDF ditemukan di perangkat Anda",
+            "refresh": "Segarkan",
+            "loadingPDFs": "Memuat PDF...",
+            "errorLoading": "Kesalahan memuat PDF",
+            "permissionRequired": "Akses file PDF memerlukan izin",
+            "grantPermission": "Berikan Izin",
+            "selectFiles": "Pilih File"
+        },
+        "ja": {
+            "pageTitle": "PDF結合",
+            "selectInfo": "PDFを選択 (少なくとも2つ)",
+            "selectAll": "すべて選択",
+            "deselectAll": "選択をクリア",
+            "selectedPDFs": "選択されたPDF:",
+            "mergingPdf": "PDFを結合中...",
+            "mergeSuccess": "PDFの結合に成功しました！",
+            "saveSuccess": "PDFが正常に保存されました",
+            "remove": "削除",
+            "selectAtLeast2": "少なくとも2つのPDFファイルを選択してください！",
+            "savedTo": "ダウンロード/PDFリーダーフォルダーに保存されました",
+            "mergeBtn": "PDFを結合",
+            "clearBtn": "選択をクリア",
+            "saveBtn": "保存",
+            "noPDFs": "デバイスにPDFが見つかりません",
+            "refresh": "更新",
+            "loadingPDFs": "PDFを読み込み中...",
+            "errorLoading": "PDFの読み込みエラー",
+            "permissionRequired": "PDFファイルへのアクセスには許可が必要です",
+            "grantPermission": "許可を与える",
+            "selectFiles": "ファイルを選択"
+        },
+        "ku": {
+            "pageTitle": "PDF-ê Pêşkêş bike",
+            "selectInfo": "PDF-ê hilbijêre (bi kêmî 2)",
+            "selectAll": "Hemû Hilbijêre",
+            "deselectAll": "Hilbijartinê Paqij bike",
+            "selectedPDFs": "PDF-ên Hilbijartî:",
+            "mergingPdf": "PDF-ê têne pêk anîn...",
+            "mergeSuccess": "PDF bi serkeftî hate pêk anîn!",
+            "saveSuccess": "PDF bi serkeftî hate tomarkirin",
+            "remove": "Jê bibe",
+            "selectAtLeast2": "Bi kêmî 2 pelê PDF-ê hilbijêrin!",
+            "savedTo": "Li qeşa Daxistin/PDF Reader-ê hate tomarkirin",
+            "mergeBtn": "PDF-Ê PÊK BİNE",
+            "clearBtn": "HILBIJARTINÊ PAQIJ BIKE",
+            "saveBtn": "TOMAR BIKE",
+            "noPDFs": "Li cîhaza we PDF-ek nehat dîtin",
+            "refresh": "Nû bike",
+            "loadingPDFs": "PDF-ê têne barkirin...",
+            "errorLoading": "Çewtiya barkirina PDF-ê",
+            "permissionRequired": "Gihiştina pelê PDF-ê destûré wazeno",
+            "grantPermission": "Destûrê bide",
+            "selectFiles": "Pelê hilbijêrin"
+        },
+        "pt": {
+            "pageTitle": "Mesclar PDF",
+            "selectInfo": "Selecionar PDFs (pelo menos 2)",
+            "selectAll": "Selecionar Todos",
+            "deselectAll": "Limpar Seleção",
+            "selectedPDFs": "PDFs Selecionados:",
+            "mergingPdf": "Mesclando PDFs...",
+            "mergeSuccess": "PDF mesclado com sucesso!",
+            "saveSuccess": "PDF salvo com sucesso",
+            "remove": "Remover",
+            "selectAtLeast2": "Selecione pelo menos 2 arquivos PDF!",
+            "savedTo": "Salvo na pasta Download/PDF Reader",
+            "mergeBtn": "MESCLAR PDF",
+            "clearBtn": "LIMPAR SELEÇÃO",
+            "saveBtn": "SALVAR",
+            "noPDFs": "Nenhum PDF encontrado em seu dispositivo",
+            "refresh": "Atualizar",
+            "loadingPDFs": "Carregando PDFs...",
+            "errorLoading": "Erro ao carregar PDFs",
+            "permissionRequired": "Acesso a arquivos PDF requer permissão",
+            "grantPermission": "Conceder Permissão",
+            "selectFiles": "Selecionar Arquivos"
+        },
+        "ru": {
+            "pageTitle": "Объединение PDF",
+            "selectInfo": "Выберите PDF (минимум 2)",
+            "selectAll": "Выбрать все",
+            "deselectAll": "Очистить выбор",
+            "selectedPDFs": "Выбранные PDF:",
+            "mergingPdf": "Объединение PDF...",
+            "mergeSuccess": "PDF успешно объединен!",
+            "saveSuccess": "PDF успешно сохранен",
+            "remove": "Удалить",
+            "selectAtLeast2": "Выберите хотя бы 2 файла PDF!",
+            "savedTo": "Сохранено в папке Загрузки/PDF Reader",
+            "mergeBtn": "ОБЪЕДИНИТЬ PDF",
+            "clearBtn": "ОЧИСТИТЬ ВЫБОР",
+            "saveBtn": "СОХРАНИТЬ",
+            "noPDFs": "PDF не найдены на вашем устройстве",
+            "refresh": "Обновить",
+            "loadingPDFs": "Загрузка PDF...",
+            "errorLoading": "Ошибка загрузки PDF",
+            "permissionRequired": "Доступ к файлам PDF требует разрешения",
+            "grantPermission": "Предоставить разрешение",
+            "selectFiles": "Выбрать файлы"
+        },
+        "sw": {
+            "pageTitle": "Unganisha PDF",
+            "selectInfo": "Chagua PDF (angalau 2)",
+            "selectAll": "Chagua Zote",
+            "deselectAll": "Futa Uchaguzi",
+            "selectedPDFs": "PDF Zilizochaguliwa:",
+            "mergingPdf": "Inaunganisha PDF...",
+            "mergeSuccess": "PDF imeunganishwa kikamilifu!",
+            "saveSuccess": "PDF imehifadhiwa kikamilifu",
+            "remove": "Ondoa",
+            "selectAtLeast2": "Chagua angalau faili 2 za PDF!",
+            "savedTo": "Imehifadhiwa kwenye folda ya Pakua/PDF Reader",
+            "mergeBtn": "UNGANISHA PDF",
+            "clearBtn": "FUTA UCHAGUZI",
+            "saveBtn": "HIFADHI",
+            "noPDFs": "Hakuna PDF zilizopatikana kwenye kifaa chako",
+            "refresh": "Sasisha",
+            "loadingPDFs": "Inapakia PDF...",
+            "errorLoading": "Hitilafu katika kupakia PDF",
+            "permissionRequired": "Ufikiaji wa faili za PDF unahitaji idhini",
+            "grantPermission": "Toa Idhini",
+            "selectFiles": "Chagua Faili"
+        },
+        "tr": {
+            "pageTitle": "PDF Birleştirme",
+            "selectInfo": "PDF seçin (en az 2)",
+            "selectAll": "Tümünü Seç",
+            "deselectAll": "Seçimi Temizle",
+            "selectedPDFs": "Seçilen PDF'ler:",
+            "mergingPdf": "PDF'ler birleştiriliyor...",
+            "mergeSuccess": "PDF başarıyla birleştirildi!",
+            "saveSuccess": "PDF Başarıyla Kaydedildi",
+            "remove": "Kaldır",
+            "selectAtLeast2": "En az 2 PDF dosyası seçin!",
+            "savedTo": "Download/PDF Reader klasörüne kaydedildi",
+            "mergeBtn": "PDF BİRLEŞTİR",
+            "clearBtn": "SEÇİMİ TEMİZLE",
+            "saveBtn": "KAYDET",
+            "noPDFs": "Cihazınızda PDF bulunamadı",
+            "refresh": "Yenile",
+            "loadingPDFs": "PDF'ler yükleniyor...",
+            "errorLoading": "PDF'ler yüklenirken hata oluştu",
+            "permissionRequired": "PDF dosyalarına erişim için izin gerekli",
+            "grantPermission": "İzin Ver",
+            "selectFiles": "Dosya Seç"
+        },
+        "ur": {
+            "pageTitle": "PDF ملا دیں",
+            "selectInfo": "PDF منتخب کریں (کم از کم 2)",
+            "selectAll": "سب منتخب کریں",
+            "deselectAll": "انتخاب صاف کریں",
+            "selectedPDFs": "منتخب شدہ PDF:",
+            "mergingPdf": "PDF ملائے جا رہے ہیں...",
+            "mergeSuccess": "PDF کامیابی سے ملا دیا گیا!",
+            "saveSuccess": "PDF کامیابی سے محفوظ ہو گیا",
+            "remove": "ہٹا دیں",
+            "selectAtLeast2": "کم از کم 2 PDF فائلیں منتخب کریں!",
+            "savedTo": "ڈاؤن لوڈ/PDF ریڈر فولڈر میں محفوظ ہو گیا",
+            "mergeBtn": "PDF ملا دیں",
+            "clearBtn": "انتخاب صاف کریں",
+            "saveBtn": "محفوظ کریں",
+            "noPDFs": "آپ کے آلہ پر کوئی PDF نہیں ملا",
+            "refresh": "تازہ کریں",
+            "loadingPDFs": "PDF لوڈ ہو رہے ہیں...",
+            "errorLoading": "PDF لوڈ کرنے میں خرابی",
+            "permissionRequired": "PDF فائل تک رسائی کے لیے اجازت درکار ہے",
+            "grantPermission": "اجازت دیں",
+            "selectFiles": "فائلیں منتخب کریں"
+        },
+        "za": {
+            "pageTitle": "PDFyan Pêro Pê kerdış",
+            "selectInfo": "PDFyan weçiné (taybetî 2)",
+            "selectAll": "Pêro Weçiné",
+            "deselectAll": "Weçinayışê Pak Ke",
+            "selectedPDFs": "PDFyé Weçinayî:",
+            "mergingPdf": "PDFyan pêro pê bené...",
+            "mergeSuccess": "PDFyan bi serkewteyî pêro pê biy!",
+            "saveSuccess": "PDF bi serkewteyî qeyd biy",
+            "remove": "Jê bibe",
+            "selectAtLeast2": "Taybetî 2 dosyayé PDFyan weçiné!",
+            "savedTo": "Li qeşa Daxistin/PDF Reader-ê hate qeydkirin",
+            "mergeBtn": "PDFYAN PÊRO PÊ KE",
+            "clearBtn": "WEÇINAYIŞÊ PAK KE",
+            "saveBtn": "QEYD KE",
+            "noPDFs": "Li cîhaza we PDF çinê",
+            "refresh": "Nû ke",
+            "loadingPDFs": "PDFyan têne barkirin...",
+            "errorLoading": "Xetaya barkirina PDFyan",
+            "permissionRequired": "Gihîştina dosyayé PDFyan destûré wazeno",
+            "grantPermission": "Destûr bide",
+            "selectFiles": "Dosyayan weçiné"
+        },
+        "zh": {
+            "pageTitle": "PDF合并",
+            "selectInfo": "选择PDF (至少2个)",
+            "selectAll": "全选",
+            "deselectAll": "清除选择",
+            "selectedPDFs": "已选PDF:",
+            "mergingPdf": "正在合并PDF...",
+            "mergeSuccess": "PDF合并成功！",
+            "saveSuccess": "PDF保存成功",
+            "remove": "移除",
+            "selectAtLeast2": "请选择至少2个PDF文件！",
+            "savedTo": "已保存到下载/PDF阅读器文件夹",
+            "mergeBtn": "合并PDF",
+            "clearBtn": "清除选择",
+            "saveBtn": "保存",
+            "noPDFs": "在您的设备上未找到PDF",
+            "refresh": "刷新",
+            "loadingPDFs": "正在加载PDF...",
+            "errorLoading": "加载PDF时出错",
+            "permissionRequired": "访问PDF文件需要权限",
+            "grantPermission": "授予权限",
+            "selectFiles": "选择文件"
+        }
+    };
+
+    // --- TEMEL FONKSİYONLAR ---
+    function getTranslation(key) {
+        try {
+            const currentLang = languageConfig ? languageConfig.getCurrent() : 'tr';
+            const t = translations[currentLang] || translations['tr'];
+            return t[key] || key;
+        } catch (e) {
+            return key;
+        }
+    }
+
+    function updateUIText() {
+        try {
+            document.getElementById('pageTitle').textContent = getTranslation('pageTitle');
+            document.getElementById('selectionInfo').textContent = getTranslation('selectInfo');
+            document.getElementById('selectAllBtn').textContent = getTranslation('selectAll');
+            document.getElementById('deselectAllBtn').textContent = getTranslation('deselectAll');
+            document.getElementById('selectFilesBtn').textContent = getTranslation('selectFiles');
+            document.getElementById('selectedHeader').innerHTML = `${getTranslation('selectedPDFs')} <span id="selectedCount">0</span>`;
+            document.getElementById('mergingPdfText').innerHTML = `${getTranslation('mergingPdf')} <span id="progressText">0%</span>`;
+            document.getElementById('savedToText').textContent = getTranslation('savedTo');
+            document.getElementById('mergeBtn').textContent = getTranslation('mergeBtn');
+            document.getElementById('clearBtn').textContent = getTranslation('clearBtn');
+            document.getElementById('saveBtn').textContent = getTranslation('saveBtn');
+        } catch (e) {
+            console.log('UI metinleri güncellenemedi:', e);
+        }
+    }
+
+    function goBack() {
+        if (window.history.length > 1) {
+            window.history.back();
+        } else {
+            window.location.href = 'index.html';
+        }
+    }
+
+    // --- ANDROID BRIDGE İŞLEMLERİ ---
+    function checkAndroidPermission() {
+        try {
+            if (typeof Android !== 'undefined' && Android.checkPermission) {
+                return Android.checkPermission();
+            }
+            return false;
+        } catch (e) {
+            console.error('Permission check error:', e);
+            return false;
+        }
+    }
+
+    function loadDevicePDFs() {
+        try {
+            const pdfList = document.getElementById('pdfList');
+            pdfList.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon material-symbols-rounded">hourglass_empty</div>
+                    <div class="empty-text">${getTranslation('loadingPDFs')}</div>
+                </div>`;
+
+            // İzin kontrolü
+            if (!checkAndroidPermission()) {
+                showPermissionRequired();
+                return;
+            }
+
+            // Android'den PDF listesini al
+            let pdfPaths = [];
+            if (typeof Android !== 'undefined' && Android.listPDFs) {
+                const result = Android.listPDFs();
+                if (result && result.trim().length > 0 && result !== "PERMISSION_DENIED") {
+                    pdfPaths = result.split('||').filter(p => p && p.trim().length > 0);
+                }
+            }
+
+            devicePDFs = [];
+            pdfPaths.forEach((path, index) => {
+                const name = path.split('/').pop();
+                const size = Android.getFileSize ? formatBytes(Android.getFileSize(path)) : "~2.5 MB";
+                const date = Android.getFileDate ? Android.getFileDate(path) : getCurrentDate();
+                
+                devicePDFs.push({
+                    id: index,
+                    name: name,
+                    size: size,
+                    date: date,
+                    path: path,
+                    isSelected: false,
+                    fileObject: null // Android'den gelenlerde fileObject yok
+                });
+            });
+
+            renderPDFList();
+            
+        } catch (e) {
+            console.error('PDF yükleme hatası:', e);
+            showError(getTranslation('errorLoading'));
+        }
+    }
+
+    function showPermissionRequired() {
+        const pdfList = document.getElementById('pdfList');
+        pdfList.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon material-symbols-rounded">lock</div>
+                <div class="empty-text">${getTranslation('permissionRequired')}</div>
+                <button class="btn" style="margin-top: 16px;" onclick="requestPermission()">
+                    ${getTranslation('grantPermission')}
+                </button>
+            </div>`;
+    }
+
+    function showError(message) {
+        const pdfList = document.getElementById('pdfList');
+        pdfList.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon material-symbols-rounded">error</div>
+                <div class="empty-text">${message}</div>
+                <button class="btn" style="margin-top: 16px;" onclick="loadDevicePDFs()">
+                    ${getTranslation('refresh')}
+                </button>
+            </div>`;
+    }
+
+    function showEmptyState() {
+        const pdfList = document.getElementById('pdfList');
+        pdfList.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon material-symbols-rounded">folder_open</div>
+                <div class="empty-text">${getTranslation('noPDFs')}</div>
+                <button class="btn" style="margin-top: 16px;" onclick="loadDevicePDFs()">
+                    ${getTranslation('refresh')}
+                </button>
+            </div>`;
+    }
+
+    function requestPermission() {
+        if (typeof Android !== 'undefined') {
+            // Android ayarlarına yönlendir
+            window.location.href = 'settings://all_files';
+        }
+    }
+
+    function refreshPDFList() {
+        loadDevicePDFs();
+    }
+
+    // --- PDF LİSTESİ RENDER ---
+    function renderPDFList() {
+        const pdfList = document.getElementById('pdfList');
+        
+        if (devicePDFs.length === 0) {
+            showEmptyState();
+            return;
+        }
+
+        let html = '';
+        devicePDFs.forEach(pdf => {
+            const isSelected = selectedPDFs.some(selected => 
+                selected.path === pdf.path || selected.name === pdf.name
+            );
+            const selectedClass = isSelected ? 'selected' : '';
+            
+            html += `
+                <div class="pdf-item ${selectedClass}" 
+                     onclick="togglePDFSelection(${pdf.id})"
+                     data-path="${pdf.path}">
+                    <div class="pdf-checkbox"></div>
+                    <div class="pdf-info">
+                        <div class="pdf-name">${pdf.name}</div>
+                        <div class="pdf-meta">
+                            <span>${pdf.size}</span>
+                            <span>•</span>
+                            <span>${pdf.date}</span>
+                            ${pdf.fileObject ? '<span style="color: var(--success);">(WebView)</span>' : ''}
+                        </div>
+                    </div>
+                </div>`;
+        });
+        
+        pdfList.innerHTML = html;
+    }
+
+    function renderSelectedList() {
+        const selectedList = document.getElementById('selectedList');
+        
+        if (selectedPDFs.length === 0) {
+            selectedList.innerHTML = `
+                <div class="empty-state" style="padding: 20px;">
+                    <div class="empty-icon material-symbols-rounded">description</div>
+                    <div class="empty-text">${getTranslation('selectInfo')}</div>
+                </div>`;
+            return;
+        }
+
+        let html = '';
+        selectedPDFs.forEach((pdf, index) => {
+            html += `
+                <div class="selected-item">
+                    <span class="selected-name">${pdf.name}</span>
+                    <button class="remove-btn" onclick="removeFromSelection(${index})">
+                        ${getTranslation('remove')}
+                    </button>
+                </div>`;
+        });
+        
+        selectedList.innerHTML = html;
+        document.getElementById('selectedCount').textContent = selectedPDFs.length;
+    }
+
+    // --- SEÇİM İŞLEMLERİ ---
+    function togglePDFSelection(id) {
+        const pdf = devicePDFs.find(p => p.id === id);
+        if (!pdf) return;
+
+        const index = selectedPDFs.findIndex(selected => 
+            selected.path === pdf.path || selected.name === pdf.name
+        );
+        
+        if (index === -1) {
+            // Seç
+            selectedPDFs.push(pdf);
+            pdf.isSelected = true;
+        } else {
+            // Seçimi kaldır
+            selectedPDFs.splice(index, 1);
+            pdf.isSelected = false;
+        }
+
+        // UI'ı güncelle
+        renderPDFList();
+        renderSelectedList();
+        updateButtons();
+    }
+
+    function selectAllPDFs() {
+        selectedPDFs = [...devicePDFs];
+        devicePDFs.forEach(pdf => pdf.isSelected = true);
+        
+        renderPDFList();
+        renderSelectedList();
+        updateButtons();
+    }
+
+    function deselectAllPDFs() {
+        selectedPDFs = [];
+        devicePDFs.forEach(pdf => pdf.isSelected = false);
+        
+        renderPDFList();
+        renderSelectedList();
+        updateButtons();
+    }
+
+    function removeFromSelection(index) {
+        const removedPDF = selectedPDFs[index];
+        selectedPDFs.splice(index, 1);
+        
+        // Device PDF listesinde de güncelle
+        const devicePDF = devicePDFs.find(p => 
+            p.path === removedPDF.path || p.name === removedPDF.name
+        );
+        if (devicePDF) {
+            devicePDF.isSelected = false;
+        }
+        
+        renderPDFList();
+        renderSelectedList();
+        updateButtons();
+    }
+
+    function clearSelection() {
+        deselectAllPDFs();
+        hideSuccess();
+    }
+
+    function updateButtons() {
+        const mergeBtn = document.getElementById('mergeBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        
+        mergeBtn.disabled = selectedPDFs.length < 2;
+        clearBtn.disabled = selectedPDFs.length === 0;
+    }
+
+    function hideSuccess() {
+        document.getElementById('success').style.display = 'none';
+        document.getElementById('saveBtn').style.display = 'none';
+        mergedPdfBlob = null;
+    }
+
+    // --- WEBVIEW DOSYA SEÇME ---
+    function selectFilesFromWebView() {
+        document.getElementById('webviewFileInput').click();
+    }
+
+    // File input event listener
+    document.getElementById('webviewFileInput').addEventListener('change', function(e) {
+        const files = Array.from(e.target.files);
+        
+        files.forEach((file, index) => {
+            if (file.type === 'application/pdf') {
+                // Dosya zaten listede var mı kontrol et
+                const existingIndex = devicePDFs.findIndex(pdf => pdf.name === file.name);
+                
+                if (existingIndex === -1) {
+                    // Yeni PDF ekle
+                    const pdfData = {
+                        id: devicePDFs.length + index + 1000, // Yüksek ID
+                        name: file.name,
+                        size: formatBytes(file.size),
+                        date: getCurrentDate(),
+                        path: file.name, // Tam yol yok, sadece isim
+                        isSelected: true,
+                        fileObject: file // File objesini sakla
+                    };
+                    
+                    // Listelere ekle
+                    devicePDFs.push(pdfData);
+                    selectedPDFs.push(pdfData);
+                } else {
+                    // Zaten varsa sadece seç
+                    devicePDFs[existingIndex].isSelected = true;
+                    if (!selectedPDFs.some(pdf => pdf.name === file.name)) {
+                        selectedPDFs.push(devicePDFs[existingIndex]);
+                    }
+                }
+            }
+        });
+        
+        // Listeleri güncelle
+        renderPDFList();
+        renderSelectedList();
+        updateButtons();
+        
+        // Input'u temizle
+        this.value = '';
+    });
+
+    // --- PDF BİRLEŞTİRME ---
+    async function mergePDFs() {
+        if (selectedPDFs.length < 2) {
+            alert(getTranslation('selectAtLeast2'));
+            return;
+        }
+
+        const progress = document.getElementById('progress');
+        const progressText = document.getElementById('progressText');
+        const mergeBtn = document.getElementById('mergeBtn');
+        
+        progress.style.display = 'block';
+        mergeBtn.disabled = true;
+        progressText.textContent = '0%';
+
+        try {
+            const { PDFDocument } = window.PDFLib || PDFLib;
+            const mergedPdf = await PDFDocument.create();
+
+            for (let i = 0; i < selectedPDFs.length; i++) {
+                const pdf = selectedPDFs[i];
+                
+                try {
+                    // Öncelik sırası:
+                    // 1. WebView fileObject (en güvenilir)
+                    // 2. Android.getPDFData()
+                    // 3. fetch()
+                    
+                    let pdfData;
+                    
+                    if (pdf.fileObject) {
+                        // WebView içinden seçilen dosya
+                        const arrayBuffer = await pdf.fileObject.arrayBuffer();
+                        pdfData = arrayBuffer;
+                        console.log(`WebView dosyası yüklendi: ${pdf.name}`);
+                    } else if (typeof Android !== 'undefined' && Android.getPDFData && pdf.path && !pdf.path.startsWith('http')) {
+                        // Android'den al
+                        pdfData = await getFileDataFromAndroid(pdf.path);
+                        console.log(`Android'den yüklendi: ${pdf.name}`);
+                    } else {
+                        // Son çare fetch
+                        pdfData = await fetchPDFData(pdf.path);
+                        console.log(`Fetch ile yüklendi: ${pdf.name}`);
+                    }
+                    
+                    if (!pdfData) {
+                        console.warn(`PDF verisi alınamadı: ${pdf.name}`);
+                        continue;
+                    }
+                    
+                    // PDF'i yükle ve birleştir
+                    const pdfDoc = await PDFDocument.load(pdfData);
+                    const pages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
+                    pages.forEach(page => mergedPdf.addPage(page));
+                    
+                } catch (error) {
+                    console.error(`PDF yükleme hatası (${pdf.name}):`, error);
+                    continue;
+                }
+                
+                // İlerleme güncelle
+                const progressPercent = Math.round(((i + 1) / selectedPDFs.length) * 100);
+                progressText.textContent = `${progressPercent}%`;
+                
+                // Küçük bir bekleme (UI güncellemesi için)
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            // Birleştirilmiş PDF'i kaydet
+            const mergedPdfBytes = await mergedPdf.save();
+            mergedPdfBlob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+            
+            // Başarı mesajını göster
+            progress.style.display = 'none';
+            document.getElementById('successMessage').textContent = getTranslation('mergeSuccess');
+            document.getElementById('success').style.display = 'block';
+            document.getElementById('saveBtn').style.display = 'block';
+            
+        } catch (error) {
+            console.error('PDF birleştirme hatası:', error);
+            alert('PDF birleştirme sırasında hata oluştu: ' + error.message);
+            progress.style.display = 'none';
+        } finally {
+            mergeBtn.disabled = false;
+        }
+    }
+
+    async function getFileDataFromAndroid(filePath) {
+        return new Promise((resolve, reject) => {
+            try {
+                if (typeof Android !== 'undefined' && Android.getPDFData) {
+                    const base64Data = Android.getPDFData(filePath);
+                    if (base64Data && base64Data.trim().length > 0) {
+                        // Base64'i ArrayBuffer'a çevir
+                        const binaryString = atob(base64Data);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        resolve(bytes.buffer);
+                    } else {
+                        reject(new Error('PDF data is empty'));
+                    }
+                } else {
+                    reject(new Error('Android bridge not available'));
+                }
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    async function fetchPDFData(filePath) {
+        try {
+            const response = await fetch(`file://${filePath}`);
+            if (!response.ok) throw new Error('Dosya okunamadı');
+            const arrayBuffer = await response.arrayBuffer();
+            return arrayBuffer;
+        } catch (error) {
+            console.error('Fetch error:', error);
+            return null;
+        }
+    }
+
+    // --- KAYDET İŞLEMİ ---
+    function saveMergedPDF() {
+        if (!mergedPdfBlob) {
+            alert('Önce PDF birleştirin!');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function() {
+            const base64data = reader.result.split(',')[1];
+            const fileName = `merged_${Date.now()}.pdf`;
+            
+            if (typeof Android !== 'undefined' && Android.saveMergedPDF) {
+                Android.saveMergedPDF(base64data, fileName);
+                
+                document.getElementById('successMessage').textContent = getTranslation('saveSuccess');
+                document.getElementById('saveBtn').style.display = 'none';
+            } else {
+                // Web tarayıcısı için
+                const url = URL.createObjectURL(mergedPdfBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                document.getElementById('successMessage').textContent = getTranslation('saveSuccess');
+                document.getElementById('saveBtn').style.display = 'none';
+            }
+        };
+        reader.readAsDataURL(mergedPdfBlob);
+    }
+
+    // --- YARDIMCI FONKSİYONLAR ---
+    function formatBytes(bytes) {
+        if (typeof bytes !== 'number') return "~2.5 MB";
+        if (!+bytes) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+    }
+
+    function getCurrentDate() {
+        const now = new Date();
+        return `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+    }
+
+    // --- GERİ TUŞU İŞLEMİ ---
+    window.androidBackPressed = function() {
+        goBack();
+        return false;
+    };
+
+    // Android'den döndüğünde çağrılacak
+    function onAndroidResume() {
+        loadDevicePDFs();
+    }
+
+    // --- SAYFA YÜKLENDİĞİNDE ---
+    document.addEventListener('DOMContentLoaded', function() {
+        updateUIText();
+        
+        const savedTheme = localStorage.getItem('pdfTheme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme === 'dark' ? 'dark' : 'light');
+        
+        if (languageConfig && languageConfig.onLanguageChange) {
+            languageConfig.onLanguageChange(updateUIText);
+        }
+        
+        loadDevicePDFs();
+    });
+
+    // Global fonksiyonlar
+    window.goBack = goBack;
+    window.refreshPDFList = refreshPDFList;
+    window.selectAllPDFs = selectAllPDFs;
+    window.deselectAllPDFs = deselectAllPDFs;
+    window.togglePDFSelection = togglePDFSelection;
+    window.removeFromSelection = removeFromSelection;
+    window.clearSelection = clearSelection;
+    window.mergePDFs = mergePDFs;
+    window.saveMergedPDF = saveMergedPDF;
+    window.requestPermission = requestPermission;
+    window.selectFilesFromWebView = selectFilesFromWebView;
+    window.onAndroidResume = onAndroidResume;
+  </script>
+</body>
+</html>
