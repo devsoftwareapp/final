@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,8 +27,8 @@ class WebViewPage extends StatefulWidget {
 }
 
 class _WebViewPageState extends State<WebViewPage> {
-  late InAppWebViewController webViewController;
   double progress = 0;
+  bool isLoading = true;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +44,12 @@ class _WebViewPageState extends State<WebViewPage> {
               ),
             Expanded(
               child: InAppWebView(
-                initialFile: "assets/web/index.html",
+                // v6.1.5'te bu şekilde asset dosyası yükleyebilirsin
+                initialUrlRequest: URLRequest(
+                  url: WebUri.uri(
+                    Uri.parse("file:///android_asset/flutter_assets/assets/web/index.html")
+                  ),
+                ),
                 initialOptions: InAppWebViewGroupOptions(
                   crossPlatform: InAppWebViewOptions(
                     javaScriptEnabled: true,
@@ -54,18 +60,16 @@ class _WebViewPageState extends State<WebViewPage> {
                   ),
                 ),
                 onWebViewCreated: (controller) {
-                  webViewController = controller;
-                  print("✅ WebView created");
+                  print("✅ WebView oluşturuldu");
                 },
                 onLoadStart: (controller, url) {
-                  print("🔄 Loading started: $url");
+                  print("🔄 Yükleniyor: $url");
                 },
-                onLoadStop: (controller, url) async {
-                  print("✅ Loading stopped: $url");
+                onLoadStop: (controller, url) {
+                  print("✅ Yüklendi: $url");
                 },
                 onLoadError: (controller, url, code, message) {
-                  print("❌ Load error: $message");
-                  print("📁 Check if assets/web/index.html exists");
+                  print("❌ Hata: $message - $url");
                 },
                 onProgressChanged: (controller, progress) {
                   setState(() {
