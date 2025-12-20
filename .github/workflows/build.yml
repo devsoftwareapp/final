@@ -16,117 +16,6 @@ jobs:
           channel: stable
           cache: false
 
-      # 🔍 DEBUG: Proje yapısını kontrol et
-      - name: Proje yapısını kontrol et
-        run: |
-          echo "=== PROJE YAPISI ==="
-          echo "Mevcut dizin: $(pwd)"
-          echo ""
-          echo "=== Tüm dosyalar ==="
-          find . -maxdepth 3 -type f \( -name "*.html" -o -name "*.dart" -o -name "*.yaml" \) | head -20
-          echo ""
-          echo "=== assets/ klasörü ==="
-          ls -la assets/ 2>/dev/null || echo "assets/ klasörü bulunamadı"
-          echo ""
-          echo "=== assets/web/ varsa ==="
-          ls -la assets/web/ 2>/dev/null || echo "assets/web/ bulunamadı"
-
-      # 📁 Asset dosyalarını pubspec.yaml'a ekle
-      - name: pubspec.yaml asset'leri düzenle
-        run: |
-          echo "=== pubspec.yaml ORJİNAL ==="
-          cat pubspec.yaml
-          echo ""
-          
-          # Yeni pubspec.yaml oluştur
-          cat > pubspec.yaml << 'EOF'
-name: pdfreader
-description: "PDF Reader"
-publish_to: 'none'
-version: 1.0.0+1
-
-environment:
-  sdk: ^3.10.4
-
-dependencies:
-  flutter:
-    sdk: flutter
-  cupertino_icons: ^1.0.8
-  flutter_inappwebview: ^6.1.5
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^6.0.0
-
-flutter:
-  uses-material-design: true
-
-  assets:
-    - assets/web/index.html
-    - assets/web/
-    - assets/build/
-EOF
-          
-          echo "=== pubspec.yaml GÜNCELLENMİŞ ==="
-          cat pubspec.yaml
-
-      # 🐛 DEBUG: Asset'leri test et
-      - name: Asset'leri test et
-        run: |
-          echo "=== ASSET TEST ==="
-          
-          # Test için basit bir index.html oluştur (eğer yoksa)
-          if [ ! -f "assets/web/index.html" ]; then
-            echo "⚠️ assets/web/index.html bulunamadı, oluşturuluyor..."
-            mkdir -p assets/web
-            cat > assets/web/index.html << 'HTML_EOF'
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📄 PDF Reader - GITHUB ACTIONS</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 40px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-align: center;
-        }
-        h1 { font-size: 2.5rem; margin-bottom: 20px; }
-        .success { 
-            background: rgba(255,255,255,0.2); 
-            padding: 30px; 
-            border-radius: 15px;
-            margin: 20px;
-        }
-        .big-check { font-size: 4rem; color: #4CAF50; }
-    </style>
-</head>
-<body>
-    <div class="success">
-        <div class="big-check">✅</div>
-        <h1>GITHUB ACTIONS BUILD</h1>
-        <p>Bu sayfa GitHub Actions tarafından oluşturuldu.</p>
-        <p>Build zamanı: <span id="time"></span></p>
-        <p>Flutter InAppWebView v6.1.5 çalışıyor.</p>
-    </div>
-    <script>
-        document.getElementById('time').textContent = new Date().toLocaleString();
-        console.log('✅ GitHub Actions build successful!');
-    </script>
-</body>
-</html>
-HTML_EOF
-            echo "✅ assets/web/index.html oluşturuldu"
-          fi
-          
-          echo ""
-          echo "=== Oluşturulan HTML ==="
-          head -20 assets/web/index.html
-
       - name: Keystore yaz
         run: |
           mkdir -p android/app/keystore
@@ -134,40 +23,18 @@ HTML_EOF
 
       - name: key.properties yaz
         run: |
-          cat << 'PROPERTIES_EOF' > android/key.properties
+          cat <<EOF > android/key.properties
 storePassword=${{ secrets.KEYSTORE_PASSWORD }}
 keyPassword=${{ secrets.KEY_PASSWORD }}
 keyAlias=${{ secrets.KEY_ALIAS }}
 storeFile=keystore/release.keystore
-PROPERTIES_EOF
+EOF
 
-      # 📦 Paketleri indir ve kontrol et
-      - name: Paketleri indir ve kontrol et
-        run: |
-          echo "=== flutter pub get ==="
-          flutter pub get
-          
-          echo ""
-          echo "=== flutter_inappwebview versiyonu ==="
-          grep -A2 -B2 flutter_inappwebview pubspec.yaml
-          
-          echo ""
-          echo "=== flutter doctor ==="
-          flutter doctor
+      - name: Paketleri indir
+        run: flutter pub get
 
-      # 🏗️ Build yap
       - name: Signed Release APK build (arm64-v8a)
-        run: |
-          echo "=== flutter build apk ==="
-          flutter build apk --release --target-platform android-arm64
-          
-          # Build başarılı mı kontrol et
-          if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
-            echo "✅✅✅ APK BAŞARIYLA OLUŞTURULDU! ✅✅✅"
-            ls -lh build/app/outputs/flutter-apk/app-release.apk
-          else
-            echo "❌❌❌ APK OLUŞTURULAMADI! ❌❌❌"
-          fi
+        run: flutter build apk --release --target-platform android-arm64
 
       - uses: actions/upload-artifact@v4
         with:
