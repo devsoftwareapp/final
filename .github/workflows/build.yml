@@ -16,6 +16,12 @@ jobs:
           channel: stable
           cache: false
 
+      - name: Assets zip aç
+        run: |
+          if [ -f assets.zip ]; then
+            unzip -o assets.zip
+          fi
+
       - name: Keystore yaz
         run: |
           mkdir -p android/app/keystore
