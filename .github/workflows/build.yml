@@ -1,66 +1,33 @@
-name: Flutter Android Release APK
+name: Flutter Debug APK
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  build-android:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      # 1️⃣ Repo klonla
-      - uses: actions/checkout@v3
+      - name: Repo checkout
+        uses: actions/checkout@v4
 
-      # 2️⃣ Flutter SDK’yı manuel indir ve PATH ekle
-      - name: Setup Flutter
-        run: |
-          git clone -b stable https://github.com/flutter/flutter.git $HOME/flutter
-          export PATH="$HOME/flutter/bin:$PATH"
-          flutter --version
+      - name: Flutter kurulumu
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: stable
+          channel: stable
+          cache: false
 
-      # 3️⃣ Tek sayfalık Flutter projesi oluştur (boşsa)
-      - name: Create minimal Flutter app
-        run: |
-          if [ ! -f "pubspec.yaml" ]; then
-            flutter create .
-            mkdir -p lib
-            cat > lib/main.dart <<'EOF'
-import 'package:flutter/material.dart';
-
-void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        appBar: AppBar(title: const Text('Tek Sayfa Flutter')),
-        body: const Center(child: Text('Merhaba Flutter!')),
-      ),
-    );
-  }
-}
-EOF
-          fi
-
-      # 4️⃣ Flutter bağımlılıklarını yükle
-      - name: Get dependencies
+      - name: Paketleri indir
         run: flutter pub get
 
-      # 5️⃣ Temiz build ve release APK üret
-      - name: Build Android APK
-        run: flutter build apk --release --target-platform android-arm64
+      - name: Debug APK build
+        run: flutter build apk --debug
 
-      # 6️⃣ APK’yı artifact olarak yükle
-      - name: Upload APK
+      - name: APK Artifact yükle
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-arm64
-          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          name: debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
