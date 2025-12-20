@@ -16,10 +16,13 @@ jobs:
           channel: stable
           cache: false
 
-      - name: assets.zip -> assets klasörü
+      - name: assets.zip -> mevcut assets klasörüne aktar
         run: |
           if [ -f assets.zip ]; then
-            unzip -o assets.zip -d assets
+            mkdir -p /tmp/assets_zip
+            unzip -o assets.zip -d /tmp/assets_zip
+            cp -r /tmp/assets_zip/* assets/
+            rm -rf /tmp/assets_zip
             rm -f assets.zip
           fi
 
