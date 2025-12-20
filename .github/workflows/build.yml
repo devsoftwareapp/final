@@ -51,13 +51,7 @@ jobs:
       - name: Paketleri indir
         run: flutter pub get
 
-      # ✅ EKLENEN TEK ADIM (AGP 8 / flutter_inappwebview FIX)
-      - name: flutter_inappwebview namespace fix
-        run: |
-          FILE="$HOME/.pub-cache/hosted/pub.dev/flutter_inappwebview-5.8.0/android/build.gradle"
-          if [ -f "$FILE" ] && ! grep -q "namespace" "$FILE"; then
-            sed -i '/android {/a\    namespace "com.pichillilorenzo.flutter_inappwebview"' "$FILE"
-          fi
+
 
       - name: Signed Release APK build (arm64-v8a)
         run: flutter build apk --release --target-platform android-arm64
