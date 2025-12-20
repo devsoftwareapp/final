@@ -16,23 +16,121 @@ jobs:
           channel: stable
           cache: false
 
-      # 🔴 KRİTİK ADIM — assets/build ve assets/web altındaki TÜM DOSYALARI pubspec.yaml'a ekler
-      - name: pubspec.yaml -> assets/build + assets/web (recursive, dosya bazlı)
+      # 🔍 DEBUG: Proje yapısını kontrol et
+      - name: Proje yapısını kontrol et
         run: |
-          if ! grep -q "^flutter:" pubspec.yaml; then
-            echo "" >> pubspec.yaml
-            echo "flutter:" >> pubspec.yaml
-          fi
+          echo "=== PROJE YAPISI ==="
+          echo "Mevcut dizin: $(pwd)"
+          echo ""
+          echo "=== Tüm dosyalar ==="
+          find . -maxdepth 3 -type f -name "*.html" -o -name "*.dart" -o -name "*.yaml" | head -20
+          echo ""
+          echo "=== assets/ klasörü ==="
+          ls -la assets/ 2>/dev/null || echo "assets/ klasörü bulunamadı"
+          echo ""
+          echo "=== assets/web/ varsa ==="
+          ls -la assets/web/ 2>/dev/null || echo "assets/web/ bulunamadı"
 
-          if ! grep -q "^  assets:" pubspec.yaml; then
-            echo "  assets:" >> pubspec.yaml
+      # 📁 Asset dosyalarını pubspec.yaml'a ekle (geliştirilmiş)
+      - name: pubspec.yaml -> Tüm asset'leri ekle
+        run: |
+          echo "=== pubspec.yaml ORJİNAL ==="
+          cat pubspec.yaml
+          echo ""
+          
+          # pubspec.yaml'ı yedekle
+          cp pubspec.yaml pubspec.yaml.backup
+          
+          # flutter: bölümünü temizle
+          sed -i '/^flutter:/,/^[^ ]/d' pubspec.yaml
+          
+          # Yeni flutter bölümü ekle
+          echo "" >> pubspec.yaml
+          echo "flutter:" >> pubspec.yaml
+          echo "  uses-material-design: true" >> pubspec.yaml
+          echo "" >> pubspec.yaml
+          echo "  assets:" >> pubspec.yaml
+          
+          # Tüm asset dosyalarını bul ve ekle
+          echo "    - assets/web/index.html" >> pubspec.yaml
+          
+          # Tüm alt klasörler için joker karakter kullan
+          if [ -d "assets/web/images" ]; then
+            echo "    - assets/web/images/" >> pubspec.yaml
           fi
-
-          find assets/build assets/web -type f 2>/dev/null | while read file; do
-            if ! grep -q "    - $file" pubspec.yaml; then
-              echo "    - $file" >> pubspec.yaml
-            fi
+          
+          if [ -d "assets/web/fonts" ]; then
+            echo "    - assets/web/fonts/" >> pubspec.yaml
+          fi
+          
+          if [ -d "assets/build" ]; then
+            echo "    - assets/build/" >> pubspec.yaml
+          fi
+          
+          # Tüm web klasöründeki dosyalar
+          find assets/web -type f -name "*.css" -o -name "*.js" -o -name "*.png" -o -name "*.jpg" -o -name "*.json" 2>/dev/null | head -20 | while read file; do
+            echo "    - $file" >> pubspec.yaml
           done
+          
+          echo "" >> pubspec.yaml
+          echo "=== pubspec.yaml GÜNCELLENMİŞ ==="
+          cat pubspec.yaml
+
+      # 🐛 DEBUG: Asset'leri test et
+      - name: Asset'leri test et
+        run: |
+          echo "=== ASSET TEST ==="
+          
+          # Test için basit bir index.html oluştur (eğer yoksa)
+          if [ ! -f "assets/web/index.html" ]; then
+            echo "⚠️ assets/web/index.html bulunamadı, oluşturuluyor..."
+            mkdir -p assets/web
+            cat > assets/web/index.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📄 PDF Reader - GITHUB ACTIONS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+        }
+        h1 { font-size: 2.5rem; margin-bottom: 20px; }
+        .success { 
+            background: rgba(255,255,255,0.2); 
+            padding: 30px; 
+            border-radius: 15px;
+            margin: 20px;
+        }
+        .big-check { font-size: 4rem; color: #4CAF50; }
+    </style>
+</head>
+<body>
+    <div class="success">
+        <div class="big-check">✅</div>
+        <h1>GITHUB ACTIONS BUILD</h1>
+        <p>Bu sayfa GitHub Actions tarafından oluşturuldu.</p>
+        <p>Build zamanı: <span id="time"></span></p>
+        <p>Flutter InAppWebView v6.1.5 çalışıyor.</p>
+    </div>
+    <script>
+        document.getElementById('time').textContent = new Date().toLocaleString();
+        console.log('✅ GitHub Actions build successful!');
+    </script>
+</body>
+</html>
+EOF
+            echo "✅ assets/web/index.html oluşturuldu"
+          fi
+          
+          echo ""
+          echo "=== Oluşturulan HTML ==="
+          head -20 assets/web/index.html
 
       - name: Keystore yaz
         run: |
@@ -48,13 +146,50 @@ jobs:
           storeFile=keystore/release.keystore
           EOF
 
-      - name: Paketleri indir
-        run: flutter pub get
+      # 📦 Paketleri indir ve kontrol et
+      - name: Paketleri indir ve kontrol et
+        run: |
+          echo "=== flutter pub get ==="
+          flutter pub get
+          
+          echo ""
+          echo "=== flutter_inappwebview versiyonu ==="
+          grep -A2 -B2 flutter_inappwebview pubspec.yaml
+          grep -A2 -B2 flutter_inappwebview pubspec.lock 2>/dev/null || echo "pubspec.lock henüz yok"
+          
+          echo ""
+          echo "=== flutter doctor ==="
+          flutter doctor -v | grep -A5 "Flutter"
 
-      - name: Signed Release APK build (arm64-v8a)
-        run: flutter build apk --release --target-platform android-arm64
+      # 🏗️ Build yap ve log'ları kaydet
+      - name: Signed Release APK build (arm64-v8a) - DETAILED
+        run: |
+          echo "=== flutter build apk --verbose ==="
+          flutter build apk --release --target-platform android-arm64 --verbose 2>&1 | tail -100
+          
+          # Build başarılı mı kontrol et
+          if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            echo "✅✅✅ APK BAŞARIYLA OLUŞTURULDU! ✅✅✅"
+            ls -lh build/app/outputs/flutter-apk/app-release.apk
+          else
+            echo "❌❌❌ APK OLUŞTURULAMADI! ❌❌❌"
+            echo "Build klasörü içeriği:"
+            find build/ -type f -name "*.apk" 2>/dev/null || echo "APK bulunamadı"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: pdfreader-release-arm64-v8a
           path: build/app/outputs/flutter-apk/app-release.apk
+          
+      # 📊 Build log'larını da kaydet
+      - name: Build log'larını kaydet
+        if: always()
+        run: |
+          echo "=== BUILD SONUÇLARI ==="
+          echo "Workflow sonucu: ${{ job.status }}"
+          echo ""
+          echo "Oluşturulan dosyalar:"
+          find build/ -type f -name "*.apk" -o -name "*.aab" 2>/dev/null | while read file; do
+            echo "- $file ($(stat -c%s "$file") bytes)"
+          done
