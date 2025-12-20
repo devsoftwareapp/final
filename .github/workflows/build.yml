@@ -36,18 +36,15 @@ jobs:
       # 🔴 KRİTİK ADIM — assets/build ve assets/web altındaki TÜM DOSYALARI pubspec.yaml'a ekler
       - name: pubspec.yaml -> assets/build + assets/web (recursive, dosya bazlı)
         run: |
-          # flutter: yoksa ekle
           if ! grep -q "^flutter:" pubspec.yaml; then
             echo "" >> pubspec.yaml
             echo "flutter:" >> pubspec.yaml
           fi
 
-          # assets: yoksa ekle
           if ! grep -q "^  assets:" pubspec.yaml; then
             echo "  assets:" >> pubspec.yaml
           fi
 
-          # SADECE assets/build ve assets/web altındaki DOSYALAR
           find assets/build assets/web -type f 2>/dev/null | while read file; do
             if ! grep -q "    - $file" pubspec.yaml; then
               echo "    - $file" >> pubspec.yaml
@@ -70,6 +67,14 @@ jobs:
 
       - name: Paketleri indir
         run: flutter pub get
+
+      # ✅ EKLENEN TEK ADIM (AGP 8 / flutter_inappwebview FIX)
+      - name: flutter_inappwebview namespace fix
+        run: |
+          FILE="$HOME/.pub-cache/hosted/pub.dev/flutter_inappwebview-5.8.0/android/build.gradle"
+          if [ -f "$FILE" ] && ! grep -q "namespace" "$FILE"; then
+            sed -i '/android {/a\    namespace "com.pichillilorenzo.flutter_inappwebview"' "$FILE"
+          fi
 
       - name: Signed Release APK build (arm64-v8a)
         run: flutter build apk --release --target-platform android-arm64
