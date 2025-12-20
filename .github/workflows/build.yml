@@ -16,23 +16,6 @@ jobs:
           channel: stable
           cache: false
 
-      # assets.zip içeriğini mevcut assets klasörüne aktar
-      - name: assets.zip -> mevcut assets klasörüne aktar
-        run: |
-          if [ -f assets.zip ]; then
-            mkdir -p /tmp/assets_zip
-            unzip -o assets.zip -d /tmp/assets_zip
-
-            if [ -d /tmp/assets_zip/assets ]; then
-              cp -r /tmp/assets_zip/assets/* assets/
-            else
-              cp -r /tmp/assets_zip/* assets/
-            fi
-
-            rm -rf /tmp/assets_zip
-            rm -f assets.zip
-          fi
-
       # 🔴 KRİTİK ADIM — assets/build ve assets/web altındaki TÜM DOSYALARI pubspec.yaml'a ekler
       - name: pubspec.yaml -> assets/build + assets/web (recursive, dosya bazlı)
         run: |
