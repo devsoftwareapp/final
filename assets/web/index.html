@@ -1,139 +1,2342 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="tr" data-theme="light">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Reader Test</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            min-height: 100vh;
-            margin: 0;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            color: #fff;
-            text-align: center;
-            font-size: 2.5rem;
-            margin-bottom: 20px;
-        }
-        .status-box {
-            background: white;
-            color: #333;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px 0;
-        }
-        .success {
-            border-left: 5px solid #4CAF50;
-        }
-        .error {
-            border-left: 5px solid #f44336;
-        }
-        button {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            margin: 5px;
-        }
-        button:hover {
-            background: #45a049;
-        }
-        .info {
-            font-size: 14px;
-            color: #ddd;
-            margin-top: 20px;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>PDF Reader | Dev Software</title>
+  
+  <style>
+    /* Material Symbols Rounded - Local WebView Font */
+    @font-face {
+        font-family: 'Material Symbols Rounded';
+        src: url('fonts/MaterialSymbolsRounded.woff2') format('woff2');
+        font-weight: 100 700;
+        font-style: normal;
+    }
+
+    .material-symbols-rounded {
+        font-family: 'Material Symbols Rounded';
+        font-weight: normal;
+        font-style: normal;
+        font-size: 24px;
+        display: inline-block;
+        line-height: 1;
+        text-transform: none;
+        letter-spacing: normal;
+        word-wrap: normal;
+        white-space: nowrap;
+        direction: ltr;
+        -webkit-font-smoothing: antialiased;
+        font-variation-settings:
+            'FILL' 0,
+            'wght' 400,
+            'GRAD' 0,
+            'opsz' 48;
+    }
+    
+    /* --- 1. DEĞİŞKENLER --- */
+    :root {
+      --background: #e8e8e8;
+      --surface: #e8e8e8;
+      --primary: #E53935;
+      --secondary: #B71C1C;
+      --success: #4cc9f0;
+      --error: #f94144;
+      --text-primary: #0f172a;
+      --text-secondary: #64748b;
+      --border: #d4d4d4; 
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      --transition-fast: 150ms ease;
+      --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+      
+      --header-height: 64px;
+      --tabs-height: 60px;
+      --top-bar-total: 124px;
+      --bottom-nav-height: 72px;
+      
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-full: 9999px;
+      
+      --z-content: 1;
+      --z-top-bar: 100;
+      --z-bottom-nav: 100;
+      --z-overlay: 2000;
+      --z-context-menu: 2100; 
+      
+      --card-icon-size: 36px;
+      --card-padding: 10px;
+      --card-gutter: 12px;
+      --card-max-width: 500px;
+      
+      --pdf-color-main: #E53935;
+      --pdf-color-bg: #E53935; 
+      --pdf-color-text: #E53935; 
+      
+      --selection-bg: rgba(229, 57, 53, 0.1);
+      --selection-border: #E53935;
+    }
+
+    [data-theme="dark"] {
+      --background: #0f172a;
+      --surface: #1e293b;
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --border: #334155;
+      --pdf-color-bg: #FF6961; 
+      --pdf-color-text: #B71C1C; 
+      --selection-bg: rgba(255, 105, 97, 0.15);
+      --selection-border: #FF6961;
+    }
+
+    /* --- 2. TEMEL AYARLAR --- */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; font-family: 'Roboto', sans-serif; background-color: var(--background); color: var(--text-primary); overflow: hidden; }
+    body { display: flex; flex-direction: column; }
+    .material-symbols-rounded { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; user-select: none; }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .gap-sm { gap: var(--spacing-sm); }
+    .font-semibold { font-weight: 600; }
+    .text-secondary { color: var(--text-secondary); }
+    .text-sm { font-size: 14px; }
+    .justify-between { justify-content: space-between; }
+    .flex-col { flex-direction: column; }
+    .mt-2 { margin-top: 8px; }
+    .mt-3 { margin-top: 12px; }
+    .mb-2 { margin-bottom: 8px; }
+    .text-center { text-align: center; }
+
+    /* --- ARAMA MODU --- */
+    body.is-searching .tabs-container,
+    body.is-searching .bottom-nav,
+    body.is-searching .fab-container,
+    body.is-searching .header-content {
+        display: none !important;
+    }
+
+    body.is-searching .top-bar-container {
+        max-height: var(--header-height);
+        box-shadow: none;
+        border-bottom: 1px solid var(--border);
+    }
+
+    body.is-searching .main-content {
+        padding-top: var(--header-height);
+        padding-bottom: 0;
+        height: 100vh;
+    }
+
+    body.is-searching .grid {
+        padding-top: 16px !important;
+    }
+
+    /* --- SELECTION MODE STYLES --- */
+    body.selection-mode .bottom-nav,
+    body.selection-mode .fab-container,
+    body.selection-mode .header-content,
+    body.selection-mode .tabs-container {
+        display: none !important;
+    }
+    
+    body.selection-mode .top-bar-container {
+        background: var(--primary);
+        color: white;
+        height: var(--header-height);
+        max-height: var(--header-height);
+    }
+    
+    body.selection-mode .selection-header {
+        display: flex !important;
+        padding: 0 var(--spacing-sm); 
+        align-items: center;
+        justify-content: space-between;
+        height: 100%;
+        width: 100%;
+    }
+    
+    body.selection-mode .selection-count {
+        font-size: 16px;
+        font-weight: 500;
+        margin-left: 8px;
+        white-space: nowrap;
+    }
+    
+    body.selection-mode .selection-actions {
+        display: flex;
+        align-items: center;
+        gap: 2px; 
+        overflow-x: auto; 
+    }
+    
+    body.selection-mode .icon-button.selection {
+        color: white;
+        width: 36px;
+        height: 36px;
+        flex-shrink: 0;
+    }
+    
+    body.selection-mode .icon-button.selection:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    
+    body.selection-mode .card {
+        position: relative;
+        cursor: default;
+    }
+    
+    body.selection-mode .card:active {
+        transform: none;
+        background: var(--surface);
+    }
+    
+    body.selection-mode .card.selected {
+        background: var(--selection-bg);
+        border-color: var(--selection-border);
+        border-width: 2px;
+    }
+    
+    .selection-checkbox {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--text-secondary);
+        border-radius: 4px;
+        background: var(--surface);
+        z-index: 2;
+        display: none;
+    }
+    
+    body.selection-mode .selection-checkbox {
+        display: block;
+    }
+    
+    .selection-checkbox.selected {
+        background: var(--primary);
+        border-color: var(--primary);
+    }
+    
+    .selection-checkbox.selected::after {
+        content: '✓';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    
+    .selection-header {
+        display: none;
+    }
+
+    /* --- ARAÇLAR KARTLARI STİLLERİ --- */
+    .tools-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        padding: 16px;
+    }
+    
+    .tool-card {
+        background: var(--surface);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        cursor: pointer;
+        transition: all var(--transition-normal);
+        box-shadow: var(--shadow-md);
+        min-height: 120px;
+    }
+    
+    .tool-card:active {
+        transform: scale(0.98);
+        background: rgba(0,0,0,0.02);
+    }
+    
+    .tool-icon-wrapper {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 12px;
+        font-size: 28px;
+    }
+    
+    .tool-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+        line-height: 1.3;
+    }
+
+    /* --- 3. ÜST BAR (STICKY HEADER) --- */
+    .top-bar-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        max-height: var(--top-bar-total); 
+        z-index: var(--z-top-bar);
+        background: var(--surface);
+        transition: transform 0.3s ease, max-height 0.3s ease, background-color 0.3s ease;
+        box-shadow: var(--shadow-md);
+    }
+    .top-bar-container.tabs-hidden {
+        max-height: var(--header-height);
+    }
+    .app-header { 
+        height: var(--header-height); 
+        padding: 0 var(--spacing-lg); 
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between; 
+        border-bottom: 1px solid var(--border);
+        position: relative; 
+    }
+
+    /* --- ARAMA ÇUBUĞU STİLLERİ --- */
+    .header-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        transition: opacity 0.2s ease;
+    }
+    .header-content.hidden {
+        opacity: 0;
+        pointer-events: none;
+        display: none;
+    }
+    .search-bar-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--surface);
+        display: flex;
+        align-items: center;
+        padding: 0 var(--spacing-sm);
+        z-index: 10;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-10px);
+        transition: all 0.2s ease;
+    }
+    .search-bar-container.active {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+    }
+    .search-input-wrapper {
+        flex: 1;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: var(--radius-full);
+        height: 40px;
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        margin: 0 8px;
+    }
+    [data-theme="dark"] .search-input-wrapper {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    .search-input {
+        background: transparent;
+        border: none;
+        width: 100%;
+        height: 100%;
+        outline: none;
+        font-family: 'Roboto', sans-serif;
+        font-size: 15px;
+        color: var(--text-primary);
+        margin-left: 8px;
+    }
+
+    /* --- TABS --- */
+    .tabs-container { 
+        height: var(--tabs-height);
+        padding: 0 var(--spacing-lg); 
+        border-bottom: 1px solid var(--border);
+        transition: opacity 0.3s ease;
+    }
+    .top-bar-container.tabs-hidden .tabs-container {
+        opacity: 0;
+        height: 0;
+        border-bottom: none;
+        padding: 0;
+        pointer-events: none;
+    }
+    .tabs { display: flex; width: 100%; height: 100%; gap: var(--spacing-sm); }
+    .tab { 
+        flex: 1;
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        justify-content: center;
+        text-align: center;
+        color: var(--text-secondary); 
+        font-weight: 500; 
+        cursor: pointer; 
+        position: relative;
+        transition: color var(--transition-fast);
+        gap: 2px;
+    }
+    .tab-label { font-size: 11px; line-height: 1.2; font-weight: 600; }
+    .tab.active { color: var(--primary); }
+    .tab.active::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 3px; background: var(--primary); border-radius: 3px 3px 0 0; }
+    
+    .logo { 
+        width: 36px; 
+        height: 36px; 
+        border-radius: 50%; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        overflow: hidden; 
+        flex-shrink: 0;
+    } 
+    .logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .app-title { 
+      font-size: 20px; 
+      font-weight: 700; 
+      background: linear-gradient(to right, #B71C1C, #FF6961); 
+      -webkit-background-clip: text; 
+      -webkit-text-fill-color: transparent; 
+      background-clip: text; 
+    }
+    .icon-button { width: 40px; height: 40px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; transition: all var(--transition-fast); }
+    .icon-button:hover { background: rgba(0, 0, 0, 0.05); color: var(--text-primary); }
+    .icon-button.primary { background: var(--primary); color: white; }
+
+    /* --- 4. ANA İÇERİK ALANI --- */
+    .main-content {
+        padding-top: var(--top-bar-total);
+        padding-bottom: var(--bottom-nav-height);
+        height: 100vh;
+        width: 100%;
+        overflow: hidden; 
+        position: relative;
+        z-index: var(--z-content);
+        transition: padding 0.3s ease;
+    }
+    .content-panel {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%; 
+        overflow-y: auto; 
+        overscroll-behavior-y: contain; 
+        opacity: 0;
+        transform: translateX(20px);
+        transition: opacity var(--transition-normal), transform var(--transition-normal);
+        pointer-events: none;
+        box-sizing: border-box; 
+    }
+    .static-panel {
+        padding-top: calc(var(--header-height) + 16px);
+        overflow-y: auto; 
+    }
+    .content-panel.active {
+        opacity: 1;
+        transform: translateX(0);
+        pointer-events: all;
+    }
+    
+    .grid { 
+        display: grid; 
+        gap: 10px; 
+        grid-template-columns: 1fr;
+        padding: calc(var(--top-bar-total) + 16px) var(--card-gutter) 120px var(--card-gutter); 
+        width: 100%;
+    }
+    
+    .static-panel .grid {
+        padding-top: 0 !important;
+        padding-bottom: 120px;
+    }
+
+    /* --- 5. PDF KART TASARIMI --- */
+    .card { 
+      background: var(--surface); 
+      border-radius: var(--radius-md); 
+      border: 1px solid var(--border); 
+      padding: var(--card-padding); 
+      transition: all var(--transition-normal); 
+      cursor: pointer; 
+      box-shadow: var(--shadow-md); 
+      display: flex; 
+      align-items: center; 
+      gap: 12px; 
+      width: 100%; 
+      max-width: var(--card-max-width);
+      margin: 0 auto;
+      user-select: none; 
+      -webkit-user-select: none;
+      position: relative;
+    }
+    .card:active { transform: scale(0.98); background: rgba(0,0,0,0.02); }
+    .card.hidden { display: none !important; } 
+    
+    .card-icon-svg-wrapper {
+        width: var(--card-icon-size); 
+        height: var(--card-icon-size); 
+        flex-shrink: 0;
+        margin-left: 4px;
+    }
+    
+    .card-details {
+        flex-grow: 1;
+        flex-basis: 50%; 
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .card-title { 
+      font-size: 14px; 
+      font-weight: 600; 
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .card-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px; 
+        font-size: 11px; 
+        color: var(--text-secondary);
+        margin-top: 2px;
+    }
+
+    .card-actions {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+    }
+
+    /* --- 6. DİĞER STİLLER --- */
+    .menu-list {
+        display: flex;
+        flex-direction: column;
+        background: var(--surface);
+        border-radius: var(--radius-lg);
+        width: calc(100% - 2 * var(--card-gutter));
+        max-width: calc(var(--card-max-width) + 24px);
+        margin: 0 auto;
+    }
+    .menu-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px var(--spacing-md); 
+        cursor: pointer;
+        border-bottom: 1px solid var(--border);
+        transition: background-color 0.1s;
+    }
+    .menu-item:last-child {
+        border-bottom: none;
+    }
+    .menu-item:active {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+    .menu-item-info {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
+    }
+    .menu-icon-wrapper {
+        width: 28px; 
+        height: 28px; 
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26px; 
+    }
+    .menu-label-wrapper {
+        display: flex;
+        flex-direction: column;
+    }
+    .menu-label {
+        font-size: 15px; 
+        font-weight: 500;
+        line-height: 1.2;
+    }
+    .menu-sublabel {
+        font-size: 11px; 
+        color: var(--text-secondary);
+        line-height: 1.2;
+    }
+    .icon-device { color: var(--text-primary); }
+    .icon-shared { color: var(--primary); }
+    .icon-photos { color: #f94144; } 
+    .icon-yandex { color: #FF0000; } 
+    .icon-mega { background-color: #D60914; color: white; border-radius: 4px; font-size: 16px !important; padding: 4px; } 
+    .icon-gdrive { color: #34A853; }
+    .icon-onedrive { color: #0078D4; }
+    .icon-dropbox { color: #0061FF; }
+    .icon-gmail { background-color: #EA4335; color: white; border-radius: 4px; font-size: 16px !important; padding: 4px; }
+    .icon-folder-open { color: var(--text-secondary); }
+    .bottom-nav { 
+        height: var(--bottom-nav-height); 
+        background: var(--surface); 
+        border-top: 1px solid var(--border); 
+        display: flex; 
+        align-items: center; 
+        justify-content: space-around; 
+        position: fixed; 
+        bottom: 0; 
+        width: 100%;
+        z-index: var(--z-bottom-nav); 
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px; color: var(--text-secondary); cursor: pointer; transition: color var(--transition-fast); }
+    .nav-item.active { color: var(--primary); }
+    .nav-label { font-size: 11px; font-weight: 500; }
+    .fab-container { position: fixed; bottom: 90px; right: 24px; z-index: var(--z-bottom-nav); }
+    .fab { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--secondary)); border: none; color: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 20px rgba(0,0,0,0.2); cursor: pointer; }
+    .fab-menu { position: absolute; bottom: 70px; right: 0; background: var(--surface); border-radius: 12px; padding: 8px; width: 180px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); opacity: 0; transform: translateY(10px); pointer-events: none; transition: all 0.2s; border: 1px solid var(--border); }
+    .fab-menu.show { opacity: 1; transform: translateY(0); pointer-events: all; }
+    .fab-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 8px; cursor: pointer; }
+    .fab-item:active { background: rgba(0, 0, 0, 0.05); }
+    
+    /* --- DRAWER (SOL MENÜ) --- */
+    .drawer-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: var(--z-overlay); opacity: 0; visibility: hidden; transition: 0.3s; }
+    .drawer-overlay.show { opacity: 1; visibility: visible; }
+    .drawer { position: fixed; top: 0; left: 0; bottom: 0; width: 280px; background: var(--surface); z-index: var(--z-overlay); transform: translateX(-100%); transition: 0.3s; display: flex; flex-direction: column; }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header { 
+      padding: 32px 24px 16px 24px; 
+      background: var(--surface); 
+      color: var(--text-primary); 
+      border-bottom: 2px solid var(--primary); 
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      flex-shrink: 0;
+    }
+    .drawer-header h3 {
+        font-size: 24px;
+        font-weight: 700; 
+        background: linear-gradient(to right, #B71C1C, #FF6961); 
+        -webkit-background-clip: text; 
+        -webkit-text-fill-color: transparent; 
+        background-clip: text; 
+        display: inline;
+    }
+    .drawer-logo {
+        width: 36px; 
+        height: 36px; 
+        border-radius: 50%; 
+        overflow: hidden; 
+        flex-shrink: 0;
+    }
+    .drawer-logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .drawer-content { 
+      padding: 16px; 
+      overflow-y: auto; 
+    }
+    .drawer-item { 
+      padding: 12px; 
+      display: flex; 
+      gap: 16px; 
+      align-items: center; 
+      border-radius: 8px; 
+      margin-bottom: 4px; 
+      cursor: pointer; 
+      transition: background-color 0.1s;
+    }
+    .drawer-item:hover { background: rgba(0, 0, 0, 0.05); }
+    .drawer-item:active { background: rgba(0, 0, 0, 0.1); } 
+
+    .drawer-accordion-content {
+      background: rgba(0, 0, 0, 0.03); 
+      border-radius: 8px;
+      margin-top: -4px;
+      margin-bottom: 8px;
+      padding: 0 16px;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s ease-in-out, padding 0.4s ease-in-out;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    .drawer-accordion-content.open {
+      max-height: 500px;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+    }
+
+    /* --- CONTEXT MENU (ALT ÇEKMECE) --- */
+    .context-sheet-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: var(--z-context-menu);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s;
+    }
+    .context-sheet-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+    .context-sheet {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background: var(--surface);
+        z-index: var(--z-context-menu);
+        border-radius: 20px 20px 0 0;
+        transform: translateY(100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        padding: 24px 0;
+        border-top: 1px solid var(--border);
+    }
+    .context-sheet.show {
+        transform: translateY(0);
+    }
+    .sheet-handle {
+        width: 40px;
+        height: 4px;
+        background: var(--text-secondary);
+        border-radius: 2px;
+        margin: -10px auto 20px auto;
+        opacity: 0.3;
+    }
+    .sheet-header {
+        padding: 0 24px 16px 24px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 8px;
+    }
+    .sheet-title {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .sheet-meta {
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+    .sheet-item {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 24px;
+        cursor: pointer;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+    .sheet-item:active {
+        background: rgba(0,0,0,0.05);
+    }
+    .sheet-item.danger {
+        color: var(--error);
+    }
+    .sheet-item .material-symbols-rounded {
+        font-size: 24px;
+        color: inherit;
+    }
+    
+    /* --- SETTINGS STYLES --- */
+    .settings-tabs {
+        display: flex;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 12px;
+    }
+    .setting-tab {
+        flex: 1;
+        padding: 8px 4px;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        color: var(--text-secondary);
+        border-bottom: 2px solid transparent;
+        transition: all var(--transition-fast);
+    }
+    .setting-tab.active {
+        color: var(--primary);
+        border-bottom: 2px solid var(--primary);
+    }
+    .setting-panel {
+        padding: 8px 0;
+        display: none;
+        animation: fadeIn 0.3s;
+    }
+    .setting-panel.active {
+        display: block;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .select-placeholder {
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin-top: 8px;
+        color: var(--text-primary);
+        background: var(--surface);
+        display: block;
+        width: 100%;
+        text-align: left;
+    }
+    .theme-options {
+        display: flex;
+        gap: 16px;
+        margin-top: 12px;
+    }
+    .theme-option {
+        flex: 1;
+        text-align: center;
+        padding: 12px 8px;
+        border: 2px solid var(--border);
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+    .theme-option.active {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.3);
+        background: rgba(var(--primary-rgb), 0.05);
+    }
+    .theme-option .material-symbols-rounded {
+        font-size: 32px;
+        margin-bottom: 4px;
+        color: var(--text-secondary);
+    }
+    .theme-option.active .material-symbols-rounded {
+        color: var(--primary);
+    }
+    .theme-option p {
+        font-size: 12px;
+        font-weight: 500;
+    }
+    .help-form input, .help-form textarea, .help-form button {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-sizing: border-box;
+        background: var(--surface);
+        color: var(--text-primary);
+    }
+    .help-form textarea {
+        resize: vertical;
+        min-height: 100px;
+    }
+    .help-form button {
+        background-color: var(--primary);
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color var(--transition-fast);
+    }
+    .help-form button:hover {
+        background-color: var(--secondary);
+    }
+    .empty-state { padding: 40px; text-align: center; color: var(--text-secondary); }
+    .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+    
+    /* --- İZİN BANNER STİLLERİ --- */
+    .permission-banner {
+        padding: 20px;
+        text-align: center;
+        background: var(--surface);
+        border-radius: 12px;
+        margin: 20px;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-md);
+    }
+    .permission-banner img {
+        width: 120px;
+        opacity: 0.7;
+        margin-bottom: 16px;
+    }
+    .permission-banner h3 {
+        font-size: 18px;
+        margin-bottom: 8px;
+        color: var(--text-primary);
+    }
+    .permission-banner p {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin-bottom: 16px;
+    }
+    .permission-banner button {
+        padding: 12px 20px;
+        border-radius: 12px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color var(--transition-fast);
+    }
+    .permission-banner button:hover {
+        background: var(--secondary);
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>✅ PDF Reader Test Sayfası</h1>
-        
-        <div class="status-box success">
-            <h3>🎉 Başarılı!</h3>
-            <p>HTML sayfası başarıyla yüklendi.</p>
-            <p>Flutter WebView çalışıyor.</p>
+
+  <input type="file" id="pdfFileInput" accept="application/pdf" style="display: none;" onchange="handleFileSelect(event)">
+
+  <div class="top-bar-container" id="topBar">
+    <header class="app-header">
+      
+      <div class="header-content" id="headerNormal">
+        <div class="flex items-center gap-sm">
+          <div class="logo">
+              <img src="logo/logo.png" alt="PDF Reader Logo">
+          </div>
+          <h1 class="app-title">PDF Reader</h1>
         </div>
-        
-        <div class="status-box">
-            <h3>📊 Sistem Bilgileri</h3>
-            <p id="userAgent">Tarayıcı: Yükleniyor...</p>
-            <p id="screenSize">Ekran Boyutu: Yükleniyor...</p>
-            <p id="timestamp">Zaman: Yükleniyor...</p>
+        <div class="flex items-center gap-sm">
+          <button class="icon-button" id="searchBtn"><span class="material-symbols-rounded">search</span></button>
+          <button class="icon-button" id="menuBtn"><span class="material-symbols-rounded">menu</span></button>
         </div>
-        
-        <div class="status-box">
-            <h3>🧪 Test Butonları</h3>
-            <button onclick="showAlert()">Alert Göster</button>
-            <button onclick="changeColor()">Arkaplan Değiştir</button>
-            <button onclick="checkConsole()">Console Test</button>
+      </div>
+
+      <div class="search-bar-container" id="searchBar">
+          <button class="icon-button" id="closeSearchBtn">
+              <span class="material-symbols-rounded">arrow_back</span>
+          </button>
+          <div class="search-input-wrapper">
+              <span class="material-symbols-rounded text-secondary" style="font-size: 20px;">search</span>
+              <input type="text" class="search-input" id="searchInput" placeholder="PDF Ara...">
+          </div>
+          <button class="icon-button" onclick="document.getElementById('searchInput').value = ''; triggerSearch();">
+              <span class="material-symbols-rounded">close</span>
+          </button>
+      </div>
+      
+      <div class="selection-header" id="selectionHeader">
+          <div class="selection-count" id="selectionCount">0 öğe seçildi</div>
+          <div class="selection-actions">
+              <button class="icon-button selection" title="Tümünü Seç" onclick="selectAllCards()">
+                  <span class="material-symbols-rounded">select_all</span>
+              </button>
+              <button class="icon-button selection" title="Seçimi Kaldır" onclick="deselectAllCards()">
+                  <span class="material-symbols-rounded">deselect</span>
+              </button>
+              <button class="icon-button selection" title="Paylaş" onclick="shareSelectedCards()">
+                  <span class="material-symbols-rounded">share</span>
+              </button>
+              <button class="icon-button selection" title="Yazdır" onclick="printSelectedCards()">
+                  <span class="material-symbols-rounded">print</span>
+              </button>
+              <button class="icon-button selection" title="Sil" onclick="deleteSelectedCards()">
+                  <span class="material-symbols-rounded">delete</span>
+              </button>
+              <button class="icon-button selection" title="Kapat" onclick="exitSelectionMode()">
+                  <span class="material-symbols-rounded">close</span>
+              </button>
+          </div>
+      </div>
+
+    </header>
+
+    <div class="tabs-container" id="tabsContainer">
+      <div class="tabs">
+        <div class="tab active" data-tab="recent">
+          <span class="material-symbols-rounded">history</span> 
+          <span class="tab-label">Son Kullanılanlar</span>
         </div>
+        <div class="tab" data-tab="device">
+          <span class="material-symbols-rounded">phone_iphone</span> 
+          <span class="tab-label">Cihazda</span>
+        </div>
+        <div class="tab" data-tab="favorites">
+          <span class="material-symbols-rounded">star</span> 
+          <span class="tab-label">Favoriler</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <main class="main-content" id="mainContent">
+    
+    <div class="content-panel active" id="recentPanel">
+      <div class="grid" id="recentList"></div>
+    </div>
+
+    <div class="content-panel" id="devicePanel">
+      <!-- İZİN BANNERİ -->
+      <div class="permission-banner" id="permissionContainer">
+        <img src="images/permission1.png" alt="İzin Gerekiyor">
+        <h3>Cihazınızdaki PDF'lere erişebilmem için izin gerekli</h3>
+        <p>Devam etmek için Tüm Dosya Erişimi izni verin.</p>
+        <button onclick="location.href='settings://all_files'">
+            Ayarlardan Erişim Ver
+        </button>
+      </div>
+      
+      <!-- PDF LİSTESİ -->
+      <div class="grid" id="deviceList"></div>
+    </div>
+
+    <div class="content-panel" id="favoritesPanel">
+      <div class="grid" id="favoritesList"></div>
+    </div>
+    
+    <div class="content-panel static-panel" id="filesPanel">
+      <div class="grid">
+        <div class="menu-list">
         
-        <div class="info">
-            <p>Bu sayfa <code>assets/web/index.html</code> dosyasından yüklenmiştir.</p>
-            <p>Flutter InAppWebView v6.1.5 ile çalışmaktadır.</p>
-            <p>Build zamanı: <span id="buildTime"></span></p>
+          <div class="menu-item" onclick="handleFileSource('device')">
+            <div class="menu-item-info">
+              <span class="material-symbols-rounded menu-icon-wrapper icon-device">phone_android</span>
+              <span class="menu-label">Bu aygıtta</span>
+            </div>
+            <span class="material-symbols-rounded text-secondary">chevron_right</span>
+          </div>
+
+          <div class="menu-item" onclick="handleFileSource('gdrive')">
+            <div class="menu-item-info">
+              <span class="material-symbols-rounded menu-icon-wrapper icon-gdrive">drive_file_move</span>
+              <span class="menu-label">Google Drive</span>
+            </div>
+            <span class="material-symbols-rounded text-secondary">add</span>
+          </div>
+
+          <div class="menu-item" onclick="handleFileSource('onedrive')">
+            <div class="menu-item-info">
+              <span class="material-symbols-rounded menu-icon-wrapper icon-onedrive">cloud</span>
+              <span class="menu-label">OneDrive</span>
+            </div>
+            <span class="material-symbols-rounded text-secondary">add</span>
+          </div>
+
+          <div class="menu-item" onclick="handleFileSource('dropbox')">
+            <div class="menu-item-info">
+              <span class="material-symbols-rounded menu-icon-wrapper icon-dropbox">interests</span>
+              <span class="menu-label">Dropbox</span>
+            </div>
+            <span class="material-symbols-rounded text-secondary">add</span>
+          </div>
+
+          <div class="menu-item" onclick="handleFileSource('gmail')">
+            <div class="menu-item-info">
+              <span class="material-symbols-rounded menu-icon-wrapper icon-gmail">mail</span>
+              <div class="menu-label-wrapper">
+                <span class="menu-label">E-postalardaki PDF'ler</span>
+                <span class="menu-sublabel">Gmail</span>
+              </div>
+            </div>
+            <span class="material-symbols-rounded text-secondary">add</span>
+          </div>
+
+          <div class="menu-item" onclick="handleFileSource('browse_more')">
+            <div class="menu-item-info">
+              <span class="material-symbols-rounded menu-icon-wrapper icon-folder_open">folder_open</span>
+              <span class="menu-label">Daha fazla dosyaya göz atın</span>
+            </div>
+            <span class="material-symbols-rounded text-secondary">chevron_right</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    
+    <div class="content-panel static-panel" id="toolsPanel">
+        <div class="tools-grid" id="toolsGrid">
+            <!-- Araçlar kartları JavaScript ile eklenecek -->
         </div>
     </div>
 
-    <script>
-        // Sayfa yüklendiğinde çalışacak
-        document.addEventListener('DOMContentLoaded', function() {
-            // Sistem bilgilerini göster
-            document.getElementById('userAgent').textContent = 'Tarayıcı: ' + navigator.userAgent;
-            document.getElementById('screenSize').textContent = 'Ekran: ' + window.innerWidth + 'x' + window.innerHeight;
-            document.getElementById('timestamp').textContent = 'Zaman: ' + new Date().toLocaleString();
-            document.getElementById('buildTime').textContent = new Date().toLocaleString();
+  </main>
+
+  <div class="fab-container">
+    <div class="fab-menu" id="fabMenu">
+      <div class="fab-item" onclick="handleFabAction('scan')">
+        <span class="material-symbols-rounded">document_scanner</span> Belge Tara
+      </div>
+      <div class="fab-item" onclick="handleFabAction('import')">
+        <span class="material-symbols-rounded">upload_file</span> PDF Yükle
+      </div>
+    </div>
+    <button class="fab" id="fabButton"><span class="material-symbols-rounded">add</span></button>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-item active" data-nav="home">
+      <span class="material-symbols-rounded">home</span>
+      <span class="nav-label">Ana Sayfa</span>
+    </div>
+    <div class="nav-item" data-nav="tools">
+      <span class="material-symbols-rounded">tune</span>
+      <span class="nav-label">Araçlar</span>
+    </div>
+    <div class="nav-item" data-nav="files">
+      <span class="material-symbols-rounded">folder</span>
+      <span class="nav-label">Dosyalar</span>
+    </div>
+  </nav>
+
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+  <aside class="drawer" id="drawer">
+    <div class="drawer-header">
+      <div class="drawer-logo">
+          <img src="logo/logo.png" alt="PDF Reader Logo">
+      </div>
+      <h3>PDF Reader</h3>
+      </div>
+    <div class="drawer-content">
+      
+      <div class="drawer-item" data-accordion="about">
+        <span class="material-symbols-rounded">info</span> Hakkında
+      </div>
+      <div class="drawer-accordion-content" id="accordion-about">
+        <p><strong>PDF Reader by Dev Software</strong></p>
+        <p>Bu uygulama, PDF dosyalarını hızlı, güvenli ve verimli bir şekilde görüntülemek, yönetmek ve temel düzeyde düzenlemek için tasarlanmıştır.</p>
+        <p>Amacımız, en iyi mobil PDF deneyimini sunmaktır. Devam eden güncellemeler ve iyileştirmeler için bizi takipte kalın!</p>
+        <p class="text-sm mt-3">Tüm Hakları Saklıdır &copy; 2025 Dev Software.</p>
+      </div>
+
+      <div class="drawer-item" data-accordion="settings">
+        <span class="material-symbols-rounded">settings</span> Ayarlar & Tercihler
+      </div>
+      <div class="drawer-accordion-content" id="accordion-settings">
+        <div class="settings-tabs">
+            <div class="setting-tab active" data-tab="app-lang">Uygulama Dili</div>
+            <div class="setting-tab" data-tab="pdf-lang">PDF Dili</div>
+            <div class="setting-tab" data-tab="theme">Tema</div>
+        </div>
+        
+        <div class="setting-panel active" data-panel="app-lang">
+            <p class="text-sm font-semibold">Uygulama arayüzünün dilini seçin.</p>
+            <select class="select-placeholder" onchange="alert('Uygulama dili ayarlanıyor: ' + this.value)">
+                <option value="" disabled selected>Uygulama Dili Seçiniz</option>
+                <option value="tr">Türkçe (Turkish)</option>
+                <option value="en">İngilizce (English)</option>
+                </select>
+        </div>
+
+        <div class="setting-panel" data-panel="pdf-lang">
+            <p class="text-sm font-semibold">PDF'leri görüntüleme ve metin kopyalama/arama için OCR dilini seçin.</p>
+            <select class="select-placeholder" onchange="alert('PDF Görüntüleyici dili ayarlanıyor: ' + this.value)">
+                <option value="" disabled selected>Görüntüleyici Dili Seçiniz (50+ Dil)</option>
+                <option value="tr">Türkçe</option>
+                <option value="en">İngilizce</option>
+            </select>
+        </div>
+
+        <div class="setting-panel" data-panel="theme">
+            <p class="text-sm font-semibold mb-2">Uygulamanın görünümünü seçin.</p>
+            <div class="theme-options">
+                <div class="theme-option active" data-theme-val="device" onclick="setThemePreference('device')">
+                    <span class="material-symbols-rounded">phone_android</span>
+                    <p>Cihaz</p>
+                </div>
+                <div class="theme-option" data-theme-val="light" onclick="setThemePreference('light')">
+                    <span class="material-symbols-rounded">light_mode</span>
+                    <p>Light</p>
+                </div>
+                <div class="theme-option" data-theme-val="dark" onclick="setThemePreference('dark')">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <p>Dark</p>
+                </div>
+            </div>
+            <p class="text-sm text-secondary mt-3">Varsayılan olarak cihaz ayarları kullanılır. Seçiminiz tarayıcınızda saklanacaktır.</p>
+        </div>
+      </div>
+
+      <div class="drawer-item" data-accordion="privacy">
+        <span class="material-symbols-rounded">lock</span> Gizlilik
+      </div>
+      <div class="drawer-accordion-content" id="accordion-privacy">
+        <p>Kişisel verilerinizin ve belge gizliliğinizin bizim için en önemli öncelik olduğunu garanti ederiz. Uygulama, dosyalarınızı sunucularımıza yüklemeden cihazınızda yerel olarak işleyecek şekilde tasarlanmıştır.</p>
+        <p><strong>Dev Software</strong> olarak, kullanıcılarımızın hiçbir kişisel verisini üçüncü taraflarla paylaşmayız.</p>
+        <p class="mt-3 font-semibold">Daha fazla bilgi için:</p>
+        <a href="#" onclick="alert('Gizlilik Politikası sayfasına yönlendiriliyor...')" class="text-sm text-primary">Gizlilik Politikası için Tıklayınız</a>
+      </div>
+
+      <div class="drawer-item" data-accordion="help">
+        <span class="material-symbols-rounded">help</span> Yardım
+      </div>
+      <div class="drawer-accordion-content" id="accordion-help">
+        <form class="help-form" onsubmit="sendHelpEmail(event)">
+            <p class="text-sm mb-2">Sorununuzu bize iletin. Ekibimiz en kısa sürede dönüş yapacaktır.</p>
+            <input type="email" id="helpEmail" placeholder="E-posta Adresiniz" required>
+            <input type="text" id="helpSubject" placeholder="Konu Başlığı" required>
+            <textarea id="helpIssue" placeholder="Sorununuzu detaylıca açıklayınız..." required></textarea>
+            <button type="submit">Gönder</button>
+            <p class="text-sm text-secondary text-center mt-2">Bu e-posta devsoftawaremail@gmail.com adresine yönlendirilecektir.</p>
+        </form>
+      </div>
+
+    </div>
+  </aside>
+
+  <div class="context-sheet-overlay" id="contextOverlay"></div>
+  <div class="context-sheet" id="contextSheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+        <h3 class="sheet-title" id="contextTitle">Belge Adı.pdf</h3>
+        <span class="sheet-meta" id="contextMeta">2.5 MB • 12.05.2025</span>
+    </div>
+    <div class="sheet-item" onclick="handleContextAction('rename')">
+        <span class="material-symbols-rounded">edit</span> Yeniden Adlandır
+    </div>
+    <div class="sheet-item" onclick="handleContextAction('share')">
+        <span class="material-symbols-rounded">share</span> Paylaş
+    </div>
+    <div class="sheet-item" onclick="handleContextAction('print')">
+        <span class="material-symbols-rounded">print</span> Yazdır
+    </div>
+    <div class="sheet-item danger" onclick="handleContextAction('delete')">
+        <span class="material-symbols-rounded">delete</span> Sil
+    </div>
+  </div>
+
+  <script>
+    // --- VARIABLES ---
+    const topBar = document.getElementById('topBar');
+    const mainContent = document.getElementById('mainContent');
+    const tabs = document.querySelectorAll('.tab');
+    const panels = document.querySelectorAll('.content-panel');
+    const navItems = document.querySelectorAll('.nav-item');
+    const fabButton = document.getElementById('fabButton');
+    const fabMenu = document.getElementById('fabMenu');
+    const drawer = document.getElementById('drawer');
+    const overlay = document.getElementById('drawerOverlay');
+    const drawerItems = document.querySelectorAll('.drawer-item[data-accordion]');
+    const settingsTabs = document.querySelectorAll('.setting-tab');
+    const themeOptions = document.querySelectorAll('.theme-option');
+    const pdfFileInput = document.getElementById('pdfFileInput');
+    
+    // Search Variables
+    const searchBtn = document.getElementById('searchBtn');
+    const headerNormal = document.getElementById('headerNormal');
+    const searchBar = document.getElementById('searchBar');
+    const searchInput = document.getElementById('searchInput');
+    const closeSearchBtn = document.getElementById('closeSearchBtn');
+
+    // Context Menu Variables
+    const contextOverlay = document.getElementById('contextOverlay');
+    const contextSheet = document.getElementById('contextSheet');
+    const contextTitle = document.getElementById('contextTitle');
+    const contextMeta = document.getElementById('contextMeta');
+    let currentContextFile = null;
+
+    // Selection Mode Variables
+    const selectionHeader = document.getElementById('selectionHeader');
+    const selectionCount = document.getElementById('selectionCount');
+    let isSelectionMode = false;
+    let selectedCards = new Set();
+
+    // Data Storage
+    let importedFiles = []; // PDF Yükle ile gelen dosyalar
+    let devicePDFs = []; // Cihazdan taranan PDF'ler
+
+    // Scroll & Swipe State
+    let lastScrollY = 0;
+    let startX = 0;
+    let startY = 0;
+    let isSwiping = false; 
+    let isVerticalScroll = false; 
+    const headerHeight = 64; 
+    let currentNav = 'home';
+    const tabOrder = ['recent', 'device', 'favorites'];
+    
+    // --- ARAÇLAR VERİLERİ ---
+    const toolsData = [
+      {
+        id: 1,
+        title: "PDF Birleştirme",
+        icon: "merge",
+        iconCode: "merge",
+        color: "#E53935",
+        page: "birlestirme.html"
+      },
+      {
+        id: 2,
+        title: "Sesli Okuma",
+        icon: "volume_up",
+        iconCode: "volume_up",
+        color: "#4CAF50",
+        page: "sesli_okuma.html"
+      },
+      {
+        id: 3,
+        title: "OCR Metin Çıkarma",
+        icon: "text_fields",
+        iconCode: "text_fields",
+        color: "#2196F3",
+        page: "orc.html"
+      },
+      {
+        id: 4,
+        title: "PDF İmzalama",
+        icon: "draw",
+        iconCode: "draw",
+        color: "#9C27B0",
+        page: "imza.html"
+      },
+      {
+        id: 5,
+        title: "PDF Sıkıştırma",
+        icon: "compress",
+        iconCode: "compress",
+        color: "#FF9800",
+        page: "sikistirma.html"
+      },
+      {
+        id: 6,
+        title: "PDF Sayfalarını Organize Etme",
+        icon: "reorder",
+        iconCode: "reorder",
+        color: "#795548",
+        page: "organize.html"
+      },
+      {
+        id: 7,
+        title: "Resimden PDF",
+        icon: "image",
+        iconCode: "image",
+        color: "#00BCD4",
+        page: "resimden_pdf.html"
+      },
+      {
+        id: 8,
+        title: "PDF'den Resim",
+        icon: "picture_as_pdf",
+        iconCode: "picture_as_pdf",
+        color: "#607D8B",
+        page: "pdf_resme.html"
+      }
+    ];
+    
+    // --- INITIALIZATION ---
+    document.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      loadData();
+      loadTools();
+      attachEvents();
+      document.getElementById('recentPanel').scrollTop = 0;
+      document.querySelector('.setting-tab').classList.add('active');
+      document.querySelector('.setting-panel').classList.add('active');
+      
+      const currentTheme = localStorage.getItem('pdfTheme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.querySelector(`.theme-option[data-theme-val="${currentTheme === 'dark' ? 'dark' : (currentTheme === 'light' ? 'light' : 'device')}"]`).classList.add('active');
+      
+      // Uygulama açıldığında cihaz PDF'lerini kontrol et
+      setTimeout(() => {
+        if (currentNav === 'home') {
+          scanDeviceForPDFs();
+        }
+      }, 1000);
+    });
+
+    // --- ARAÇLAR YÜKLEME ---
+    function loadTools() {
+      const toolsGrid = document.getElementById('toolsGrid');
+      if (!toolsGrid) return;
+      
+      let html = '';
+      toolsData.forEach(tool => {
+        html += `
+          <div class="tool-card" onclick="openToolPage('${tool.page}')">
+            <div class="tool-icon-wrapper" style="background: ${tool.color}20; color: ${tool.color};">
+              <span class="material-symbols-rounded">${tool.iconCode}</span>
+            </div>
+            <div class="tool-title">${tool.title}</div>
+          </div>
+        `;
+      });
+      
+      toolsGrid.innerHTML = html;
+    }
+    
+    function openToolPage(page) {
+      window.location.href = page;
+    }
+
+    function initTheme() {
+      const saved = localStorage.getItem('pdfTheme');
+      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      let themeToSet = 'light';
+      if (saved === 'dark' || (saved === 'device' && systemPrefersDark)) {
+        themeToSet = 'dark';
+      } else if (saved === 'light') {
+        themeToSet = 'light';
+      } else if (saved === 'device' && !systemPrefersDark) {
+        themeToSet = 'light';
+      }
+      document.documentElement.setAttribute('data-theme', themeToSet);
+    }
+
+    function setThemePreference(preference) {
+        localStorage.setItem('pdfTheme', preference);
+        themeOptions.forEach(opt => opt.classList.remove('active'));
+        document.querySelector(`.theme-option[data-theme-val="${preference}"]`).classList.add('active');
+        initTheme();
+        loadData();
+    }
+
+    function loadData() {
+      renderList('recentList', []); // Son kullanılanlar boş
+      renderList('favoritesList', []); // Favoriler boş
+      
+      // Cihaz PDF'lerini ve importedFiles'ı birleştir
+      const allDeviceFiles = [...devicePDFs, ...importedFiles.filter(f => !f.path || !f.path.startsWith('/'))];
+      renderList('deviceList', allDeviceFiles);
+      
+      // İzin kontrolü yap
+      checkPermissionAndUpdateUI();
+    }
+
+    // Listeleri render eden yardımcı fonksiyon
+    function renderList(listId, files) {
+        const list = document.getElementById(listId);
+        if (files.length === 0) {
+            list.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon material-symbols-rounded">folder_open</div>
+                <p>Henüz dosya yok.</p>
+            </div>`;
+        } else {
+            let html = '';
+            files.forEach(file => {
+                 html += createCard(file.name, file.size, file.date, file.isFavorite, file.id);
+            });
+            list.innerHTML = html;
+            attachLongPressEvents();
+        }
+    }
+
+    // KART OLUŞTURMA
+    function createCard(name, size, date, isFavorite, id) {
+      const MAX_LENGTH = 30;
+      const truncatedName = name.length > MAX_LENGTH 
+          ? name.substring(0, MAX_LENGTH) + '...' 
+          : name;
+
+      const theme = document.documentElement.getAttribute('data-theme');
+      const bgColor = theme === 'dark' ? 'var(--pdf-color-bg)' : '#E53935';
+      const textColor = theme === 'dark' ? 'var(--pdf-color-text)' : '#E53935';
+      const fillStar = isFavorite ? 1 : 0;
+
+      const pdfIconSvg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 64 64">
+          <rect x="0" y="0" width="64" height="64" rx="10" fill="${bgColor}"/>
+          <path d="M18 12h22l10 10v30a4 4 0 0 1-4 4H18a4 4 0 0 1-4-4V16a4 4 0 0 1 4-4z"
+                fill="#FFFFFF"/>
+          <polygon points="40,12 50,22 40,22" fill="#F0F0F0"/>
+          <rect x="22" y="24" width="18" height="3" rx="1.5" fill="${textColor}"/>
+          <rect x="22" y="30" width="20" height="3" rx="1.5" fill="${textColor}"/>
+          <rect x="22" y="36" width="20" height="3" rx="1.5" fill="${textColor}"/>
+          <text x="50%" y="52" text-anchor="middle"
+                font-family="Segoe UI, Roboto, Arial, sans-serif"
+                font-weight="700" font-size="14" fill="${textColor}">
+            PDF
+          </text>
+        </svg>
+      `;
+
+      return `
+      <div class="card" 
+           data-name="${name}" 
+           data-size="${size}" 
+           data-date="${date}"
+           data-favorite="${isFavorite ? 'true' : 'false'}"
+           data-id="${id}"
+           onclick="handleCardClick(this, '${name}', ${id})">
+        
+        <div class="selection-checkbox" onclick="event.stopPropagation(); toggleCardSelection(${id})"></div>
+        
+        <div class="card-icon-svg-wrapper">
+            ${pdfIconSvg}
+        </div>
+        <div class="card-details">
+            <h3 class="card-title">${truncatedName}</h3>
+            <div class="card-meta">
+                <span class="font-semibold">${size}</span> 
+                <span>•</span> 
+                <span>${date}</span>
+            </div>
+        </div>
+        <div class="card-actions">
+            <button class="icon-button favorite-btn" 
+                    data-fill="${fillStar}"
+                    onclick="event.stopPropagation(); toggleFavorite(this, ${id})">
+                <span class="material-symbols-rounded" style="font-variation-settings: 'FILL' ${fillStar}, 'wght' 500, 'GRAD' 0, 'opsz' 24;">star</span>
+            </button>
+            <button class="icon-button more-btn" 
+                    onclick="event.stopPropagation(); openContextMenu('${name}', '${size}', '${date}', ${id})">
+                <span class="material-symbols-rounded">more_vert</span>
+            </button>
+        </div>
+      </div>`;
+    }
+
+    // --- ANDROID İZİN VE PDF TARAMA ---
+    
+    // Android'den izin kontrolü
+    function checkAndroidPermission() {
+        try {
+            if (typeof Android !== 'undefined' && Android.checkPermission) {
+                return Android.checkPermission();
+            }
+            return false;
+        } catch (e) {
+            console.error('Permission check error:', e);
+            return false;
+        }
+    }
+    
+    // İzin durumuna göre UI güncelle
+    function checkPermissionAndUpdateUI() {
+        const hasPermission = checkAndroidPermission();
+        const permissionContainer = document.getElementById('permissionContainer');
+        const deviceList = document.getElementById('deviceList');
+        
+        if (!hasPermission) {
+            // İzin yoksa banner göster, listeyi gizle
+            if (permissionContainer) permissionContainer.style.display = 'block';
+            if (deviceList) deviceList.style.display = 'none';
+        } else {
+            // İzin varsa banner gizle, listeyi göster
+            if (permissionContainer) permissionContainer.style.display = 'none';
+            if (deviceList) deviceList.style.display = 'grid';
+        }
+    }
+
+    // Cihaz PDF'lerini tarama
+    function scanDeviceForPDFs() {
+        try {
+            // Önce izin kontrolü
+            if (!checkAndroidPermission()) {
+                checkPermissionAndUpdateUI();
+                return;
+            }
             
-            console.log('✅ index.html başarıyla yüklendi');
-            console.log('🔧 User Agent:', navigator.userAgent);
-            console.log('📱 Ekran:', window.innerWidth + 'x' + window.innerHeight);
+            // Android bridge'den PDF listesini al
+            let pdfPaths = [];
+            if (typeof Android !== 'undefined' && Android.listPDFs) {
+                const result = Android.listPDFs();
+                if (result && result.trim().length > 0 && result !== "PERMISSION_DENIED") {
+                    pdfPaths = result.split('||').filter(p => p && p.trim().length > 0);
+                }
+            }
             
-            // Flutter'a mesaj gönder (isteğe bağlı)
-            if (window.flutter_inappwebview) {
-                console.log('📲 Flutter WebView bağlantısı aktif');
+            // PDF'leri devicePDFs dizisine ekle
+            devicePDFs = [];
+            let nextId = 1000; // Cihaz PDF'leri için yüksek ID'ler
+            
+            pdfPaths.forEach(path => {
+                const name = path.split('/').pop();
+                devicePDFs.push({
+                    id: nextId++,
+                    name: name,
+                    size: getFileSizeFromPath(path),
+                    date: getFileDateFromPath(path),
+                    isFavorite: false,
+                    path: path
+                });
+            });
+            
+            // UI'ı güncelle
+            checkPermissionAndUpdateUI();
+            loadData(); // Verileri yeniden yükle
+            
+        } catch (e) {
+            console.error('Device scan error:', e);
+            checkPermissionAndUpdateUI();
+        }
+    }
+    
+    // Dosya boyutunu al (simüle)
+    function getFileSizeFromPath(path) {
+        // Gerçek uygulamada Android'den dosya boyutu alınmalı
+        return "~2.5 MB";
+    }
+    
+    // Dosya tarihini al (simüle)
+    function getFileDateFromPath(path) {
+        const now = new Date();
+        return `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+    }
+
+    // --- DOSYA YÜKLEME İŞLEMLERİ ---
+    
+    // FAB Action Handler
+    function handleFabAction(action) {
+      if (action === 'scan') {
+          alert('Kamera açılıyor: Belge Tarama Modu...');
+      } else if (action === 'import') {
+          // Gizli inputu tetikle
+          pdfFileInput.click();
+      }
+      // Menüyü kapat
+      fabMenu.classList.remove('show');
+    }
+
+    // Dosya Seçim İşleyicisi (FileReader ile BASE64 dönüşümü)
+    function handleFileSelect(event) {
+        const files = event.target.files;
+        if (files && files.length > 0) {
+            const file = files[0];
+            
+            // Tarih Formatlama
+            const now = new Date();
+            const formattedDate = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+            
+            // FileReader kullanarak dosyayı oku (Base64)
+            const reader = new FileReader();
+            
+            reader.onload = () => {
+                const base64Data = reader.result;
+
+                // Dosya Objesi Oluşturma
+                const newFile = {
+                    name: file.name,
+                    size: formatBytes(file.size),
+                    date: formattedDate,
+                    isFavorite: false,
+                    id: Date.now(), 
+                    base64: base64Data // Base64 formatında saklıyoruz
+                };
+
+                // importedFiles dizisine ekle
+                importedFiles.unshift(newFile); 
+
+                alert(`${newFile.name} başarıyla içe aktarıldı.`);
+                
+                // Eğer Ana Sayfa'da değilsek ana sayfaya geç
+                if (currentNav !== 'home') {
+                    switchNav('home');
+                }
+                
+                // "Cihazda" sekmesine geç
+                switchTab('device', true);
+                
+                // Listeyi yeniden çiz
+                loadData();
+                
+                // Input değerini temizle
+                pdfFileInput.value = '';
+            };
+
+            // Dosyayı Base64 DataURL olarak oku
+            reader.readAsDataURL(file);
+        }
+    }
+
+    // Byte dönüştürücü
+    function formatBytes(bytes, decimals = 1) {
+        if (!+bytes) return '0 Bytes';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+    }
+
+    // --- SELECTION MODE FUNCTIONS ---
+
+    function enterSelectionMode() {
+        isSelectionMode = true;
+        document.body.classList.add('selection-mode');
+        updateSelectionCount();
+    }
+    
+    function exitSelectionMode() {
+        isSelectionMode = false;
+        document.body.classList.remove('selection-mode');
+        selectedCards.clear();
+        document.querySelectorAll('.selection-checkbox').forEach(cb => {
+            cb.classList.remove('selected');
+        });
+        document.querySelectorAll('.card').forEach(card => {
+            card.classList.remove('selected');
+        });
+    }
+    
+    function toggleCardSelection(cardId) {
+        if (!isSelectionMode) {
+            enterSelectionMode();
+        }
+        
+        const card = document.querySelector(`.card[data-id="${cardId}"]`);
+        const checkbox = card.querySelector('.selection-checkbox');
+        
+        if (selectedCards.has(cardId)) {
+            selectedCards.delete(cardId);
+            checkbox.classList.remove('selected');
+            card.classList.remove('selected');
+        } else {
+            selectedCards.add(cardId);
+            checkbox.classList.add('selected');
+            card.classList.add('selected');
+        }
+        
+        updateSelectionCount();
+        
+        if (selectedCards.size === 0) {
+            exitSelectionMode();
+        }
+    }
+    
+    function selectAllCards() {
+        const allCards = document.querySelectorAll('.card:not(.hidden)');
+        allCards.forEach(card => {
+            const cardId = parseInt(card.dataset.id);
+            selectedCards.add(cardId);
+            const checkbox = card.querySelector('.selection-checkbox');
+            checkbox.classList.add('selected');
+            card.classList.add('selected');
+        });
+        updateSelectionCount();
+    }
+    
+    function deselectAllCards() {
+        selectedCards.clear();
+        document.querySelectorAll('.selection-checkbox').forEach(cb => {
+            cb.classList.remove('selected');
+        });
+        document.querySelectorAll('.card').forEach(card => {
+            card.classList.remove('selected');
+        });
+        updateSelectionCount();
+    }
+    
+    function shareSelectedCards() {
+        if (selectedCards.size === 0) return;
+        const fileCount = selectedCards.size;
+        alert(`${fileCount} adet dosya paylaşım için hazırlanıyor...`);
+    }
+
+    function printSelectedCards() {
+        if (selectedCards.size === 0) return;
+        const fileCount = selectedCards.size;
+        alert(`${fileCount} adet dosya yazıcıya gönderiliyor...`);
+    }
+
+    function deleteSelectedCards() {
+        if (selectedCards.size === 0) {
+            alert('Lütfen silmek için öğe seçin.');
+            return;
+        }
+        
+        if (confirm(`${selectedCards.size} öğe silinecek. Emin misiniz?`)) {
+            // importedFiles ve devicePDFs dizilerinden sil
+            selectedCards.forEach(cardId => {
+                importedFiles = importedFiles.filter(file => file.id !== cardId);
+                devicePDFs = devicePDFs.filter(file => file.id !== cardId);
+            });
+            
+            alert(`${selectedCards.size} öğe silindi.`);
+            exitSelectionMode();
+            loadData(); // Listeleri yenile
+        }
+    }
+    
+    function updateSelectionCount() {
+        selectionCount.textContent = `${selectedCards.size} öğe seçildi`;
+    }
+
+    // --- FAVORİ İŞLEVİ ---
+    function toggleFavorite(button, cardId) {
+        if (isSelectionMode) {
+            toggleCardSelection(cardId);
+            return;
+        }
+        
+        const span = button.querySelector('.material-symbols-rounded');
+        const card = button.closest('.card');
+        let isFavorite = card.dataset.favorite === 'true';
+
+        isFavorite = !isFavorite;
+        card.dataset.favorite = isFavorite;
+        
+        const fillValue = isFavorite ? 1 : 0;
+        span.style.fontVariationSettings = `'FILL' ${fillValue}, 'wght' 500, 'GRAD' 0, 'opsz' 24`;
+
+        const actionText = isFavorite ? 'Favorilere Eklendi' : 'Favorilerden Kaldırıldı';
+        alert(`"${card.dataset.name}" ${actionText}`);
+        
+        // importedFiles'da güncelle
+        let fileIndex = importedFiles.findIndex(f => f.id === cardId);
+        if(fileIndex > -1) {
+            importedFiles[fileIndex].isFavorite = isFavorite;
+        }
+        
+        // devicePDFs'de güncelle
+        fileIndex = devicePDFs.findIndex(f => f.id === cardId);
+        if(fileIndex > -1) {
+            devicePDFs[fileIndex].isFavorite = isFavorite;
+        }
+    }
+
+    // --- LONG PRESS VE CLICK YÖNETİMİ ---
+    let longPressTimer;
+    let isLongPress = false;
+
+    function attachLongPressEvents() {
+        const cards = document.querySelectorAll('.card');
+        cards.forEach(card => {
+            card.addEventListener('touchstart', (e) => {
+                if (e.target.closest('.icon-button')) {
+                    clearTimeout(longPressTimer);
+                    return;
+                }
+                
+                isLongPress = false;
+                longPressTimer = setTimeout(() => {
+                    isLongPress = true;
+                    if (navigator.vibrate) navigator.vibrate(50);
+                    const cardId = parseInt(card.dataset.id);
+                    toggleCardSelection(cardId);
+                }, 500); 
+            }, {passive: true});
+
+            card.addEventListener('touchend', () => {
+                clearTimeout(longPressTimer);
+            });
+
+            card.addEventListener('touchmove', () => {
+                clearTimeout(longPressTimer); 
+            });
+        });
+    }
+
+    function handleCardClick(element, name, cardId) {
+        if (isSelectionMode) {
+            toggleCardSelection(cardId);
+            return;
+        }
+        
+        if (!isLongPress) {
+            // 1. Kart ID'sine göre dosya verisini bul
+            let fileData = importedFiles.find(f => f.id === cardId);
+            if (!fileData) {
+                fileData = devicePDFs.find(f => f.id === cardId);
+            }
+
+            // 2. Base64 verisi var mı kontrol et (importedFiles için)
+            if (fileData && fileData.base64) {
+                // 3. Base64 verisini URL parametresi olarak ekle
+                const url = "viewer.html?base64=" + 
+                            encodeURIComponent(fileData.base64) + 
+                            "&name=" + 
+                            encodeURIComponent(name);
+
+                // 4. Yönlendir
+                window.location.href = url;
+            } else if (fileData && fileData.path) {
+                // Cihaz PDF'si için farklı bir yaklaşım
+                const url = "viewer.html?file=" + 
+                            encodeURIComponent(fileData.path) + 
+                            "&name=" + 
+                            encodeURIComponent(name);
+                window.location.href = url;
+            } else {
+                alert("Dosya verisi bulunamadı!");
+            }
+        }
+    }
+
+    // --- CONTEXT MENU FONKSİYONLARI ---
+    function openContextMenu(name, size, date, cardId) {
+        if (isSelectionMode) {
+            toggleCardSelection(cardId);
+            return;
+        }
+        
+        currentContextFile = { name, cardId };
+        contextTitle.textContent = name;
+        contextMeta.textContent = `${size} • ${date}`;
+        
+        contextOverlay.classList.add('show');
+        contextSheet.classList.add('show');
+    }
+
+    function closeContextMenu() {
+        contextOverlay.classList.remove('show');
+        contextSheet.classList.remove('show');
+    }
+
+    function handleContextAction(action) {
+        closeContextMenu();
+        setTimeout(() => {
+            switch(action) {
+                case 'rename':
+                    alert(`"${currentContextFile.name}" yeniden adlandırılıyor...`);
+                    break;
+                case 'share':
+                    alert(`"${currentContextFile.name}" paylaşılıyor...`);
+                    break;
+                case 'print':
+                    alert(`"${currentContextFile.name}" yazdırılıyor...`);
+                    break;
+                case 'delete':
+                    if(confirm(`"${currentContextFile.name}" dosyasını silmek istediğinize emin misiniz?`)) {
+                        // Dosyayı ilgili diziden sil
+                        importedFiles = importedFiles.filter(f => f.id !== currentContextFile.cardId);
+                        devicePDFs = devicePDFs.filter(f => f.id !== currentContextFile.cardId);
+                        loadData();
+                        alert('Dosya silindi.');
+                    }
+                    break;
+            }
+        }, 300); 
+    }
+
+    // --- SEARCH FUNCTIONS ---
+    function triggerSearch() {
+        const query = searchInput.value.toLowerCase();
+        const allCards = document.querySelectorAll('.card');
+        allCards.forEach(card => {
+            const title = card.querySelector('.card-title').innerText.toLowerCase();
+            if (title.includes(query)) {
+                card.classList.remove('hidden');
+            } else {
+                card.classList.add('hidden');
             }
         });
+    }
+
+    // --- EVENTS ---
+    function attachEvents() {
         
-        function showAlert() {
-            alert('Merhaba! JavaScript çalışıyor!');
-            console.log('Alert gösterildi');
+      contextOverlay.addEventListener('click', closeContextMenu);
+
+      searchBtn.addEventListener('click', () => {
+          document.body.classList.add('is-searching'); 
+          
+          headerNormal.classList.add('hidden');
+          searchBar.classList.add('active');
+          searchInput.focus();
+
+          if (currentNav !== 'home') {
+              switchNav('home');
+          }
+      });
+
+      closeSearchBtn.addEventListener('click', () => {
+          document.body.classList.remove('is-searching');
+
+          searchBar.classList.remove('active');
+          headerNormal.classList.remove('hidden');
+          searchInput.value = '';
+          triggerSearch();
+      });
+
+      searchInput.addEventListener('input', triggerSearch);
+
+      // SCROLL
+      panels.forEach(panel => {
+        panel.addEventListener('scroll', (e) => {
+          if (document.body.classList.contains('is-searching')) return;
+
+          if(currentNav !== 'home' || !panel.classList.contains('active')) return;
+          const currentY = e.target.scrollTop;
+          const direction = currentY > lastScrollY ? 'down' : 'up';
+          
+          if(currentY > 10 && direction === 'down') {
+            topBar.style.transform = `translateY(-${headerHeight}px)`;
+          } else if (direction === 'up') {
+            topBar.style.transform = 'translateY(0)';
+          }
+          lastScrollY = currentY;
+        });
+      });
+
+      // SWIPE
+      panels.forEach(panel => {
+        panel.addEventListener('touchstart', e => {
+            if (document.body.classList.contains('is-searching')) return;
+
+            if(currentNav !== 'home' || !panel.classList.contains('active')) return;
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+            isSwiping = false; 
+            isVerticalScroll = false;
+        }, {passive: false});
+
+        panel.addEventListener('touchmove', e => {
+            if (document.body.classList.contains('is-searching')) return;
+
+            if(currentNav !== 'home' || !panel.classList.contains('active')) return;
+            const currentX = e.touches[0].clientX;
+            const currentY = e.touches[0].clientY;
+            const diffX = currentX - startX;
+            const diffY = currentY - startY;
+            const moveThreshold = 10;
+            
+            if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > moveThreshold) {
+                e.preventDefault(); 
+                isSwiping = true;
+                isVerticalScroll = false;
+            } else if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > moveThreshold) {
+                isSwiping = false;
+                isVerticalScroll = true;
+            }
+        }, {passive: false}); 
+
+        panel.addEventListener('touchend', e => {
+            if (document.body.classList.contains('is-searching')) return;
+
+            if(currentNav !== 'home' || !panel.classList.contains('active')) return;
+            const endX = e.changedTouches[0].clientX;
+            const diffX = endX - startX;
+            const swipeThreshold = 50; 
+
+            if (isSwiping && Math.abs(diffX) > swipeThreshold) {
+                changeTab(diffX < 0 ? 1 : -1);
+            }
+            isSwiping = false;
+            isVerticalScroll = false;
+        });
+      });
+      
+      tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab, true)));
+      navItems.forEach(n => n.addEventListener('click', () => switchNav(n.dataset.nav)));
+      
+      fabButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fabMenu.classList.toggle('show');
+      });
+      document.addEventListener('click', () => fabMenu.classList.remove('show'));
+      
+      document.getElementById('menuBtn').addEventListener('click', () => {
+        drawer.classList.add('open');
+        overlay.classList.add('show');
+      });
+      overlay.addEventListener('click', () => {
+        drawer.classList.remove('open');
+        overlay.classList.remove('show');
+      });
+      
+      drawerItems.forEach(item => {
+          item.addEventListener('click', () => {
+              const targetId = `accordion-${item.dataset.accordion}`;
+              const targetContent = document.getElementById(targetId);
+              document.querySelectorAll('.drawer-accordion-content.open').forEach(content => {
+                  if (content !== targetContent) {
+                      content.classList.remove('open');
+                  }
+              });
+              targetContent.classList.toggle('open');
+          });
+      });
+
+      settingsTabs.forEach(tab => {
+          tab.addEventListener('click', () => {
+              const targetTab = tab.dataset.tab;
+              settingsTabs.forEach(t => t.classList.remove('active'));
+              document.querySelectorAll('.setting-panel').forEach(p => p.classList.remove('active'));
+              tab.classList.add('active');
+              document.querySelector(`.setting-panel[data-panel="${targetTab}"]`).classList.add('active');
+          });
+      });
+    }
+
+    // --- NAVIGATION ---
+    function switchTab(id, isClickOrNav = false) {
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+      
+      document.querySelectorAll('#recentPanel, #devicePanel, #favoritesPanel').forEach(p => {
+        p.classList.toggle('active', p.id === `${id}Panel`);
+        if(p.id === `${id}Panel`) {
+            if(isClickOrNav) {
+                p.scrollTop = 0;
+                topBar.style.transform = 'translateY(0)'; 
+                lastScrollY = 0;
+            } else {
+                const currentTransform = topBar.style.transform;
+                if (currentTransform === `translateY(-${headerHeight}px)`) {
+                     p.scrollTop = headerHeight + 1; 
+                     lastScrollY = headerHeight + 1; 
+                } else {
+                    p.scrollTop = 0;
+                    lastScrollY = 0;
+                }
+            }
         }
-        
-        function changeColor() {
-            const colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe'];
-            const randomColor = colors[Math.floor(Math.random() * colors.length)];
-            document.body.style.background = `linear-gradient(135deg, ${randomColor} 0%, ${colors[Math.floor(Math.random() * colors.length)]} 100%)`;
-            console.log('Arkaplan rengi değiştirildi:', randomColor);
+      });
+      
+      // Cihaz sekmesine geçildiğinde PDF'leri tara
+      if (id === 'device') {
+          scanDeviceForPDFs();
+      }
+    }
+
+    function changeTab(dir) {
+      const active = document.querySelector('.tab.active').dataset.tab;
+      const idx = tabOrder.indexOf(active);
+      const nextIdx = idx + dir;
+      if(nextIdx >= 0 && nextIdx < tabOrder.length) {
+          switchTab(tabOrder[nextIdx], false); 
+      }
+    }
+
+    function switchNav(id) {
+      if (isSelectionMode) {
+          exitSelectionMode();
+      }
+      
+      navItems.forEach(n => n.classList.toggle('active', n.dataset.nav === id));
+      currentNav = id;
+      
+      panels.forEach(p => p.classList.remove('active'));
+      topBar.style.transform = 'translateY(0)';
+      lastScrollY = 0;
+      fabButton.style.display = id === 'home' ? 'flex' : 'none';
+
+      if(id === 'home') {
+        topBar.classList.remove('tabs-hidden');
+        mainContent.style.paddingTop = 'var(--top-bar-total)';
+        switchTab('recent', true); 
+      } else {
+        topBar.classList.add('tabs-hidden');
+        mainContent.style.paddingTop = `calc(${headerHeight}px + 16px)`; 
+        const targetPanel = document.getElementById(`${id}Panel`);
+        if (targetPanel) {
+          targetPanel.classList.add('active');
+          targetPanel.scrollTop = 0;
         }
-        
-        function checkConsole() {
-            console.log('🎯 Console testi başarılı!');
-            console.log('📅 Tarih:', new Date());
-            console.log('🌐 Lokasyon:', window.location.href);
-            console.log('🚀 Performans:', performance.now().toFixed(2) + 'ms');
+      }
+    }
+
+    function handleFileSource(source) {
+        if (source === 'device') {
+            scanDeviceForPDFs();
+            switchNav('home'); 
+            switchTab('device', true);
+        } else if (source === 'browse_more') {
+            alert('Cihazınızın dosya yöneticisi açılıyor...');
+        } else {
+            alert(`${source.toUpperCase()} kaynağına bağlanılıyor...`);
         }
+    }
+    
+    function sendHelpEmail(e) {
+        e.preventDefault();
+        const email = document.getElementById('helpEmail').value;
+        const subject = document.getElementById('helpSubject').value;
+        const issue = document.getElementById('helpIssue').value;
+        const recipient = "devsoftawaremail@gmail.com";
+        const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent("Gönderen: " + email + "\n\nSorun:\n" + issue)}`;
+        window.location.href = mailtoLink;
+        alert("Destek talebiniz için varsayılan e-posta uygulamanız açılıyor. Lütfen Gönder butonuna basarak e-postayı tamamlayın.");
+        document.querySelector('.help-form').reset();
+    }
+
+    // Android'den döndüğünde çağrılacak
+    function onAndroidResume() {
+        try {
+            // İzin durumunu kontrol et
+            checkPermissionAndUpdateUI();
+            
+            // Eğer cihaz sekmesindeyse PDF'leri yeniden tara
+            if (currentNav === 'home') {
+                const activeTab = document.querySelector('.tab.active').dataset.tab;
+                if (activeTab === 'device') {
+                    scanDeviceForPDFs();
+                }
+            }
+        } catch (e) {
+            console.warn('onAndroidResume error', e);
+        }
+    }
+
+    // Geri tuşu için global değişken
+    let backPressedTime = 0;
+
+    // Geri tuşu toast mesajı göster
+    function showExitToast() {
+        // Toast mesajı oluştur
+        const toast = document.createElement('div');
+        toast.id = 'exitToast';
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            z-index: 9999;
+            font-size: 14px;
+            font-weight: 500;
+            opacity: 0;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            white-space: nowrap;
+        `;
         
-        // Hata yakalama
-        window.onerror = function(msg, url, line) {
-            console.error('❌ JavaScript Hatası:', msg, 'at', url, ':', line);
+        toast.textContent = 'Çıkmak için tekrar geri tuşuna basın';
+        document.body.appendChild(toast);
+        
+        // Görünür yap
+        setTimeout(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(-50%) translateY(0)';
+        }, 10);
+        
+        // 2 saniye sonra gizle ve sil
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(-50%) translateY(-20px)';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 2000);
+    }
+
+    // Android geri tuşu fonksiyonu (MainActivity'den çağrılacak)
+    window.androidBackPressed = function() {
+        // Mevcut sayfanın viewer.html olup olmadığını kontrol et
+        if (window.location.href.includes('viewer.html')) {
+            // Viewer'dan index.html'ye dön
+            window.location.href = 'file:///android_asset/web/index.html';
             return true;
-        };
-    </script>
+        }
+        
+        // Eğer selection modundaysa çık
+        if (isSelectionMode) {
+            exitSelectionMode();
+            return false;
+        }
+        
+        // Eğer arama modundaysa çık
+        if (document.body.classList.contains('is-searching')) {
+            closeSearchBtn.click();
+            return false;
+        }
+        
+        // Eğer drawer açıksa kapat
+        if (drawer.classList.contains('open')) {
+            drawer.classList.remove('open');
+            overlay.classList.remove('show');
+            return false;
+        }
+        
+        // Eğer context menu açıksa kapat
+        if (contextSheet.classList.contains('show')) {
+            closeContextMenu();
+            return false;
+        }
+        
+        // Eğer FAB menu açıksa kapat
+        if (fabMenu.classList.contains('show')) {
+            fabMenu.classList.remove('show');
+            return false;
+        }
+        
+        // Ana sayfada değilsek ana sayfaya dön
+        if (currentNav !== 'home') {
+            switchNav('home');
+            return false;
+        }
+        
+        // Ana sayfadaysak çıkış kontrolü
+        const now = Date.now();
+        if (backPressedTime + 2000 > now) {
+            // Çift tıklama ile çık (Android tarafında işlenecek)
+            return 'exit_check';
+        } else {
+            // İlk tıklama, toast göster
+            showExitToast();
+            backPressedTime = now;
+            return false;
+        }
+    };
+
+    // Viewer'a giderken history state ekle
+    function goToViewer(url) {
+        // History state ekle (geri tuşu için)
+        if (window.history && window.history.pushState) {
+            window.history.pushState({ page: "viewer" }, "", window.location.href);
+        }
+        
+        // Viewer'a git
+        window.location.href = url;
+    }
+
+    // History state kontrolü
+    window.addEventListener('popstate', function(event) {
+        // Geri tuşu ile viewer'dan döndüysek
+        if (event.state && event.state.page === "viewer") {
+            // Ana sayfaya dön
+            currentNav = 'home';
+            switchNav('home');
+            switchTab('recent', true);
+        }
+    });
+
+    // DOM yüklendiğinde history state'i ayarla
+    document.addEventListener('DOMContentLoaded', () => {
+        // İlk history state'i ekle
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState({ page: "home" }, "", window.location.href);
+        }
+    });
+
+    // Global fonksiyonlar
+    window.setThemePreference = setThemePreference;
+    window.sendHelpEmail = sendHelpEmail;
+    window.handleFileSource = handleFileSource;
+    window.handleFabAction = handleFabAction;
+    window.triggerSearch = triggerSearch;
+    window.openContextMenu = openContextMenu;
+    window.handleContextAction = handleContextAction;
+    window.handleCardClick = handleCardClick;
+    window.toggleFavorite = toggleFavorite;
+    window.enterSelectionMode = enterSelectionMode;
+    window.exitSelectionMode = exitSelectionMode;
+    window.toggleCardSelection = toggleCardSelection;
+    window.selectAllCards = selectAllCards;
+    window.deselectAllCards = deselectAllCards;
+    window.deleteSelectedCards = deleteSelectedCards;
+    window.shareSelectedCards = shareSelectedCards; 
+    window.printSelectedCards = printSelectedCards;
+    window.handleFileSelect = handleFileSelect;
+    window.scanDeviceForPDFs = scanDeviceForPDFs;
+    window.onAndroidResume = onAndroidResume;
+    window.openToolPage = openToolPage;
+
+  </script>
 </body>
 </html>
