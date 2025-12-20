@@ -9,26 +9,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Repo'yu checkout et
       - uses: actions/checkout@v4
 
+      # 2️⃣ Flutter kur
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: false
 
-      # assets klasörünü tarayıp pubspec.yaml flutter: altına ekle (dependencies bozulmaz)
-      - name: Otomatik pubspec.yaml asset ekle
-        run: |
-          ASSETS=$(find assets -type f | sed 's|^|  - |')
-          awk '/^flutter:/ {print; print "  assets:"; system("echo \"$ASSETS\""); next}1' pubspec.yaml > pubspec_temp.yaml
-          mv pubspec_temp.yaml pubspec.yaml
-          cat pubspec.yaml
-
+      # 3️⃣ Keystore'u oluştur ve yaz
       - name: Keystore yaz
         run: |
           mkdir -p android/app/keystore
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore/release.keystore
 
+      # 4️⃣ key.properties dosyasını oluştur
       - name: key.properties yaz
         run: |
           cat <<EOF > android/key.properties
@@ -38,12 +34,15 @@ jobs:
           storeFile=keystore/release.keystore
           EOF
 
+      # 5️⃣ Flutter paketlerini indir
       - name: Paketleri indir
         run: flutter pub get
 
+      # 6️⃣ Signed Release APK build (arm64-v8a)
       - name: Signed Release APK build (arm64-v8a)
         run: flutter build apk --release --target-platform android-arm64
 
+      # 7️⃣ Build edilmiş APK'yı artifact olarak yükle
       - uses: actions/upload-artifact@v4
         with:
           name: pdfreader-release-arm64-v8a
