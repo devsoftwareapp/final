@@ -10,7 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  flutter_inappwebview: ^6.1.5  # GÜNCELLENDİ: 5.8.0 -> 6.1.5
+  flutter_inappwebview: ^6.1.5
 
 dev_dependencies:
   flutter_test:
@@ -21,21 +21,13 @@ flutter:
   uses-material-design: true
 
   assets:
-    # HTML ve temel dosyalar
-    - assets/web/index.html
+    # Ana HTML dosyası (DIRECT assets/index.html)
+    - assets/index.html
     
-    # Tüm images klasörü
-    - assets/web/images/
-    
-    # Tüm build klasörü
-    - assets/build/
-    
-    # Tüm fonts klasörü
-    - assets/web/fonts/
-    
-    # Diğer olası asset'ler
+    # Ek asset'ler
     - assets/web/
-    
-    # Eğer CSS/JS dosyaları varsa
+    - assets/build/
+    - assets/web/images/
+    - assets/web/fonts/
     - assets/web/css/
     - assets/web/js/
