@@ -23,7 +23,7 @@ jobs:
           echo "Mevcut dizin: $(pwd)"
           echo ""
           echo "=== Tüm dosyalar ==="
-          find . -maxdepth 3 -type f -name "*.html" -o -name "*.dart" -o -name "*.yaml" | head -20
+          find . -maxdepth 3 -type f \( -name "*.html" -o -name "*.dart" -o -name "*.yaml" \) | head -20
           echo ""
           echo "=== assets/ klasörü ==="
           ls -la assets/ 2>/dev/null || echo "assets/ klasörü bulunamadı"
@@ -31,48 +31,43 @@ jobs:
           echo "=== assets/web/ varsa ==="
           ls -la assets/web/ 2>/dev/null || echo "assets/web/ bulunamadı"
 
-      # 📁 Asset dosyalarını pubspec.yaml'a ekle (geliştirilmiş)
-      - name: pubspec.yaml -> Tüm asset'leri ekle
+      # 📁 Asset dosyalarını pubspec.yaml'a ekle
+      - name: pubspec.yaml asset'leri düzenle
         run: |
           echo "=== pubspec.yaml ORJİNAL ==="
           cat pubspec.yaml
           echo ""
           
-          # pubspec.yaml'ı yedekle
-          cp pubspec.yaml pubspec.yaml.backup
+          # Yeni pubspec.yaml oluştur
+          cat > pubspec.yaml << 'EOF'
+name: pdfreader
+description: "PDF Reader"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_inappwebview: ^6.1.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/web/index.html
+    - assets/web/
+    - assets/build/
+EOF
           
-          # flutter: bölümünü temizle
-          sed -i '/^flutter:/,/^[^ ]/d' pubspec.yaml
-          
-          # Yeni flutter bölümü ekle
-          echo "" >> pubspec.yaml
-          echo "flutter:" >> pubspec.yaml
-          echo "  uses-material-design: true" >> pubspec.yaml
-          echo "" >> pubspec.yaml
-          echo "  assets:" >> pubspec.yaml
-          
-          # Tüm asset dosyalarını bul ve ekle
-          echo "    - assets/web/index.html" >> pubspec.yaml
-          
-          # Tüm alt klasörler için joker karakter kullan
-          if [ -d "assets/web/images" ]; then
-            echo "    - assets/web/images/" >> pubspec.yaml
-          fi
-          
-          if [ -d "assets/web/fonts" ]; then
-            echo "    - assets/web/fonts/" >> pubspec.yaml
-          fi
-          
-          if [ -d "assets/build" ]; then
-            echo "    - assets/build/" >> pubspec.yaml
-          fi
-          
-          # Tüm web klasöründeki dosyalar
-          find assets/web -type f -name "*.css" -o -name "*.js" -o -name "*.png" -o -name "*.jpg" -o -name "*.json" 2>/dev/null | head -20 | while read file; do
-            echo "    - $file" >> pubspec.yaml
-          done
-          
-          echo "" >> pubspec.yaml
           echo "=== pubspec.yaml GÜNCELLENMİŞ ==="
           cat pubspec.yaml
 
@@ -85,7 +80,7 @@ jobs:
           if [ ! -f "assets/web/index.html" ]; then
             echo "⚠️ assets/web/index.html bulunamadı, oluşturuluyor..."
             mkdir -p assets/web
-            cat > assets/web/index.html << 'EOF'
+            cat > assets/web/index.html << 'HTML_EOF'
 <!DOCTYPE html>
 <html>
 <head>
@@ -124,7 +119,7 @@ jobs:
     </script>
 </body>
 </html>
-EOF
+HTML_EOF
             echo "✅ assets/web/index.html oluşturuldu"
           fi
           
@@ -139,12 +134,12 @@ EOF
 
       - name: key.properties yaz
         run: |
-          cat <<EOF > android/key.properties
-          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          storeFile=keystore/release.keystore
-          EOF
+          cat << 'PROPERTIES_EOF' > android/key.properties
+storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+keyPassword=${{ secrets.KEY_PASSWORD }}
+keyAlias=${{ secrets.KEY_ALIAS }}
+storeFile=keystore/release.keystore
+PROPERTIES_EOF
 
       # 📦 Paketleri indir ve kontrol et
       - name: Paketleri indir ve kontrol et
@@ -155,17 +150,16 @@ EOF
           echo ""
           echo "=== flutter_inappwebview versiyonu ==="
           grep -A2 -B2 flutter_inappwebview pubspec.yaml
-          grep -A2 -B2 flutter_inappwebview pubspec.lock 2>/dev/null || echo "pubspec.lock henüz yok"
           
           echo ""
           echo "=== flutter doctor ==="
-          flutter doctor -v | grep -A5 "Flutter"
+          flutter doctor
 
-      # 🏗️ Build yap ve log'ları kaydet
-      - name: Signed Release APK build (arm64-v8a) - DETAILED
+      # 🏗️ Build yap
+      - name: Signed Release APK build (arm64-v8a)
         run: |
-          echo "=== flutter build apk --verbose ==="
-          flutter build apk --release --target-platform android-arm64 --verbose 2>&1 | tail -100
+          echo "=== flutter build apk ==="
+          flutter build apk --release --target-platform android-arm64
           
           # Build başarılı mı kontrol et
           if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
@@ -173,23 +167,9 @@ EOF
             ls -lh build/app/outputs/flutter-apk/app-release.apk
           else
             echo "❌❌❌ APK OLUŞTURULAMADI! ❌❌❌"
-            echo "Build klasörü içeriği:"
-            find build/ -type f -name "*.apk" 2>/dev/null || echo "APK bulunamadı"
           fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: pdfreader-release-arm64-v8a
           path: build/app/outputs/flutter-apk/app-release.apk
-          
-      # 📊 Build log'larını da kaydet
-      - name: Build log'larını kaydet
-        if: always()
-        run: |
-          echo "=== BUILD SONUÇLARI ==="
-          echo "Workflow sonucu: ${{ job.status }}"
-          echo ""
-          echo "Oluşturulan dosyalar:"
-          find build/ -type f -name "*.apk" -o -name "*.aab" 2>/dev/null | while read file; do
-            echo "- $file ($(stat -c%s "$file") bytes)"
-          done
