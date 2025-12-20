@@ -21,12 +21,11 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Flutter Android Hello World oluştur
+      - name: Flutter Android Hello World oluştur (ROOT)
         run: |
-          if [ ! -d "app" ]; then
-            flutter create app --platforms=android
+          if [ ! -f "pubspec.yaml" ]; then
+            flutter create . --platforms=android
           fi
-          cd app
           flutter pub get
 
       - name: Projeyi repoya yaz (ilk kurulum)
@@ -34,20 +33,18 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add app
-            git commit -m "Initial Flutter Android project (auto)"
+            git add .
+            git commit -m "Initial Flutter Android project (root)"
             git push
           else
             echo "Degisiklik yok"
           fi
 
       - name: Debug APK build
-        run: |
-          cd app
-          flutter build apk --debug
+        run: flutter build apk --debug
 
       - name: APK Artifact yükle
         uses: actions/upload-artifact@v4
         with:
           name: debug-apk
-          path: app/build/app/outputs/flutter-apk/app-debug.apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
