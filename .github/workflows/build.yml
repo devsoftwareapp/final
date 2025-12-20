@@ -16,10 +16,11 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Assets zip aç
+      - name: assets.zip -> assets klasörü
         run: |
           if [ -f assets.zip ]; then
-            unzip -o assets.zip
+            unzip -o assets.zip -d assets
+            rm -f assets.zip
           fi
 
       - name: Keystore yaz
