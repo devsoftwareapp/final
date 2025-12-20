@@ -1002,9 +1002,12 @@
         <img src="images/permission1.png" alt="İzin Gerekiyor">
         <h3>Cihazınızdaki PDF'lere erişebilmem için izin gerekli</h3>
         <p>Devam etmek için Tüm Dosya Erişimi izni verin.</p>
-        <button onclick="location.href='settings://all_files'">
-            Ayarlardan Erişim Ver
-        </button>
+
+<!-- YENİ -->
+<button onclick="openAndroidSettings()">
+    Ayarlardan Erişim Ver
+</button>
+
       </div>
       
       <!-- PDF LİSTESİ -->
@@ -2336,9 +2339,9 @@
     window.scanDeviceForPDFs = scanDeviceForPDFs;
     window.onAndroidResume = onAndroidResume;
     window.openToolPage = openToolPage;
-
-
-   function openAndroidSettings() {
+    
+    
+    function openAndroidSettings() {
     // Flutter'daki JavaScript handler'ını çağır
     if (window.flutter_inappwebview) {
         window.flutter_inappwebview.callHandler('openSettings');
@@ -2347,8 +2350,7 @@
         window.location.href = 'settings://all_files';
     }
 }
-
-
+    
     
 
   </script>
