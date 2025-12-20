@@ -1,8 +1,7 @@
-name: Flutter Debug APK
+name: Flutter Debug APK (Auto)
 
 on:
   push:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -19,14 +18,19 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Paketleri indir
-        run: flutter pub get
+      - name: Flutter Hello World oluştur
+        run: |
+          flutter create app
+          cd app
+          flutter pub get
 
       - name: Debug APK build
-        run: flutter build apk --debug
+        run: |
+          cd app
+          flutter build apk --debug
 
       - name: APK Artifact yükle
         uses: actions/upload-artifact@v4
         with:
           name: debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          path: app/build/app/outputs/flutter-apk/app-debug.apk
