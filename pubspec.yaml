@@ -10,7 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  flutter_inappwebview: ^5.8.0
+  flutter_inappwebview: ^6.1.5  # GÜNCELLENDİ: 5.8.0 -> 6.1.5
 
 dev_dependencies:
   flutter_test:
@@ -20,6 +20,4 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  assets:
-    - assets/build/
-    - assets/web/
+  # Buraya assets ekleme script'in çalışacak
