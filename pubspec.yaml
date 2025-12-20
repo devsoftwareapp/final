@@ -10,7 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  flutter_inappwebview: ^5.8.0   # ✅ EKLENDİ
+  flutter_inappwebview: ^6.0.0
 
 dev_dependencies:
   flutter_test:
@@ -22,4 +22,4 @@ flutter:
 
   assets:
     - assets/build/
-    - assets/web/          # ✅ index.html buradan yüklenecek
+    - assets/web/
