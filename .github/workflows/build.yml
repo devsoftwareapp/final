@@ -32,6 +32,22 @@ jobs:
             rm -f assets.zip
           fi
 
+      - name: pubspec.yaml -> assets otomatik ekle
+        run: |
+          if [ -d assets ]; then
+            if ! grep -q "^  assets:" pubspec.yaml; then
+              echo "" >> pubspec.yaml
+              echo "  assets:" >> pubspec.yaml
+            fi
+
+            for item in assets/*; do
+              name=$(basename "$item")
+              if ! grep -q "assets/$name" pubspec.yaml; then
+                echo "    - assets/$name" >> pubspec.yaml
+              fi
+            done
+          fi
+
       - name: Keystore yaz
         run: |
           mkdir -p android/app/keystore
