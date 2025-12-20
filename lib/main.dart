@@ -26,15 +26,15 @@ class WebViewPage extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: InAppWebView(
-          initialFile: "assets/web/index.html",
-          initialOptions: InAppWebViewGroupOptions(
-            crossPlatform: InAppWebViewOptions(
-              javaScriptEnabled: true,
-              useShouldOverrideUrlLoading: true,
-            ),
-            android: AndroidInAppWebViewOptions(
-              useHybridComposition: true,
-            ),
+          initialUrlRequest: URLRequest(
+            url: WebUri("flutter-asset:///assets/web/index.html"),
+          ),
+          initialSettings: InAppWebViewSettings(
+            javaScriptEnabled: true,
+            allowFileAccessFromFileURLs: true,
+            allowUniversalAccessFromFileURLs: true,
+            allowsInlineMediaPlayback: true,
+            mediaPlaybackRequiresUserGesture: false,
           ),
         ),
       ),
