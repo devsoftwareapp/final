@@ -26,13 +26,15 @@ class WebViewPage extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: InAppWebView(
-          initialFile: 'assets/web/index.html', // ✅ DOĞRUDAN ASSET
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            domStorageEnabled: true,
-            allowFileAccess: true,
-            allowContentAccess: true,
-            mediaPlaybackRequiresUserGesture: false,
+          initialFile: "assets/web/index.html",
+          initialOptions: InAppWebViewGroupOptions(
+            crossPlatform: InAppWebViewOptions(
+              javaScriptEnabled: true,
+              useShouldOverrideUrlLoading: true,
+            ),
+            android: AndroidInAppWebViewOptions(
+              useHybridComposition: true,
+            ),
           ),
         ),
       ),
