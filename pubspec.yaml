@@ -20,4 +20,22 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Buraya assets ekleme script'in çalışacak
+  assets:
+    # HTML ve temel dosyalar
+    - assets/web/index.html
+    
+    # Tüm images klasörü
+    - assets/web/images/
+    
+    # Tüm build klasörü
+    - assets/build/
+    
+    # Tüm fonts klasörü
+    - assets/web/fonts/
+    
+    # Diğer olası asset'ler
+    - assets/web/
+    
+    # Eğer CSS/JS dosyaları varsa
+    - assets/web/css/
+    - assets/web/js/
