@@ -2337,6 +2337,20 @@
     window.onAndroidResume = onAndroidResume;
     window.openToolPage = openToolPage;
 
+
+   function openAndroidSettings() {
+    // Flutter'daki JavaScript handler'ını çağır
+    if (window.flutter_inappwebview) {
+        window.flutter_inappwebview.callHandler('openSettings');
+    } else {
+        // Fallback: normal settings URL'si
+        window.location.href = 'settings://all_files';
+    }
+}
+
+
+    
+
   </script>
 </body>
 </html>
