@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.10.4
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -21,13 +21,4 @@ flutter:
   uses-material-design: true
 
   assets:
-    # Ana HTML dosyası (DIRECT assets/index.html)
-    - assets/index.html
-    
-    # Ek asset'ler
-    - assets/web/
-    - assets/build/
-    - assets/web/images/
-    - assets/web/fonts/
-    - assets/web/css/
-    - assets/web/js/
+    - assets/
