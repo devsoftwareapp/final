@@ -20,9 +20,23 @@ jobs:
 
       - name: Flutter Hello World oluştur
         run: |
-          flutter create app
+          if [ ! -d "app" ]; then
+            flutter create app
+          fi
           cd app
           flutter pub get
+
+      - name: Projeyi repoya yaz (ilk kurulum)
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Degisiklik yok, commit atilmadi"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add app
+            git commit -m "Initial Flutter Android project (auto)"
+            git push
+          fi
 
       - name: Debug APK build
         run: |
