@@ -16,11 +16,19 @@ jobs:
           channel: stable
           cache: false
 
-      
+      # assets klasörünü tarayıp pubspec.yaml güncelle
+      - name: Otomatik pubspec.yaml asset ekle
+        run: |
+          ASSETS=$(find assets -type f | sed 's|^|  - |')
+          awk '/flutter:/ {print; print "  assets:"; system("echo \"$ASSETS\""); next}1' pubspec.yaml > pubspec_temp.yaml
+          mv pubspec_temp.yaml pubspec.yaml
+          cat pubspec.yaml
+
       - name: Keystore yaz
         run: |
           mkdir -p android/app/keystore
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore/release.keystore
+
       - name: key.properties yaz
         run: |
           cat <<EOF > android/key.properties
@@ -29,6 +37,7 @@ jobs:
           keyAlias=${{ secrets.KEY_ALIAS }}
           storeFile=keystore/release.keystore
           EOF
+
       - name: Paketleri indir
         run: flutter pub get
 
