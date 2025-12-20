@@ -1,3 +1,4 @@
+import 'dart:io'; // exit(0) için eklendi
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -74,7 +75,7 @@ class _WebViewPageState extends State<WebViewPage> {
           // Android geri tuşu desteği için
           onLoadStop: (controller, url) async {
             // JavaScript kanalı oluştur
-            await controller.addJavaScriptHandler(
+            controller.addJavaScriptHandler(
               handlerName: 'openSettings',
               callback: (args) {
                 _openAndroidSettings();
@@ -82,7 +83,7 @@ class _WebViewPageState extends State<WebViewPage> {
             );
             
             // Android back button handler
-            await controller.addJavaScriptHandler(
+            controller.addJavaScriptHandler(
               handlerName: 'androidBackPressed',
               callback: (args) {
                 // Geri tuşu işlemi
@@ -157,7 +158,7 @@ class _WebViewPageState extends State<WebViewPage> {
                   child: const Text('İptal'),
                 ),
                 TextButton(
-                  onPressed: () => SystemNavigator.pop(),
+                  onPressed: () => exit(0),
                   child: const Text('Çık'),
                 ),
               ],
@@ -168,37 +169,5 @@ class _WebViewPageState extends State<WebViewPage> {
     });
     
     return null;
-  }
-
-  // Android fiziksel geri tuşunu yakala
-  @override
-  void dispose() {
-    super.dispose();
-  }
-}
-
-// Android geri tuşu için WillPopScope ekleyelim
-class _WebViewPageWithBackButton extends StatefulWidget {
-  const _WebViewPageWithBackButton({super.key});
-
-  @override
-  State<_WebViewPageWithBackButton> createState() => _WebViewPageWithBackButtonState();
-}
-
-class _WebViewPageWithBackButtonState extends State<_WebViewPageWithBackButton> {
-  @override
-  Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        // WebView içindeki JavaScript'i kontrol et
-        final webViewState = context.findAncestorStateOfType<_WebViewPageState>();
-        if (webViewState != null) {
-          webViewState._handleAndroidBack();
-          return false; // JavaScript işleyecek
-        }
-        return true;
-      },
-      child: const WebViewPage(),
-    );
   }
 }
