@@ -28,7 +28,8 @@ class WebViewPage extends StatelessWidget {
         title: const Text("PDF Reader"),
       ),
       body: InAppWebView(
-        initialFile: "assets/index.html",
+        // Sadece assets/web/index.html açacak
+        initialFile: "assets/web/index.html",
         initialOptions: InAppWebViewGroupOptions(
           crossPlatform: InAppWebViewOptions(
             javaScriptEnabled: true,
