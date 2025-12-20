@@ -16,11 +16,11 @@ jobs:
           channel: stable
           cache: false
 
-      # assets klasörünü tarayıp pubspec.yaml güncelle
+      # assets klasörünü tarayıp pubspec.yaml flutter: altına ekle (dependencies bozulmaz)
       - name: Otomatik pubspec.yaml asset ekle
         run: |
           ASSETS=$(find assets -type f | sed 's|^|  - |')
-          awk '/flutter:/ {print; print "  assets:"; system("echo \"$ASSETS\""); next}1' pubspec.yaml > pubspec_temp.yaml
+          awk '/^flutter:/ {print; print "  assets:"; system("echo \"$ASSETS\""); next}1' pubspec.yaml > pubspec_temp.yaml
           mv pubspec_temp.yaml pubspec.yaml
           cat pubspec.yaml
 
