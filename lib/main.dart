@@ -24,18 +24,18 @@ class WebViewPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("PDF Reader"),
-      ),
-      body: InAppWebView(
-        // Sadece assets/web/index.html açacak
-        initialFile: "assets/web/index.html",
-        initialOptions: InAppWebViewGroupOptions(
-          crossPlatform: InAppWebViewOptions(
-            javaScriptEnabled: true,
-          ),
-          android: AndroidInAppWebViewOptions(
-            useHybridComposition: true,
+      // ❌ AppBar kaldırıldı
+      body: SafeArea(
+        // ✅ Status bar ve navigation bar korunur
+        child: InAppWebView(
+          initialFile: "assets/web/index.html",
+          initialOptions: InAppWebViewGroupOptions(
+            crossPlatform: InAppWebViewOptions(
+              javaScriptEnabled: true,
+            ),
+            android: AndroidInAppWebViewOptions(
+              useHybridComposition: true,
+            ),
           ),
         ),
       ),
