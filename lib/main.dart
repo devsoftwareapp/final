@@ -1469,53 +1469,50 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   late InAppWebViewController _webViewController;
   double _progress = 0;
   bool _isLoading = true;
-  String? _currentBase64;
   String? _tempFilePath;
 
   @override
   void initState() {
     super.initState();
-    _preparePDF();
+    _createTempPDF();
   }
 
-  Future<void> _preparePDF() async {
+  Future<void> _createTempPDF() async {
     try {
+      // 1. PDF'i geçici dosya olarak kaydet
+      final tempDir = await getTemporaryDirectory();
+      final fileName = 'temp_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final tempFile = File('${tempDir.path}/$fileName');
+      
+      // 2. PDF verisini al (base64 veya dosya yolu)
+      List<int> bytes;
+      
       if (widget.pdfFile.base64 != null) {
-        _currentBase64 = widget.pdfFile.base64;
-        
-        // Base64'i geçici dosyaya yaz
-        final tempDir = await getTemporaryDirectory();
-        final fileName = 'temp_${DateTime.now().millisecondsSinceEpoch}.pdf';
-        final tempFile = File('${tempDir.path}/$fileName');
-        
-        final bytes = base64Decode(_currentBase64!);
-        await tempFile.writeAsBytes(bytes);
-        _tempFilePath = tempFile.path;
-        
-        print('📁 Geçici dosya oluşturuldu: $_tempFilePath');
-        
+        // Base64'ten
+        bytes = base64Decode(widget.pdfFile.base64!);
       } else if (widget.pdfFile.path != null) {
-        _tempFilePath = widget.pdfFile.path;
-        
-        // Dosyayı base64'e çevir (kaydetme için)
+        // Dosyadan
         final file = File(widget.pdfFile.path!);
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          _currentBase64 = base64Encode(bytes);
-          widget.pdfFile.base64 = _currentBase64;
-        }
+        bytes = await file.readAsBytes();
+      } else {
+        throw Exception('PDF verisi yok');
       }
+      
+      // 3. Geçici dosyaya yaz
+      await tempFile.writeAsBytes(bytes);
+      _tempFilePath = tempFile.path;
+      
+      print('📁 Geçici PDF oluşturuldu: $_tempFilePath');
+      
     } catch (e) {
-      print('PDF hazırlama hatası: $e');
+      print('Geçici dosya oluşturma hatası: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // DÜZELTME: asset:// yerine file:///android_asset/ kullan
+    // file:///android_asset/ kullan
     String viewerUrl = 'file:///android_asset/flutter_assets/assets/web/viewer.html';
-    
-    print('📄 Viewer URL: $viewerUrl');
 
     return Scaffold(
       appBar: AppBar(
@@ -1528,10 +1525,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
           IconButton(
             icon: const Icon(Icons.share),
             onPressed: _sharePDF,
-          ),
-          IconButton(
-            icon: const Icon(Icons.print),
-            onPressed: _printPDF,
           ),
         ],
       ),
@@ -1569,9 +1562,9 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                 _isLoading = false;
               });
               
-              // Base64 varsa JavaScript injection yap
-              if (_currentBase64 != null) {
-                await _injectPDFScript(controller);
+              // JavaScript injection: Open File butonuna tıklat
+              if (_tempFilePath != null) {
+                await _triggerOpenFileButton(controller);
               }
             },
             onProgressChanged: (controller, progress) {
@@ -1597,91 +1590,161 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
     );
   }
 
-  Future<void> _injectPDFScript(InAppWebViewController controller) async {
-    if (_currentBase64 == null) return;
+  Future<void> _triggerOpenFileButton(InAppWebViewController controller) async {
+    if (_tempFilePath == null) return;
 
+    // JavaScript injection: "Open File" butonuna tıklat
     await controller.evaluateJavascript(source: '''
-      // TAM ORJİNAL KODUNUZ
-      document.addEventListener("webviewerloaded", () => {
-        const base64 = "${_currentBase64}";
+      // 1. "Open File" butonunu bul ve tıklat
+      function triggerOpenFileButton() {
+        console.log('🔍 Open File butonu aranıyor...');
         
-        if (!base64) {
-          console.warn("❌ Base64 verisi yok");
-          return;
-        }
+        // "secondaryOpenFile" ID'li butonu bul
+        const openFileBtn = document.getElementById('secondaryOpenFile');
         
-        console.log("📥 Base64 verisi alındı, uzunluk:", base64.length);
-        
-        try {
-          // Base64 → Uint8Array
-          const b64 = base64.split(',')[1];
-          const raw = atob(b64);
-          const len = raw.length;
-          const bytes = new Uint8Array(len);
+        if (openFileBtn) {
+          console.log('✅ Open File butonu bulundu');
           
-          for (let i = 0; i < len; i++) {
-            bytes[i] = raw.charCodeAt(i);
-          }
+          // Butona tıkla
+          openFileBtn.click();
           
-          console.log("✅ Uint8Array oluşturuldu, boyut:", bytes.length);
-          
-          // Uint8Array → Blob → Blob URL
-          const blob = new Blob([bytes], { type: "application/pdf" });
-          const blobUrl = URL.createObjectURL(blob);
-          
-          console.log("📄 Blob URL oluşturuldu:", blobUrl.substring(0, 50) + "...");
-          
-          // Viewer initialize olana kadar bekle
-          const waiter = setInterval(() => {
-            if (!window.PDFViewerApplication || !PDFViewerApplication.initialized) {
-              console.log("⏳ PDF.js henüz hazır değil...");
-              return;
-            }
+          // 2. 1 saniye bekle, sonra dosya seçimini simüle et
+          setTimeout(() => {
+            // File input oluştur
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.pdf';
             
-            clearInterval(waiter);
+            // DataTransfer ile dosya ekle
+            const dataTransfer = new DataTransfer();
             
-            console.log("🚀 PDF.js hazır, PDF açılıyor...");
-            
-            // PDF.js v5.x için doğru kullanım: { url: blobUrl }
-            PDFViewerApplication.open({ url: blobUrl }).then(() => {
-              console.log("🎉 PDF başarıyla açıldı!");
-            }).catch(error => {
-              console.error("PDF açma hatası:", error);
+            // File objesi oluştur (Flutter'dan gelen dosya yolu)
+            const file = new File([''], '${widget.pdfFile.name}', { 
+              type: 'application/pdf',
+              lastModified: Date.now()
             });
             
-          }, 100);
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+            
+            // Change event'i tetikle
+            const changeEvent = new Event('change', { bubbles: true });
+            fileInput.dispatchEvent(changeEvent);
+            
+            console.log('📄 PDF dosyası seçildi: ${widget.pdfFile.name}');
+            
+          }, 1000);
           
-        } catch (error) {
-          console.error("❌ JavaScript hatası:", error);
+          return true;
         }
-      });
-      
-      // Eğer webviewerloaded event'i zaten tetiklenmişse
-      if (document.querySelector('.PDFViewer')) {
-        console.log("⚡ PDF.js zaten yüklenmiş");
         
-        const base64 = "${_currentBase64}";
-        if (base64) {
-          try {
-            const b64 = base64.split(',')[1];
-            const raw = atob(b64);
-            const len = raw.length;
-            const bytes = new Uint8Array(len);
-            
-            for (let i = 0; i < len; i++) {
-              bytes[i] = raw.charCodeAt(i);
-            }
-            
-            const blob = new Blob([bytes], { type: "application/pdf" });
-            const blobUrl = URL.createObjectURL(blob);
-            
-            if (window.PDFViewerApplication && PDFViewerApplication.initialized) {
-              PDFViewerApplication.open({ url: blobUrl });
-            }
-          } catch (error) {
-            console.error("Direkt açma hatası:", error);
-          }
+        return false;
+      }
+      
+      // 3. PDF.js hazır olana kadar bekle
+      function waitForPDFJS() {
+        if (window.PDFViewerApplication && PDFViewerApplication.initialized) {
+          console.log('🚀 PDF.js hazır');
+          
+          // Open File butonunu tetikle
+          triggerOpenFileButton();
+          return true;
         }
+        
+        // webviewerloaded event'ini dinle
+        document.addEventListener('webviewerloaded', function() {
+          console.log('📄 webviewerloaded event tetiklendi');
+          setTimeout(() => triggerOpenFileButton(), 500);
+        });
+        
+        return false;
+      }
+      
+      // 4. Hemen deneyelim
+      if (!waitForPDFJS()) {
+        const interval = setInterval(() => {
+          if (waitForPDFJS()) {
+            clearInterval(interval);
+          }
+        }, 100);
+      }
+      
+      // 5. Alternatif: Doğrudan PDF yükleme
+      function loadPDFDirectly() {
+        if (window.PDFViewerApplication && PDFViewerApplication.initialized) {
+          console.log('📄 Doğrudan PDF yükleniyor...');
+          
+          // File objesi oluştur
+          const file = new File([''], '${widget.pdfFile.name}', { 
+            type: 'application/pdf'
+          });
+          
+          // PDF.js'ye dosyayı yükle
+          PDFViewerApplication.open(file).then(() => {
+            console.log('🎉 PDF başarıyla açıldı');
+          }).catch(error => {
+            console.error('PDF açma hatası:', error);
+          });
+        }
+      }
+      
+      // 6. Her iki yöntemi de dene
+      setTimeout(loadPDFDirectly, 2000);
+    ''');
+    
+    // Alternatif: File input simülasyonu için JavaScript
+    await Future.delayed(const Duration(seconds: 1));
+    
+    await controller.evaluateJavascript(source: '''
+      // File input oluştur ve dosyayı seç
+      function simulateFileSelect() {
+        try {
+          // File input oluştur
+          const fileInput = document.createElement('input');
+          fileInput.type = 'file';
+          fileInput.accept = '.pdf';
+          fileInput.style.display = 'none';
+          document.body.appendChild(fileInput);
+          
+          // DataTransfer ile dosya ekle
+          const dataTransfer = new DataTransfer();
+          
+          // Boş file objesi oluştur (gerçek dosya yolu JavaScript'te erişilemez)
+          // Bu nedenle PDF.js'nin kendi file input'unu kullanmalıyız
+          const file = new File([''], '${widget.pdfFile.name}', { 
+            type: 'application/pdf',
+            lastModified: Date.now()
+          });
+          
+          dataTransfer.items.add(file);
+          fileInput.files = dataTransfer.files;
+          
+          // Change event'i tetikle
+          const changeEvent = new Event('change', { bubbles: true });
+          fileInput.dispatchEvent(changeEvent);
+          
+          console.log('📁 File input simüle edildi');
+          
+          return true;
+        } catch (error) {
+          console.error('File select simülasyon hatası:', error);
+          return false;
+        }
+      }
+      
+      // Open File butonunu bul ve tıkla
+      const openBtn = document.getElementById('secondaryOpenFile') || 
+                      document.querySelector('button[title*="Open"]') ||
+                      document.querySelector('button[title*="Dosya Aç"]');
+      
+      if (openBtn) {
+        console.log('🎯 Open File butonu bulundu, tıklanıyor...');
+        openBtn.click();
+        
+        // 1.5 saniye sonra file input simülasyonu yap
+        setTimeout(simulateFileSelect, 1500);
+      } else {
+        console.warn('⚠️ Open File butonu bulunamadı');
       }
     ''');
   }
@@ -1695,12 +1758,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   void _sharePDF() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Paylaşma özelliği aktif')),
-    );
-  }
-
-  void _printPDF() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Yazdırma özelliği aktif')),
     );
   }
 }
