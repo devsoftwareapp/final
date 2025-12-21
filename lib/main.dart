@@ -121,6 +121,22 @@ class ToolItem {
   });
 }
 
+class CloudService {
+  final int id;
+  final String name;
+  final IconData icon;
+  final Color color;
+  final String serviceType;
+
+  CloudService({
+    required this.id,
+    required this.name,
+    required this.icon,
+    required this.color,
+    required this.serviceType,
+  });
+}
+
 // --- MAIN HOME SCREEN ---
 
 class HomeScreen extends StatefulWidget {
@@ -133,7 +149,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> 
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
-  int _currentTabIndex = 0;
+  int _currentScreenIndex = 0; // 0: Ana Sayfa, 1: Araçlar, 2: Dosyalar
+  int _currentHomeTabIndex = 0; // 0: Son, 1: Cihazda, 2: Favoriler
   
   // Data Lists
   List<PdfFile> _recentFiles = [];
@@ -163,6 +180,11 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isConnected = true;
   late StreamSubscription<ConnectivityResult> _connectivitySubscription;
   
+  // Scroll Controller for Hide/Show AppBar
+  final ScrollController _scrollController = ScrollController();
+  bool _isAppBarVisible = true;
+  double _lastScrollOffset = 0;
+  
   @override
   void initState() {
     super.initState();
@@ -170,6 +192,8 @@ class _HomeScreenState extends State<HomeScreen>
     
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
+    
+    _scrollController.addListener(_handleScroll);
     
     _initConnectivity();
     _checkPermission();
@@ -182,15 +206,52 @@ class _HomeScreenState extends State<HomeScreen>
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     _searchController.dispose();
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
     _connectivitySubscription.cancel();
     super.dispose();
+  }
+  
+  void _handleScroll() {
+    if (_currentScreenIndex != 0) return; // Sadece Ana Sayfa'da
+    
+    final currentOffset = _scrollController.offset;
+    final isScrollingDown = currentOffset > _lastScrollOffset;
+    final isScrollingUp = currentOffset < _lastScrollOffset;
+    
+    // Minimum scroll mesafesi
+    const threshold = 50.0;
+    
+    if (isScrollingDown && currentOffset > threshold) {
+      if (_isAppBarVisible) {
+        setState(() {
+          _isAppBarVisible = false;
+        });
+      }
+    } else if (isScrollingUp) {
+      if (!_isAppBarVisible) {
+        setState(() {
+          _isAppBarVisible = true;
+        });
+      }
+    }
+    
+    _lastScrollOffset = currentOffset;
+  }
+  
+  void _scrollToTop() {
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
   
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _checkPermission();
-      if (_currentTabIndex == 1) {
+      if (_currentScreenIndex == 0 && _currentHomeTabIndex == 1) {
         _scanDeviceFiles();
       }
     }
@@ -406,8 +467,9 @@ class _HomeScreenState extends State<HomeScreen>
   void _handleTabChange() {
     if (_tabController.indexIsChanging) {
       setState(() {
-        _currentTabIndex = _tabController.index;
+        _currentHomeTabIndex = _tabController.index;
         _updateFilteredFiles();
+        _scrollToTop();
       });
     }
   }
@@ -415,7 +477,7 @@ class _HomeScreenState extends State<HomeScreen>
   void _updateFilteredFiles() {
     List<PdfFile> sourceList;
     
-    switch (_currentTabIndex) {
+    switch (_currentHomeTabIndex) {
       case 0:
         sourceList = _recentFiles;
         break;
@@ -471,7 +533,7 @@ class _HomeScreenState extends State<HomeScreen>
       }
       
       _saveData();
-      if (_currentTabIndex == 0) {
+      if (_currentScreenIndex == 0 && _currentHomeTabIndex == 0) {
         _updateFilteredFiles();
       }
     });
@@ -504,7 +566,9 @@ class _HomeScreenState extends State<HomeScreen>
       _updateFileInList(_importedFiles, file);
       
       _saveData();
-      _updateFilteredFiles();
+      if (_currentScreenIndex == 0) {
+        _updateFilteredFiles();
+      }
     });
   }
   
@@ -516,15 +580,11 @@ class _HomeScreenState extends State<HomeScreen>
   }
   
   Future<void> _importPDF() async {
-  try {
-    // GÜNCELLENMİŞ KOD BAŞLANGICI
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      // 'type' parametresi tamamen KALDIRILDI.
-      // Yeni API'de dosya türü bu şekilde belirtilir:
-      allowedExtensions: ['pdf'],
-      allowMultiple: false,
-    );
-    // GÜNCELLENMİŞ KOD SONU
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        allowedExtensions: ['pdf'],
+        allowMultiple: false,
+      );
       
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
@@ -558,7 +618,9 @@ class _HomeScreenState extends State<HomeScreen>
           setState(() {
             _importedFiles.insert(0, newFile);
             _addToRecent(newFile);
-            if (_currentTabIndex != 1) {
+            if (_currentScreenIndex != 0 || _currentHomeTabIndex != 1) {
+              _currentScreenIndex = 0;
+              _currentHomeTabIndex = 1;
               _tabController.animateTo(1);
             } else {
               _updateFilteredFiles();
@@ -871,9 +933,7 @@ class _HomeScreenState extends State<HomeScreen>
           ),
           child: InkWell(
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${tool.title} açılıyor...')),
-              );
+              _navigateToToolPage(tool.page);
             },
             borderRadius: BorderRadius.circular(16),
             child: Padding(
@@ -907,16 +967,186 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
   
+  void _navigateToToolPage(String page) {
+    switch (page) {
+      case 'merge':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const MergeScreen()),
+        );
+        break;
+      case 'tts':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const TTSScreen()),
+        );
+        break;
+      case 'ocr':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const OCRScreen()),
+        );
+        break;
+      case 'sign':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SignScreen()),
+        );
+        break;
+      case 'compress':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const CompressScreen()),
+        );
+        break;
+      case 'organize':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const OrganizeScreen()),
+        );
+        break;
+      case 'image2pdf':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ImageToPdfScreen()),
+        );
+        break;
+      case 'pdf2image':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const PdfToImageScreen()),
+        );
+        break;
+    }
+  }
+  
+  Widget _buildCloudServicesList() {
+    final cloudServices = [
+      CloudService(id: 1, name: 'Google Drive', icon: Icons.cloud, color: const Color(0xFF4285F4), serviceType: 'google_drive'),
+      CloudService(id: 2, name: 'OneDrive', icon: Icons.cloud, color: const Color(0xFF0078D4), serviceType: 'onedrive'),
+      CloudService(id: 3, name: 'Dropbox', icon: Icons.cloud, color: const Color(0xFF0061FF), serviceType: 'dropbox'),
+    ];
+    
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(
+          'Bu aygıtta',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Bağlı bulut hesapları',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).textTheme.bodySmall?.color,
+          ),
+        ),
+        const SizedBox(height: 24),
+        
+        // Cloud Services
+        Column(
+          children: cloudServices.map((service) {
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: service.color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(service.icon, color: service.color),
+                ),
+                title: Text(service.name),
+                trailing: Icon(Icons.add, color: Theme.of(context).primaryColor),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${service.name} bağlanıyor...')),
+                  );
+                },
+              ),
+            );
+          }).toList(),
+        ),
+        
+        const SizedBox(height: 24),
+        const Divider(),
+        const SizedBox(height: 16),
+        
+        // E-posta section
+        Text(
+          'E-postalardaki PDF\'ler',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 16),
+        
+        Card(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ListTile(
+            leading: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEA4335).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.mail, color: Color(0xFFEA4335)),
+            ),
+            title: const Text('Gmail'),
+            trailing: Icon(Icons.add, color: Theme.of(context).primaryColor),
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnakBar(
+                const SnackBar(content: Text('Gmail bağlanıyor...')),
+              );
+            },
+          ),
+        ),
+        
+        const SizedBox(height: 32),
+        Center(
+          child: OutlinedButton(
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Daha fazla dosya göz atılıyor...')),
+              );
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).primaryColor,
+              side: BorderSide(color: Theme.of(context).primaryColor),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+            ),
+            child: const Text('Daha fazla dosyaya göz atın'),
+          ),
+        ),
+      ],
+    );
+  }
+  
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
     return Scaffold(
       key: _scaffoldKey,
-      appBar: _isSearching ? _buildSearchAppBar(theme) : _buildMainAppBar(theme),
+      appBar: _currentScreenIndex == 0 ? 
+        (_isSearching ? _buildSearchAppBar(theme) : _buildMainAppBar(theme)) : 
+        _buildSimpleAppBar(theme),
       body: _buildBody(theme),
       bottomNavigationBar: _buildBottomNavBar(theme),
-      floatingActionButton: _buildFAB(theme),
+      floatingActionButton: _currentScreenIndex == 0 ? _buildFAB(theme) : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
@@ -962,14 +1192,40 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ],
       ],
-      bottom: TabBar(
-        controller: _tabController,
-        tabs: const [
-          Tab(icon: Icon(Icons.history), text: 'Son'),
-          Tab(icon: Icon(Icons.phone_iphone), text: 'Cihazda'),
-          Tab(icon: Icon(Icons.star), text: 'Favoriler'),
-        ],
-      ),
+      bottom: _isAppBarVisible
+          ? TabBar(
+              controller: _tabController,
+              tabs: const [
+                Tab(icon: Icon(Icons.history), text: 'Son'),
+                Tab(icon: Icon(Icons.phone_iphone), text: 'Cihazda'),
+                Tab(icon: Icon(Icons.star), text: 'Favoriler'),
+              ],
+            )
+          : null,
+    );
+  }
+  
+  AppBar _buildSimpleAppBar(ThemeData theme) {
+    String title;
+    switch (_currentScreenIndex) {
+      case 1:
+        title = 'Araçlar';
+        break;
+      case 2:
+        title = 'Dosyalar';
+        break;
+      default:
+        title = 'PDF Reader';
+    }
+    
+    return AppBar(
+      title: Text(title),
+      actions: [
+        IconButton(
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          icon: const Icon(Icons.menu),
+        ),
+      ],
     );
   }
   
@@ -1002,14 +1258,67 @@ class _HomeScreenState extends State<HomeScreen>
   }
   
   Widget _buildBody(ThemeData theme) {
-    if (_currentTabIndex == 0) {
-      return _buildRecentTab();
-    } else if (_currentTabIndex == 1) {
-      return _buildDeviceTab();
-    } else if (_currentTabIndex == 2) {
-      return _buildFavoritesTab();
+    switch (_currentScreenIndex) {
+      case 0:
+        return _buildHomeScreen();
+      case 1:
+        return _buildToolsGrid();
+      case 2:
+        return _buildCloudServicesList();
+      default:
+        return Container();
     }
-    return Container();
+  }
+  
+  Widget _buildHomeScreen() {
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        // Swipe gesture için: yatay kaydırma ile tab değişimi
+        if (notification is ScrollUpdateNotification && 
+            notification.dragDetails != null) {
+          final delta = notification.dragDetails!.delta.dx;
+          if (delta.abs() > 10) { // Minimum swipe mesafesi
+            if (delta < 0 && _currentHomeTabIndex < 2) {
+              // Sağdan sola swipe - sonraki tab
+              _tabController.animateTo(_currentHomeTabIndex + 1);
+            } else if (delta > 0 && _currentHomeTabIndex > 0) {
+              // Soldan sağa swipe - önceki tab
+              _tabController.animateTo(_currentHomeTabIndex - 1);
+            }
+          }
+        }
+        return false;
+      },
+      child: Column(
+        children: [
+          // Sticky Tab Bar (AppBar gizlenince gösterilecek)
+          if (!_isAppBarVisible && _currentScreenIndex == 0)
+            Container(
+              color: theme.appBarTheme.backgroundColor ?? theme.colorScheme.surface,
+              child: TabBar(
+                controller: _tabController,
+                tabs: const [
+                  Tab(icon: Icon(Icons.history), text: 'Son'),
+                  Tab(icon: Icon(Icons.phone_iphone), text: 'Cihazda'),
+                  Tab(icon: Icon(Icons.star), text: 'Favoriler'),
+                ],
+              ),
+            ),
+          
+          // Content with scroll controller
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildRecentTab(),
+                _buildDeviceTab(),
+                _buildFavoritesTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
   
   Widget _buildRecentTab() {
@@ -1018,6 +1327,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
     
     return ListView.builder(
+      controller: _scrollController,
       itemCount: _filteredFiles.length,
       itemBuilder: (context, index) {
         return _buildPDFCard(_filteredFiles[index], index);
@@ -1041,6 +1351,7 @@ class _HomeScreenState extends State<HomeScreen>
     return RefreshIndicator(
       onRefresh: _scanDeviceFiles,
       child: ListView.builder(
+        controller: _scrollController,
         itemCount: _filteredFiles.length,
         itemBuilder: (context, index) {
           return _buildPDFCard(_filteredFiles[index], index);
@@ -1055,6 +1366,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
     
     return ListView.builder(
+      controller: _scrollController,
       itemCount: _filteredFiles.length,
       itemBuilder: (context, index) {
         return _buildPDFCard(_filteredFiles[index], index);
@@ -1064,11 +1376,14 @@ class _HomeScreenState extends State<HomeScreen>
   
   Widget _buildBottomNavBar(ThemeData theme) {
     return BottomNavigationBar(
-      currentIndex: _currentTabIndex,
+      currentIndex: _currentScreenIndex,
       onTap: (index) {
         setState(() {
-          _currentTabIndex = index;
-          _tabController.animateTo(index);
+          _currentScreenIndex = index;
+          _isSearching = false;
+          _isSelectionMode = false;
+          _selectedFiles.clear();
+          _isAppBarVisible = true;
         });
       },
       items: const [
@@ -1172,11 +1487,14 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Base64 veriyi viewer.html'e query parameter olarak gönderiyoruz
     String viewerUrl;
     
     if (widget.pdfFile.base64 != null) {
-      viewerUrl = 'asset://flutter_assets/assets/web/viewer.html?file=data:application/pdf;base64,${widget.pdfFile.base64}';
+      // Base64 veriyi direkt gönderiyoruz
+      viewerUrl = 'asset://flutter_assets/assets/web/viewer.html?base64=${widget.pdfFile.base64}';
     } else if (widget.pdfFile.path != null) {
+      // Dosya yolundan açma
       viewerUrl = 'asset://flutter_assets/assets/web/viewer.html?file=file://${widget.pdfFile.path}';
     } else {
       viewerUrl = 'asset://flutter_assets/assets/web/viewer.html';
@@ -1185,18 +1503,37 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.pdfFile.name),
-        actions: const [
+        actions: [
           IconButton(
-            icon: Icon(Icons.share),
-            onPressed: null,
+            icon: const Icon(Icons.share),
+            onPressed: () {
+              // Paylaşma işlevi
+            },
           ),
           IconButton(
-            icon: Icon(Icons.print),
-            onPressed: null,
+            icon: const Icon(Icons.print),
+            onPressed: () {
+              // Yazdırma işlevi
+            },
           ),
-          IconButton(
-            icon: Icon(Icons.more_vert),
-            onPressed: null,
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              // Menü seçenekleri
+            },
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem<String>(
+                value: 'info',
+                child: Text('Dosya Bilgisi'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'rename',
+                child: Text('Yeniden Adlandır'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'delete',
+                child: Text('Sil', style: TextStyle(color: Colors.red)),
+              ),
+            ],
           ),
         ],
       ),
@@ -1229,10 +1566,62 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                 _isLoading = true;
               });
             },
-            onLoadStop: (controller, url) {
+            onLoadStop: (controller, url) async {
               setState(() {
                 _isLoading = false;
               });
+              
+              // JavaScript injection for handling base64 PDF
+              if (widget.pdfFile.base64 != null) {
+                await controller.evaluateJavascript(source: '''
+                  document.addEventListener("webviewerloaded", () => {
+                    const params = new URLSearchParams(window.location.search);
+                    const base64 = params.get("base64");
+                    if (!base64) return;
+
+                    // Base64 → Uint8Array
+                    const b64 = base64.split(',')[1];
+                    const raw = atob(b64);
+                    const len = raw.length;
+                    const bytes = new Uint8Array(len);
+                    for (let i = 0; i < len; i++) bytes[i] = raw.charCodeAt(i);
+
+                    // Uint8Array → Blob → Blob URL
+                    const blob = new Blob([bytes], { type: "application/pdf" });
+                    const blobUrl = URL.createObjectURL(blob);
+
+                    // Viewer initialize olana kadar bekle
+                    const waiter = setInterval(() => {
+                      if (!window.PDFViewerApplication || !PDFViewerApplication.initialized) return;
+
+                      clearInterval(waiter);
+
+                      // 🔥 PDF.js v5.x için doğru kullanım: { url: blobUrl }
+                      PDFViewerApplication.open({ url: blobUrl });
+
+                    }, 50);
+                  });
+                  
+                  // Eğer webviewerloaded event'i zaten tetiklenmişse, kodu çalıştır
+                  if (document.querySelector('.PDFViewer')) {
+                    const params = new URLSearchParams(window.location.search);
+                    const base64 = params.get("base64");
+                    if (base64) {
+                      // Yukarıdaki kodu burada da çalıştır
+                      const b64 = base64.split(',')[1];
+                      const raw = atob(b64);
+                      const len = raw.length;
+                      const bytes = new Uint8Array(len);
+                      for (let i = 0; i < len; i++) bytes[i] = raw.charCodeAt(i);
+                      const blob = new Blob([bytes], { type: "application/pdf" });
+                      const blobUrl = URL.createObjectURL(blob);
+                      if (window.PDFViewerApplication && PDFViewerApplication.initialized) {
+                        PDFViewerApplication.open({ url: blobUrl });
+                      }
+                    }
+                  }
+                ''');
+              }
             },
             onProgressChanged: (controller, progress) {
               setState(() {
@@ -1251,6 +1640,104 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
             ),
         ],
       ),
+    );
+  }
+}
+
+// --- TOOL SCREENS (PLACEHOLDER) ---
+
+class MergeScreen extends StatelessWidget {
+  const MergeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('PDF Birleştir')),
+      body: const Center(child: Text('PDF Birleştirme Ekranı')),
+    );
+  }
+}
+
+class TTSScreen extends StatelessWidget {
+  const TTSScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sesli Okuma')),
+      body: const Center(child: Text('Sesli Okuma Ekranı')),
+    );
+  }
+}
+
+class OCRScreen extends StatelessWidget {
+  const OCRScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('OCR Metin Çıkar')),
+      body: const Center(child: Text('OCR Ekranı')),
+    );
+  }
+}
+
+class SignScreen extends StatelessWidget {
+  const SignScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('PDF İmzala')),
+      body: const Center(child: Text('PDF İmzalama Ekranı')),
+    );
+  }
+}
+
+class CompressScreen extends StatelessWidget {
+  const CompressScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('PDF Sıkıştır')),
+      body: const Center(child: Text('PDF Sıkıştırma Ekranı')),
+    );
+  }
+}
+
+class OrganizeScreen extends StatelessWidget {
+  const OrganizeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sayfa Düzenle')),
+      body: const Center(child: Text('Sayfa Düzenleme Ekranı')),
+    );
+  }
+}
+
+class ImageToPdfScreen extends StatelessWidget {
+  const ImageToPdfScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Resimden PDF')),
+      body: const Center(child: Text('Resimden PDF Ekranı')),
+    );
+  }
+}
+
+class PdfToImageScreen extends StatelessWidget {
+  const PdfToImageScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('PDF\'den Resim')),
+      body: const Center(child: Text('PDF\'den Resim Ekranı')),
     );
   }
 }
