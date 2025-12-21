@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,36 +29,9 @@ class WebViewPage extends StatefulWidget {
   State<WebViewPage> createState() => _WebViewPageState();
 }
 
-class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
+class _WebViewPageState extends State<WebViewPage> {
   final GlobalKey webViewKey = GlobalKey();
   InAppWebViewController? webViewController;
-
-  @override
-  void initState() {
-    super.initState();
-    // Observer'ı ekleyin
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    // Observer'ı kaldırın
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Uygulama yaşam döngüsü değiştiğinde
-    if (state == AppLifecycleState.resumed) {
-      // Uygulama tekrar açıldığında WebView'e mesaj gönder
-      webViewController?.evaluateJavascript(source: '''
-        if (typeof onAndroidResume === 'function') {
-          onAndroidResume();
-        }
-      ''');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +56,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           onWebViewCreated: (controller) {
             webViewController = controller;
             
-            // JavaScript handler'larını ekle
             controller.addJavaScriptHandler(
               handlerName: 'openSettings',
               callback: (args) {
@@ -95,18 +69,38 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 return _handleAndroidBack();
               },
             );
+            
+            controller.addJavaScriptHandler(
+              handlerName: 'checkPermission',
+              callback: (args) async {
+                return await _checkAndroidPermission();
+              },
+            );
+            
+            controller.addJavaScriptHandler(
+              handlerName: 'listPDFs',
+              callback: (args) async {
+                return await _scanDeviceForPDFs();
+              },
+            );
+            
+            // Uygulama geri geldiğinde kontrol
+            controller.addJavaScriptHandler(
+              handlerName: 'onResume',
+              callback: (args) async {
+                return await _checkAndroidPermission();
+              },
+            );
           },
           shouldOverrideUrlLoading: (controller, navigationAction) async {
             final uri = navigationAction.request.url;
             
             if (uri != null) {
-              // "settings://all_files" özel URL'sini yakala
               if (uri.toString() == 'settings://all_files') {
                 _openAndroidSettings();
                 return NavigationActionPolicy.CANCEL;
               }
               
-              // Diğer URL'leri normal şekilde işle
               if (uri.scheme == 'http' || uri.scheme == 'https') {
                 if (await canLaunchUrl(uri)) {
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -118,7 +112,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             return NavigationActionPolicy.ALLOW;
           },
           onLoadStop: (controller, url) async {
-            // Sayfa yüklendiğinde JavaScript'e mesaj gönder
             controller.evaluateJavascript(source: '''
               if (typeof window.flutterReady === 'function') {
                 window.flutterReady();
@@ -130,37 +123,131 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     );
   }
 
-  // Android ayarlarını aç
   Future<void> _openAndroidSettings() async {
     try {
-      // Android 11+ için MANAGE_EXTERNAL_STORAGE ayarlarını aç
-      if (Platform.isAndroid) {
-        // Önce uygulama ayarlarını açmayı dene
-        const appSettings = 'package:${'your.package.name'}'; // PAKET ADINI GÜNCELLE
+      await openAppSettings();
+    } catch (e) {
+      print('Error opening settings: $e');
+      _showSnackBar('Ayarlar açılırken hata oluştu');
+    }
+  }
+
+  Future<String> _checkAndroidPermission() async {
+    if (Platform.isAndroid) {
+      try {
+        var status = await Permission.manageExternalStorage.status;
         
-        // Android 11+ için özel izin sayfası
-        final uri = Uri.parse('android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION');
-        
-        // Önce genel ayarları açmayı dene
-        if (await canLaunchUrl(Uri.parse(appSettings))) {
-          await launchUrl(Uri.parse(appSettings), mode: LaunchMode.externalApplication);
-        } else if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (status.isGranted) {
+          return 'granted';
         } else {
-          // En son çare olarak genel ayarlar
-          const settingsUri = 'app-settings:';
-          if (await canLaunchUrl(Uri.parse(settingsUri))) {
-            await launchUrl(Uri.parse(settingsUri), mode: LaunchMode.externalApplication);
-          } else {
-            // Hiçbiri çalışmazsa toast göster
-            _showSnackBar('Ayarlar açılamadı. Manuel olarak Ayarlar > Uygulamalar > [Uygulama Adı] > İzinler bölümünden izin verin.');
+          status = await Permission.manageExternalStorage.request();
+          return status.isGranted ? 'granted' : 'denied';
+        }
+      } catch (e) {
+        return 'denied';
+      }
+    }
+    return 'denied';
+  }
+
+  // GERÇEK TARAMA FONKSİYONU
+  Future<String> _scanDeviceForPDFs() async {
+    try {
+      final permissionStatus = await _checkAndroidPermission();
+      if (permissionStatus != 'granted') {
+        return 'PERMISSION_DENIED';
+      }
+      
+      print('Starting real PDF scan...');
+      
+      // Tüm önemli dizinleri tarayalım
+      final List<String> pdfPaths = [];
+      
+      // Android'in ana dizinleri
+      final List<String> directoriesToScan = [
+        '/storage/emulated/0/',
+        '/sdcard/',
+        '/storage/self/primary/',
+      ];
+      
+      for (var directoryPath in directoriesToScan) {
+        try {
+          final dir = Directory(directoryPath);
+          if (await dir.exists()) {
+            print('Scanning directory: $directoryPath');
+            final files = await _scanDirectoryForPDFs(dir);
+            pdfPaths.addAll(files);
+          }
+        } catch (e) {
+          print('Error scanning $directoryPath: $e');
+        }
+      }
+      
+      // Ek olarak Downloads, Documents, DCIM gibi spesifik klasörler
+      final List<String> specificFolders = [
+        'Download',
+        'Documents',
+        'DCIM',
+        'Pictures',
+        'Books',
+        'Telegram',
+        'WhatsApp',
+        'Movies',
+        'Music'
+      ];
+      
+      for (var folder in specificFolders) {
+        try {
+          final path = '/storage/emulated/0/$folder';
+          final dir = Directory(path);
+          if (await dir.exists()) {
+            print('Scanning folder: $folder');
+            final files = await _scanDirectoryForPDFs(dir);
+            pdfPaths.addAll(files);
+          }
+        } catch (e) {
+          print('Error scanning folder $folder: $e');
+        }
+      }
+      
+      print('Found ${pdfPaths.length} PDF files');
+      
+      if (pdfPaths.isEmpty) {
+        return 'NO_PDFS_FOUND||';
+      }
+      
+      return pdfPaths.join('||');
+    } catch (e) {
+      print('Error in _scanDeviceForPDFs: $e');
+      return 'ERROR||$e';
+    }
+  }
+
+  // Dizin tarama fonksiyonu
+  Future<List<String>> _scanDirectoryForPDFs(Directory dir) async {
+    final List<String> pdfFiles = [];
+    
+    try {
+      final List<FileSystemEntity> entities = dir.listSync(recursive: true);
+      
+      for (var entity in entities) {
+        if (entity is File) {
+          final path = entity.path.toLowerCase();
+          if (path.endsWith('.pdf')) {
+            pdfFiles.add(entity.path);
+            
+            // Çok fazla dosya bulunursa sınırla
+            if (pdfFiles.length > 1000) {
+              break;
+            }
           }
         }
       }
     } catch (e) {
-      print('Error opening settings: $e');
-      _showSnackBar('Ayarlar açılırken hata oluştu: $e');
+      print('Error scanning ${dir.path}: $e');
     }
+    
+    return pdfFiles;
   }
 
   void _showSnackBar(String message) {
@@ -174,7 +261,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // Android geri tuşu işleme
   dynamic _handleAndroidBack() {
     webViewController?.evaluateJavascript(source: '''
       if (typeof androidBackPressed === 'function') {
