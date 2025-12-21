@@ -517,7 +517,7 @@ class _HomeScreenState extends State<HomeScreen>
         date: file.date,
         isFavorite: file.isFavorite,
         path: file.path,
-        base64: file.base64 ?? '',
+        base64: file.base64,
         timestamp: DateTime.now().millisecondsSinceEpoch,
         fileType: FileType.recent,
       ));
@@ -546,7 +546,7 @@ class _HomeScreenState extends State<HomeScreen>
             date: file.date,
             isFavorite: true,
             path: file.path,
-            base64: file.base64 ?? '',
+            base64: file.base64,
             timestamp: DateTime.now().millisecondsSinceEpoch,
             fileType: FileType.favorite,
           ));
