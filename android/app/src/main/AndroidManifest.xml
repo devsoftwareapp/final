@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.devsoftaware.pdfreader">
 
     <!-- Temel internet izni -->
     <uses-permission android:name="android.permission.INTERNET" />
+    
+    <!-- Ağ durumu kontrolü -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     
     <!-- TAM DOSYA ERİŞİM İZNİ (Android 11+ için) -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
@@ -13,6 +17,9 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
                      android:maxSdkVersion="32" />
 
+    <!-- Kamera izni (belge tarama için) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <!-- Package visibility queries (Android 11+ için) -->
     <queries>
         <!-- Tüm dosya erişim izni için -->
@@ -20,20 +27,39 @@
             <action android:name="android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION" />
             <data android:scheme="package" />
         </intent>
+        
         <!-- PDF görüntüleyiciler -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="application/pdf" />
         </intent>
+        
         <!-- Dosya seçiciler -->
         <intent>
             <action android:name="android.intent.action.GET_CONTENT" />
             <data android:mimeType="*/*" />
         </intent>
+        
         <!-- E-posta uygulamaları -->
         <intent>
             <action android:name="android.intent.action.SENDTO" />
             <data android:scheme="mailto" />
+        </intent>
+        
+        <!-- Web tarayıcılar -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        
+        <!-- Dosya yöneticileri -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="resource/folder" />
         </intent>
     </queries>
 
@@ -44,7 +70,10 @@
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
-        android:allowBackup="true">
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:theme="@style/LaunchTheme">
         
         <!-- Ana Activity -->
         <activity
@@ -53,7 +82,19 @@
             android:launchMode="singleTop"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:windowSoftInputMode="adjustResize">
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize"
+            android:screenOrientation="portrait">
+            
+            <!-- Splash screen için -->
+            <meta-data
+                android:name="io.flutter.embedding.android.SplashScreenDrawable"
+                android:resource="@drawable/launch_background" />
+            
+            <!-- Normal tema -->
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
             
             <!-- Uygulama başlatıcı -->
             <intent-filter>
@@ -96,6 +137,13 @@
                 <data android:mimeType="application/pdf" />
             </intent-filter>
 
+            <!-- Çoklu dosya paylaşımı -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/pdf" />
+            </intent-filter>
+
         </activity>
 
         <!-- Flutter embedding -->
@@ -104,6 +152,37 @@
             android:value="2" />
 
         <!-- FileProvider (PDF paylaşımı için) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.devsoftaware.pdfreader.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- WebView optimizasyonu -->
+        <meta-data
+            android:name="android.webkit.WebView.EnableSafeBrowsing"
+            android:value="true" />
+            
+        <!-- Donanım hızlandırma -->
+        <meta-data
+            android:name="android.hardware.telephony"
+            android:required="false" />
+            
+        <!-- Kamera donanımı (opsiyonel) -->
+        <meta-data
+            android:name="android.hardware.camera"
+            android:required="false" />
+        <meta-data
+            android:name="android.hardware.camera.autofocus"
+            android:required="false" />
+
+    </application>
+
+</manifest>        <!-- FileProvider (PDF paylaşımı için) -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
