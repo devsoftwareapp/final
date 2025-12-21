@@ -1294,7 +1294,7 @@ class _HomeScreenState extends State<HomeScreen>
           // Sticky Tab Bar (AppBar gizlenince gösterilecek)
           if (!_isAppBarVisible && _currentScreenIndex == 0)
             Container(
-              color: theme.appBarTheme.backgroundColor ?? theme.colorScheme.surface,
+              color: Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).colorScheme.surface,
               child: TabBar(
                 controller: _tabController,
                 tabs: const [
