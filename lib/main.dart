@@ -516,13 +516,15 @@ class _HomeScreenState extends State<HomeScreen>
   }
   
   Future<void> _importPDF() async {
-    try {
-      // FilePicker güncellemesi - FileType.any kullan
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.any, // FileType.custom yerine FileType.any
-        allowedExtensions: ['pdf'],
-        allowMultiple: false,
-      );
+  try {
+    // GÜNCELLENMİŞ KOD BAŞLANGICI
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      // 'type' parametresi tamamen KALDIRILDI.
+      // Yeni API'de dosya türü bu şekilde belirtilir:
+      allowedExtensions: ['pdf'],
+      allowMultiple: false,
+    );
+    // GÜNCELLENMİŞ KOD SONU
       
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
