@@ -14,12 +14,10 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // HATA DÜZELTİLDİ: Platform kontrolü eklendi
+  // InAppWebView için platform başlatma
   if (Platform.isAndroid) {
-    // Doğru sınıf adı kullanıldı
-    if (WebViewPlatform.instance is AndroidWebViewPlatform) {
-      AndroidInAppWebViewController.setWebContentsDebuggingEnabled(true);
-    }
+    // AndroidInAppWebViewController kullanımı
+    AndroidInAppWebViewController.setWebContentsDebuggingEnabled(true);
   }
   
   runApp(const MyApp());
@@ -532,9 +530,9 @@ class _HomeScreenState extends State<HomeScreen>
   
   Future<void> _importPDF() async {
     try {
-      // HATA DÜZELTİLDİ: FileType.custom yerine FileType.any kullanıldı
+      // FilePicker güncellemesi - FileType.any yerine FileType.custom kullan
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.any, // FileType.custom yerine FileType.any
+        type: FileType.custom, // FileType.any yerine FileType.custom kullanıldı
         allowedExtensions: ['pdf'],
         allowMultiple: false,
       );
