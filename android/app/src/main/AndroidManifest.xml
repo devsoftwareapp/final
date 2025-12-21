@@ -13,6 +13,11 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
                      android:maxSdkVersion="32" />
 
+    <!-- Android 13+ için medya izinleri -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
     <application
         android:label="PDF Reader"
         android:name="${applicationName}"
@@ -20,8 +25,29 @@
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
-        android:allowBackup="true">
+        android:allowBackup="true"
+        android:fullBackupContent="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:networkSecurityConfig="@xml/network_security_config">
         
+        <!-- Uygulamanın MANAGE_EXTERNAL_STORAGE iznini kullandığını bildirir -->
+        <queries>
+            <!-- Tüm dosya erişim izni için -->
+            <intent>
+                <action android:name="android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION" />
+                <data android:scheme="package" />
+            </intent>
+            <!-- Diğer uygulamalar için gerekli sorgular -->
+            <intent>
+                <action android:name="android.intent.action.VIEW" />
+                <data android:mimeType="application/pdf" />
+            </intent>
+            <intent>
+                <action android:name="android.intent.action.GET_CONTENT" />
+                <data android:mimeType="*/*" />
+            </intent>
+        </queries>
+
         <!-- Ana Activity -->
         <activity
             android:name=".MainActivity"
@@ -29,7 +55,8 @@
             android:launchMode="singleTop"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:screenOrientation="portrait">
             
             <!-- Uygulama başlatıcı -->
             <intent-filter>
@@ -65,11 +92,40 @@
                 <data android:mimeType="application/pdf" />
             </intent-filter>
 
+            <!-- Diğer uygulamalardan PDF almak için -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/pdf" />
+            </intent-filter>
+
+            <!-- HTTP/HTTPS bağlantıları için (gerekirse) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:mimeType="text/html" />
+            </intent-filter>
+
         </activity>
 
+        <!-- Flutter embedding -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- FileProvider (PDF paylaşımı için) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 
