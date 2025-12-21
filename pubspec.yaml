@@ -1,4 +1,4 @@
-Name: pdfreader
+name: pdfreader
 description: "PDF Reader"
 publish_to: 'none'
 version: 1.0.0+1
@@ -138,4 +138,3 @@ flutter:
     - assets/web/locale/xh/
     - assets/web/locale/zh-CN/
     - assets/web/locale/zh-TW/
-
