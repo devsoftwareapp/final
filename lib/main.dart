@@ -12,6 +12,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:path/path.dart' as path;
+import 'package:flutter/services.dart';
+import 'package:open_file/open_file.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -632,7 +634,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
   
-  void _openPDFViewer(PdfFile file) async {
+  Future<void> _openPDFViewer(PdfFile file) async {
     _addToRecent(file);
     
     // PDF verisini hazırla
@@ -1500,11 +1502,12 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   late InAppWebViewController _webViewController;
   double _progress = 0;
   bool _isLoading = true;
+  bool _isSaving = false;
   
   @override
   Widget build(BuildContext context) {
-    // viewer.html URL'sini oluştur (base64 parametresi ile)
-    final viewerUrl = 'file:///android_asset/flutter_assets/assets/web/viewer.html?base64=data:application/pdf;base64,${widget.base64Data}';
+    // viewer.html URL'sini oluştur (base64 ve fileName parametreleri ile)
+    final viewerUrl = 'file:///android_asset/flutter_assets/assets/web/viewer.html?base64=data:application/pdf;base64,${widget.base64Data}&fileName=${Uri.encodeComponent(widget.pdfFile.name)}';
     
     return Scaffold(
       appBar: AppBar(
@@ -1512,11 +1515,11 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
-            onPressed: _savePDF,
+            onPressed: _isSaving ? null : _savePDF,
           ),
           IconButton(
             icon: const Icon(Icons.share),
-            onPressed: _sharePDF,
+            onPressed: _isSaving ? null : _sharePDF,
           ),
         ],
       ),
@@ -1543,6 +1546,9 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
             ),
             onWebViewCreated: (controller) {
               _webViewController = controller;
+              
+              // JavaScript handler'larını ekle
+              _setupJavaScriptHandlers(controller);
             },
             onLoadStart: (controller, url) {
               setState(() {
@@ -1554,42 +1560,10 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                 _isLoading = false;
               });
               
-              // PDF.js'nin base64'i düzgün işlemesi için JavaScript ekleyelim
+              // WebView hazır olduğunda JavaScript'e bildir
               await controller.evaluateJavascript(source: '''
-                // Base64 verisini URL'den al
-                const params = new URLSearchParams(window.location.search);
-                const base64 = params.get("base64");
-                
-                if (base64) {
-                  // PDF.js'nin hazır olmasını bekle
-                  const waitForPDFJS = () => {
-                    if (window.PDFViewerApplication && PDFViewerApplication.initialized) {
-                      // Base64 → Uint8Array
-                      const b64 = base64.split(',')[1];
-                      const raw = atob(b64);
-                      const len = raw.length;
-                      const bytes = new Uint8Array(len);
-                      for (let i = 0; i < len; i++) bytes[i] = raw.charCodeAt(i);
-                      
-                      // Uint8Array → Blob → Blob URL
-                      const blob = new Blob([bytes], { type: "application/pdf" });
-                      const blobUrl = URL.createObjectURL(blob);
-                      
-                      // PDF.js v5.x için doğru kullanım
-                      PDFViewerApplication.open({ url: blobUrl });
-                      
-                      return true;
-                    }
-                    return false;
-                  };
-                  
-                  if (!waitForPDFJS()) {
-                    const interval = setInterval(() => {
-                      if (waitForPDFJS()) {
-                        clearInterval(interval);
-                      }
-                    }, 100);
-                  }
+                if (typeof flutter_inappwebview !== 'undefined') {
+                  window.dispatchEvent(new Event('flutterInAppWebViewPlatformReady'));
                 }
               ''');
             },
@@ -1611,21 +1585,229 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                 Theme.of(context).primaryColor,
               ),
             ),
+          
+          if (_isSaving)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black54,
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  void _savePDF() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Kaydetme özelliği aktif')),
+  void _setupJavaScriptHandlers(InAppWebViewController controller) {
+    // Save PDF handler
+    controller.addJavaScriptHandler(
+      handlerName: 'savePDF',
+      callback: (args) async {
+        final base64Data = args[0]['base64'] as String?;
+        final fileName = args[0]['fileName'] as String?;
+        
+        if (base64Data == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('PDF verisi alınamadı')),
+          );
+          return;
+        }
+        
+        await _savePDFToDevice(base64Data, fileName ?? 'document.pdf');
+      },
+    );
+    
+    // Share PDF handler
+    controller.addJavaScriptHandler(
+      handlerName: 'sharePDF',
+      callback: (args) async {
+        final base64Data = args[0]['base64'] as String?;
+        final fileName = args[0]['fileName'] as String?;
+        
+        if (base64Data == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('PDF verisi alınamadı')),
+          );
+          return;
+        }
+        
+        await _sharePDFFile(base64Data, fileName ?? 'document.pdf');
+      },
+    );
+    
+    // PDF Loaded handler
+    controller.addJavaScriptHandler(
+      handlerName: 'pdfLoaded',
+      callback: (args) {
+        print('PDF Loaded: ${args[0]}');
+      },
+    );
+    
+    // WebView Ready handler
+    controller.addJavaScriptHandler(
+      handlerName: 'webViewReady',
+      callback: (args) {
+        print('WebView Ready: ${args[0]}');
+      },
+    );
+    
+    // Page Changed handler
+    controller.addJavaScriptHandler(
+      handlerName: 'pageChanged',
+      callback: (args) {
+        print('Page Changed: ${args[0]}');
+      },
+    );
+    
+    // PDF Info handler
+    controller.addJavaScriptHandler(
+      handlerName: 'pdfInfo',
+      callback: (args) {
+        print('PDF Info: ${args[0]}');
+      },
     );
   }
 
-  void _sharePDF() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Paylaşma özelliği aktif')),
-    );
+  Future<void> _savePDF() async {
+    // JavaScript'e save komutu gönder
+    try {
+      await _webViewController.evaluateJavascript(source: '''
+        if (typeof getCurrentPDFBase64 === 'function') {
+          getCurrentPDFBase64().then(base64 => {
+            if (window.flutter_inappwebview) {
+              window.flutter_inappwebview.callHandler('savePDF', {
+                base64: base64,
+                fileName: getPDFFileName()
+              });
+            }
+          });
+        } else {
+          // Alternatif: Doğrudan mevcut base64'i kullan
+          if (window.flutter_inappwebview) {
+            window.flutter_inappwebview.callHandler('savePDF', {
+              base64: '${widget.base64Data}',
+              fileName: '${widget.pdfFile.name}'
+            });
+          }
+        }
+      ''');
+    } catch (e) {
+      print('Save command error: $e');
+      // Direk olarak kaydet
+      await _savePDFToDevice(widget.base64Data, widget.pdfFile.name);
+    }
+  }
+
+  Future<void> _sharePDF() async {
+    // JavaScript'e share komutu gönder
+    try {
+      await _webViewController.evaluateJavascript(source: '''
+        if (typeof getCurrentPDFBase64 === 'function') {
+          getCurrentPDFBase64().then(base64 => {
+            if (window.flutter_inappwebview) {
+              window.flutter_inappwebview.callHandler('sharePDF', {
+                base64: base64,
+                fileName: getPDFFileName()
+              });
+            }
+          });
+        } else {
+          // Alternatif: Doğrudan mevcut base64'i kullan
+          if (window.flutter_inappwebview) {
+            window.flutter_inappwebview.callHandler('sharePDF', {
+              base64: '${widget.base64Data}',
+              fileName: '${widget.pdfFile.name}'
+            });
+          }
+        }
+      ''');
+    } catch (e) {
+      print('Share command error: $e');
+      // Direk olarak paylaş
+      await _sharePDFFile(widget.base64Data, widget.pdfFile.name);
+    }
+  }
+
+  Future<void> _savePDFToDevice(String base64Data, String fileName) async {
+    setState(() {
+      _isSaving = true;
+    });
+    
+    try {
+      // Base64'i decode et
+      final bytes = base64Decode(base64Data);
+      
+      // Downloads/PDF_Reader dizinini oluştur
+      final downloadsDir = await getExternalStorageDirectory();
+      if (downloadsDir == null) {
+        throw Exception('Downloads dizini bulunamadı');
+      }
+      
+      final pdfReaderDir = Directory('${downloadsDir.path}/PDF_Reader');
+      if (!await pdfReaderDir.exists()) {
+        await pdfReaderDir.create(recursive: true);
+      }
+      
+      // Dosyayı kaydet
+      final file = File('${pdfReaderDir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('PDF kaydedildi: $fileName'),
+          action: SnackBarAction(
+            label: 'Aç',
+            onPressed: () => _openSavedFile(file.path),
+          ),
+        ),
+      );
+      
+      print('PDF saved to: ${file.path}');
+      
+    } catch (e) {
+      print('Save error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Kaydetme hatası: ${e.toString()}')),
+      );
+    } finally {
+      setState(() {
+        _isSaving = false;
+      });
+    }
+  }
+
+  Future<void> _sharePDFFile(String base64Data, String fileName) async {
+    try {
+      // Base64'i decode et
+      final bytes = base64Decode(base64Data);
+      
+      // Geçici dosya oluştur
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/$fileName');
+      await tempFile.writeAsBytes(bytes);
+      
+      // Dosyayı paylaş
+      await OpenFile.open(tempFile.path);
+      
+    } catch (e) {
+      print('Share error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Paylaşma hatası: ${e.toString()}')),
+      );
+    }
+  }
+
+  Future<void> _openSavedFile(String filePath) async {
+    try {
+      await OpenFile.open(filePath);
+    } catch (e) {
+      print('Open file error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Dosya açma hatası: ${e.toString()}')),
+      );
+    }
   }
 }
 
