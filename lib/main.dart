@@ -1105,9 +1105,9 @@ class _HomeScreenState extends State<HomeScreen>
             title: const Text('Gmail'),
             trailing: Icon(Icons.add, color: Theme.of(context).primaryColor),
             onTap: () {
-              ScaffoldMessenger.of(context).showSnakBar(
-                const SnackBar(content: Text('Gmail bağlanıyor...')),
-              );
+              ScaffoldMessenger.of(context).showSnackBar(
+  const SnackBar(content: Text('Gmail bağlanıyor...')),
+);
             },
           ),
         ),
