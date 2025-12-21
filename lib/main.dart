@@ -517,8 +517,9 @@ class _HomeScreenState extends State<HomeScreen>
   
   Future<void> _importPDF() async {
     try {
+      // FilePicker güncellemesi - FileType.any kullan
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
+        type: FileType.any, // FileType.custom yerine FileType.any
         allowedExtensions: ['pdf'],
         allowMultiple: false,
       );
