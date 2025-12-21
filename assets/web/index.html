@@ -1002,12 +1002,9 @@
         <img src="images/permission1.png" alt="İzin Gerekiyor">
         <h3>Cihazınızdaki PDF'lere erişebilmem için izin gerekli</h3>
         <p>Devam etmek için Tüm Dosya Erişimi izni verin.</p>
-
-<!-- YENİ -->
-<button onclick="openAndroidSettings()">
-    Ayarlardan Erişim Ver
-</button>
-
+        <button onclick="openAndroidSettings()">
+            Ayarlardan Erişim Ver
+        </button>
       </div>
       
       <!-- PDF LİSTESİ -->
@@ -1511,78 +1508,96 @@
 
     // --- ANDROID İZİN VE PDF TARAMA ---
     
-    // Android'den izin kontrolü
+    // Android'den izin kontrolü (Flutter ile çalışacak şekilde)
     function checkAndroidPermission() {
         try {
-            if (typeof Android !== 'undefined' && Android.checkPermission) {
-                return Android.checkPermission();
+            // Flutter'dan izin kontrolü yap
+            if (window.flutter_inappwebview) {
+                return new Promise((resolve) => {
+                    // Flutter'dan izin durumunu al
+                    window.flutter_inappwebview.callHandler('checkPermission').then((result) => {
+                        resolve(result === 'granted');
+                    }).catch(() => {
+                        resolve(false);
+                    });
+                });
             }
-            return false;
+            return Promise.resolve(false);
         } catch (e) {
             console.error('Permission check error:', e);
-            return false;
+            return Promise.resolve(false);
         }
     }
     
     // İzin durumuna göre UI güncelle
     function checkPermissionAndUpdateUI() {
-        const hasPermission = checkAndroidPermission();
-        const permissionContainer = document.getElementById('permissionContainer');
-        const deviceList = document.getElementById('deviceList');
-        
-        if (!hasPermission) {
-            // İzin yoksa banner göster, listeyi gizle
-            if (permissionContainer) permissionContainer.style.display = 'block';
-            if (deviceList) deviceList.style.display = 'none';
-        } else {
-            // İzin varsa banner gizle, listeyi göster
-            if (permissionContainer) permissionContainer.style.display = 'none';
-            if (deviceList) deviceList.style.display = 'grid';
-        }
+        checkAndroidPermission().then(hasPermission => {
+            const permissionContainer = document.getElementById('permissionContainer');
+            const deviceList = document.getElementById('deviceList');
+            
+            if (!hasPermission) {
+                // İzin yoksa banner göster, listeyi gizle
+                if (permissionContainer) permissionContainer.style.display = 'block';
+                if (deviceList) deviceList.style.display = 'none';
+            } else {
+                // İzin varsa banner gizle, listeyi göster
+                if (permissionContainer) permissionContainer.style.display = 'none';
+                if (deviceList) deviceList.style.display = 'grid';
+                // PDF'leri tara
+                scanDeviceForPDFs();
+            }
+        });
     }
 
     // Cihaz PDF'lerini tarama
     function scanDeviceForPDFs() {
-        try {
-            // Önce izin kontrolü
-            if (!checkAndroidPermission()) {
+        checkAndroidPermission().then(hasPermission => {
+            if (!hasPermission) {
                 checkPermissionAndUpdateUI();
                 return;
             }
             
-            // Android bridge'den PDF listesini al
-            let pdfPaths = [];
-            if (typeof Android !== 'undefined' && Android.listPDFs) {
-                const result = Android.listPDFs();
-                if (result && result.trim().length > 0 && result !== "PERMISSION_DENIED") {
-                    pdfPaths = result.split('||').filter(p => p && p.trim().length > 0);
+            try {
+                // Flutter'dan PDF listesini al
+                if (window.flutter_inappwebview) {
+                    window.flutter_inappwebview.callHandler('listPDFs').then(result => {
+                        if (result && result !== "PERMISSION_DENIED") {
+                            let pdfPaths = [];
+                            if (result.trim().length > 0) {
+                                pdfPaths = result.split('||').filter(p => p && p.trim().length > 0);
+                            }
+                            
+                            // PDF'leri devicePDFs dizisine ekle
+                            devicePDFs = [];
+                            let nextId = 1000;
+                            
+                            pdfPaths.forEach(path => {
+                                const name = path.split('/').pop();
+                                devicePDFs.push({
+                                    id: nextId++,
+                                    name: name,
+                                    size: getFileSizeFromPath(path),
+                                    date: getFileDateFromPath(path),
+                                    isFavorite: false,
+                                    path: path
+                                });
+                            });
+                            
+                            // UI'ı güncelle
+                            loadData();
+                        } else {
+                            checkPermissionAndUpdateUI();
+                        }
+                    }).catch(error => {
+                        console.error('Error getting PDF list:', error);
+                        checkPermissionAndUpdateUI();
+                    });
                 }
+            } catch (e) {
+                console.error('Device scan error:', e);
+                checkPermissionAndUpdateUI();
             }
-            
-            // PDF'leri devicePDFs dizisine ekle
-            devicePDFs = [];
-            let nextId = 1000; // Cihaz PDF'leri için yüksek ID'ler
-            
-            pdfPaths.forEach(path => {
-                const name = path.split('/').pop();
-                devicePDFs.push({
-                    id: nextId++,
-                    name: name,
-                    size: getFileSizeFromPath(path),
-                    date: getFileDateFromPath(path),
-                    isFavorite: false,
-                    path: path
-                });
-            });
-            
-            // UI'ı güncelle
-            checkPermissionAndUpdateUI();
-            loadData(); // Verileri yeniden yükle
-            
-        } catch (e) {
-            console.error('Device scan error:', e);
-            checkPermissionAndUpdateUI();
-        }
+        });
     }
     
     // Dosya boyutunu al (simüle)
@@ -1596,6 +1611,39 @@
         const now = new Date();
         return `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
     }
+
+    // --- FLUTTER İLE İLETİŞİM ---
+    function openAndroidSettings() {
+        // Flutter'daki JavaScript handler'ını çağır
+        if (window.flutter_inappwebview) {
+            window.flutter_inappwebview.callHandler('openSettings');
+        } else {
+            // Fallback için
+            window.location.href = 'settings://all_files';
+        }
+    }
+
+    // Flutter'dan ayarlar açıldıktan sonra geri dönüldüğünde
+    window.flutterReady = function() {
+        // Sayfa ilk yüklendiğinde izin kontrolü yap
+        setTimeout(() => {
+            checkPermissionAndUpdateUI();
+        }, 500);
+    };
+
+    // Uygulamaya geri dönüldüğünde
+    window.onAndroidResume = function() {
+        // İzin durumunu kontrol et
+        checkPermissionAndUpdateUI();
+        
+        // Eğer cihaz sekmesindeyse PDF'leri yeniden tara
+        if (currentNav === 'home') {
+            const activeTab = document.querySelector('.tab.active').dataset.tab;
+            if (activeTab === 'device') {
+                scanDeviceForPDFs();
+            }
+        }
+    };
 
     // --- DOSYA YÜKLEME İŞLEMLERİ ---
     
@@ -2165,19 +2213,15 @@
 
     // Android'den döndüğünde çağrılacak
     function onAndroidResume() {
-        try {
-            // İzin durumunu kontrol et
-            checkPermissionAndUpdateUI();
-            
-            // Eğer cihaz sekmesindeyse PDF'leri yeniden tara
-            if (currentNav === 'home') {
-                const activeTab = document.querySelector('.tab.active').dataset.tab;
-                if (activeTab === 'device') {
-                    scanDeviceForPDFs();
-                }
+        // İzin durumunu kontrol et
+        checkPermissionAndUpdateUI();
+        
+        // Eğer cihaz sekmesindeyse PDF'leri yeniden tara
+        if (currentNav === 'home') {
+            const activeTab = document.querySelector('.tab.active').dataset.tab;
+            if (activeTab === 'device') {
+                scanDeviceForPDFs();
             }
-        } catch (e) {
-            console.warn('onAndroidResume error', e);
         }
     }
 
@@ -2339,21 +2383,10 @@
     window.scanDeviceForPDFs = scanDeviceForPDFs;
     window.onAndroidResume = onAndroidResume;
     window.openToolPage = openToolPage;
-    
-    
-    function openAndroidSettings() {
-    // Flutter'daki JavaScript handler'ını çağır
-    if (window.flutter_inappwebview) {
-        window.flutter_inappwebview.callHandler('openSettings');
-    } else {
-        // Fallback: normal settings URL'si
-        window.location.href = 'settings://all_files';
-    }
-}
-    
+    window.openAndroidSettings = openAndroidSettings;
+    window.flutterReady = flutterReady;
     
 
   </script>
 </body>
 </html>
-
