@@ -100,7 +100,7 @@ class PdfFile {
       date: json['date'],
       isFavorite: json['isFavorite'] ?? false,
       path: json['path'],
-      base64: json['base64'] ?? '', // DÜZELTİLDİ: null kontrolü eklendi
+      base64: json['base64'] ?? '',
       timestamp: json['timestamp'],
       fileType: FileType.values[json['fileType'] ?? 0],
     );
@@ -517,7 +517,7 @@ class _HomeScreenState extends State<HomeScreen>
         date: file.date,
         isFavorite: file.isFavorite,
         path: file.path,
-        base64: file.base64 ?? '', // DÜZELTİLDİ: null kontrolü eklendi
+        base64: file.base64 ?? '',
         timestamp: DateTime.now().millisecondsSinceEpoch,
         fileType: FileType.recent,
       ));
@@ -546,7 +546,7 @@ class _HomeScreenState extends State<HomeScreen>
             date: file.date,
             isFavorite: true,
             path: file.path,
-            base64: file.base64 ?? '', // DÜZELTİLDİ: null kontrolü eklendi
+            base64: file.base64 ?? '',
             timestamp: DateTime.now().millisecondsSinceEpoch,
             fileType: FileType.favorite,
           ));
@@ -665,7 +665,7 @@ class _HomeScreenState extends State<HomeScreen>
       MaterialPageRoute(
         builder: (context) => PDFViewerScreen(
           pdfFile: file,
-          base64Data: base64Data,
+          base64Data: base64Data!, // DÜZELTİLDİ: "!" eklendi
         ),
       ),
     );
