@@ -55,12 +55,6 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
-        
-        <!-- Dosya yöneticileri -->
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:mimeType="resource/folder" />
-        </intent>
     </queries>
 
     <application
@@ -71,8 +65,6 @@
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
         android:allowBackup="true"
-        android:fullBackupContent="@xml/backup_rules"
-        android:dataExtractionRules="@xml/data_extraction_rules"
         android:theme="@style/LaunchTheme">
         
         <!-- Ana Activity -->
@@ -155,37 +147,6 @@
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.devsoftaware.pdfreader.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-
-        <!-- WebView optimizasyonu -->
-        <meta-data
-            android:name="android.webkit.WebView.EnableSafeBrowsing"
-            android:value="true" />
-            
-        <!-- Donanım hızlandırma -->
-        <meta-data
-            android:name="android.hardware.telephony"
-            android:required="false" />
-            
-        <!-- Kamera donanımı (opsiyonel) -->
-        <meta-data
-            android:name="android.hardware.camera"
-            android:required="false" />
-        <meta-data
-            android:name="android.hardware.camera.autofocus"
-            android:required="false" />
-
-    </application>
-
-</manifest>        <!-- FileProvider (PDF paylaşımı için) -->
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
