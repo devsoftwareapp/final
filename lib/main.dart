@@ -530,9 +530,9 @@ class _HomeScreenState extends State<HomeScreen>
   
   Future<void> _importPDF() async {
     try {
-      // FilePicker güncellemesi - FileType.any yerine FileType.custom kullan
+      // FilePicker güncellemesi - FileType.custom kullanımı düzeltildi
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom, // FileType.any yerine FileType.custom kullanıldı
+        type: FileType.custom,
         allowedExtensions: ['pdf'],
         allowMultiple: false,
       );
@@ -550,7 +550,9 @@ class _HomeScreenState extends State<HomeScreen>
           final bytes = await tempFile.readAsBytes();
           base64Data = base64Encode(bytes);
         } else if (file.bytes != null) {
-          base64Data = base64Encode(file.bytes!);
+          await tempFile.writeAsBytes(file.bytes!);
+          final bytes = await tempFile.readAsBytes();
+          base64Data = base64Encode(bytes);
         }
         
         if (base64Data != null) {
