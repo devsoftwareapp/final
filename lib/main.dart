@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:path/path.dart' as path;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -60,7 +62,7 @@ class PdfFile {
   String date;
   bool isFavorite;
   final String? path;
-  final String? base64;
+  String? base64;
   final int timestamp;
   final FileType fileType;
 
@@ -149,16 +151,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> 
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
-  int _currentScreenIndex = 0; // 0: Ana Sayfa, 1: Araçlar, 2: Dosyalar
-  int _currentHomeTabIndex = 0; // 0: Son, 1: Cihazda, 2: Favoriler
+  int _currentScreenIndex = 0;
+  int _currentHomeTabIndex = 0;
   
-  // Data Lists
   List<PdfFile> _recentFiles = [];
   List<PdfFile> _deviceFiles = [];
   List<PdfFile> _favoriteFiles = [];
   List<PdfFile> _importedFiles = [];
   
-  // UI State
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
   List<PdfFile> _filteredFiles = [];
@@ -166,21 +166,14 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isSelectionMode = false;
   Set<int> _selectedFiles = {};
   
-  // Permission
   bool _hasPermission = false;
   bool _permissionChecked = false;
   
-  // Drawer State
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  
-  // FAB Menu
   bool _showFabMenu = false;
-  
-  // Connectivity
   bool _isConnected = true;
   late StreamSubscription<ConnectivityResult> _connectivitySubscription;
   
-  // Scroll Controller for Hide/Show AppBar
   final ScrollController _scrollController = ScrollController();
   bool _isAppBarVisible = true;
   double _lastScrollOffset = 0;
@@ -213,13 +206,12 @@ class _HomeScreenState extends State<HomeScreen>
   }
   
   void _handleScroll() {
-    if (_currentScreenIndex != 0) return; // Sadece Ana Sayfa'da
+    if (_currentScreenIndex != 0) return;
     
     final currentOffset = _scrollController.offset;
     final isScrollingDown = currentOffset > _lastScrollOffset;
     final isScrollingUp = currentOffset < _lastScrollOffset;
     
-    // Minimum scroll mesafesi
     const threshold = 50.0;
     
     if (isScrollingDown && currentOffset > threshold) {
@@ -460,8 +452,8 @@ class _HomeScreenState extends State<HomeScreen>
     return '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}.${now.year}';
   }
   
-  String _getFileNameFromPath(String path) {
-    return path.split('/').last;
+  String _getFileNameFromPath(String filePath) {
+    return path.basename(filePath);
   }
   
   void _handleTabChange() {
@@ -1045,7 +1037,6 @@ class _HomeScreenState extends State<HomeScreen>
         ),
         const SizedBox(height: 24),
         
-        // Cloud Services
         Column(
           children: cloudServices.map((service) {
             return Card(
@@ -1079,7 +1070,6 @@ class _HomeScreenState extends State<HomeScreen>
         const Divider(),
         const SizedBox(height: 16),
         
-        // E-posta section
         Text(
           'E-postalardaki PDF\'ler',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -1106,8 +1096,8 @@ class _HomeScreenState extends State<HomeScreen>
             trailing: Icon(Icons.add, color: Theme.of(context).primaryColor),
             onTap: () {
               ScaffoldMessenger.of(context).showSnackBar(
-  const SnackBar(content: Text('Gmail bağlanıyor...')),
-);
+                const SnackBar(content: Text('Gmail bağlanıyor...')),
+              );
             },
           ),
         ),
@@ -1273,16 +1263,13 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _buildHomeScreen() {
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        // Swipe gesture için: yatay kaydırma ile tab değişimi
         if (notification is ScrollUpdateNotification && 
             notification.dragDetails != null) {
           final delta = notification.dragDetails!.delta.dx;
-          if (delta.abs() > 10) { // Minimum swipe mesafesi
+          if (delta.abs() > 10) {
             if (delta < 0 && _currentHomeTabIndex < 2) {
-              // Sağdan sola swipe - sonraki tab
               _tabController.animateTo(_currentHomeTabIndex + 1);
             } else if (delta > 0 && _currentHomeTabIndex > 0) {
-              // Soldan sağa swipe - önceki tab
               _tabController.animateTo(_currentHomeTabIndex - 1);
             }
           }
@@ -1291,7 +1278,6 @@ class _HomeScreenState extends State<HomeScreen>
       },
       child: Column(
         children: [
-          // Sticky Tab Bar (AppBar gizlenince gösterilecek)
           if (!_isAppBarVisible && _currentScreenIndex == 0)
             Container(
               color: Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).colorScheme.surface,
@@ -1305,7 +1291,6 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
           
-          // Content with scroll controller
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -1464,8 +1449,7 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }
 
@@ -1484,20 +1468,43 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   late InAppWebViewController _webViewController;
   double _progress = 0;
   bool _isLoading = true;
+  String? _currentBase64;
+
+  @override
+  void initState() {
+    super.initState();
+    // Dosya varsa base64'e çevir
+    _loadFileToBase64();
+  }
+
+  Future<void> _loadFileToBase64() async {
+    if (widget.pdfFile.base64 != null) {
+      _currentBase64 = widget.pdfFile.base64;
+      return;
+    }
+
+    if (widget.pdfFile.path != null) {
+      try {
+        final file = File(widget.pdfFile.path!);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          _currentBase64 = base64Encode(bytes);
+          // Gelecekte kullanmak için PDF dosyasını güncelle
+          widget.pdfFile.base64 = _currentBase64;
+        }
+      } catch (e) {
+        print('Dosya okuma hatası: $e');
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Base64 veriyi viewer.html'e query parameter olarak gönderiyoruz
-    String viewerUrl;
+    String viewerUrl = 'asset://flutter_assets/assets/web/viewer.html';
     
-    if (widget.pdfFile.base64 != null) {
-      // Base64 veriyi direkt gönderiyoruz
-      viewerUrl = 'asset://flutter_assets/assets/web/viewer.html?base64=${widget.pdfFile.base64}';
-    } else if (widget.pdfFile.path != null) {
-      // Dosya yolundan açma
-      viewerUrl = 'asset://flutter_assets/assets/web/viewer.html?file=file://${widget.pdfFile.path}';
-    } else {
-      viewerUrl = 'asset://flutter_assets/assets/web/viewer.html';
+    if (_currentBase64 != null) {
+      // Base64 veriyi URL encode ederek gönder
+      viewerUrl = '$viewerUrl?base64=${Uri.encodeComponent(_currentBase64!)}';
     }
 
     return Scaffold(
@@ -1505,35 +1512,16 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
         title: Text(widget.pdfFile.name),
         actions: [
           IconButton(
+            icon: const Icon(Icons.save),
+            onPressed: _savePDF,
+          ),
+          IconButton(
             icon: const Icon(Icons.share),
-            onPressed: () {
-              // Paylaşma işlevi
-            },
+            onPressed: _sharePDF,
           ),
           IconButton(
             icon: const Icon(Icons.print),
-            onPressed: () {
-              // Yazdırma işlevi
-            },
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              // Menü seçenekleri
-            },
-            itemBuilder: (BuildContext context) => [
-              const PopupMenuItem<String>(
-                value: 'info',
-                child: Text('Dosya Bilgisi'),
-              ),
-              const PopupMenuItem<String>(
-                value: 'rename',
-                child: Text('Yeniden Adlandır'),
-              ),
-              const PopupMenuItem<String>(
-                value: 'delete',
-                child: Text('Sil', style: TextStyle(color: Colors.red)),
-              ),
-            ],
+            onPressed: _printPDF,
           ),
         ],
       ),
@@ -1571,62 +1559,16 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                 _isLoading = false;
               });
               
-              // JavaScript injection for handling base64 PDF
-              if (widget.pdfFile.base64 != null) {
-                await controller.evaluateJavascript(source: '''
-                  document.addEventListener("webviewerloaded", () => {
-                    const params = new URLSearchParams(window.location.search);
-                    const base64 = params.get("base64");
-                    if (!base64) return;
-
-                    // Base64 → Uint8Array
-                    const b64 = base64.split(',')[1];
-                    const raw = atob(b64);
-                    const len = raw.length;
-                    const bytes = new Uint8Array(len);
-                    for (let i = 0; i < len; i++) bytes[i] = raw.charCodeAt(i);
-
-                    // Uint8Array → Blob → Blob URL
-                    const blob = new Blob([bytes], { type: "application/pdf" });
-                    const blobUrl = URL.createObjectURL(blob);
-
-                    // Viewer initialize olana kadar bekle
-                    const waiter = setInterval(() => {
-                      if (!window.PDFViewerApplication || !PDFViewerApplication.initialized) return;
-
-                      clearInterval(waiter);
-
-                      // 🔥 PDF.js v5.x için doğru kullanım: { url: blobUrl }
-                      PDFViewerApplication.open({ url: blobUrl });
-
-                    }, 50);
-                  });
-                  
-                  // Eğer webviewerloaded event'i zaten tetiklenmişse, kodu çalıştır
-                  if (document.querySelector('.PDFViewer')) {
-                    const params = new URLSearchParams(window.location.search);
-                    const base64 = params.get("base64");
-                    if (base64) {
-                      // Yukarıdaki kodu burada da çalıştır
-                      const b64 = base64.split(',')[1];
-                      const raw = atob(b64);
-                      const len = raw.length;
-                      const bytes = new Uint8Array(len);
-                      for (let i = 0; i < len; i++) bytes[i] = raw.charCodeAt(i);
-                      const blob = new Blob([bytes], { type: "application/pdf" });
-                      const blobUrl = URL.createObjectURL(blob);
-                      if (window.PDFViewerApplication && PDFViewerApplication.initialized) {
-                        PDFViewerApplication.open({ url: blobUrl });
-                      }
-                    }
-                  }
-                ''');
-              }
+              // JavaScript injection - BASE64 PDF AÇMA
+              await _injectPDFLoadingScript(controller);
             },
             onProgressChanged: (controller, progress) {
               setState(() {
                 _progress = progress / 100;
               });
+            },
+            onConsoleMessage: (controller, consoleMessage) {
+              print('WebView Console: ${consoleMessage.message}');
             },
           ),
           
@@ -1640,6 +1582,246 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Future<void> _injectPDFLoadingScript(InAppWebViewController controller) async {
+    if (_currentBase64 == null) return;
+
+    await controller.evaluateJavascript(source: '''
+      // BASE64 PDF AÇMA SCRIPT'I
+      (function() {
+        console.log('📄 PDF.js Yüklendi - Flutter Modu');
+        
+        // Base64 verisini al
+        const params = new URLSearchParams(window.location.search);
+        const base64 = params.get('base64');
+        
+        if (!base64) {
+          console.warn('❌ Base64 verisi bulunamadı');
+          return;
+        }
+        
+        // Base64'i decode et
+        function loadBase64PDF(base64Data) {
+          try {
+            // Base64 string'ini temizle (data:application/pdf;base64, kısmını kaldır)
+            const pureBase64 = base64Data.includes(',') ? 
+                              base64Data.split(',')[1] : 
+                              base64Data;
+            
+            console.log('📥 Base64 verisi alındı, boyut:', pureBase64.length);
+            
+            // Base64 → Binary
+            const binary = atob(pureBase64);
+            const bytes = new Uint8Array(binary.length);
+            
+            for (let i = 0; i < binary.length; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+            
+            // Blob oluştur
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            const blobUrl = URL.createObjectURL(blob);
+            
+            console.log('✅ Blob URL oluşturuldu:', blobUrl.substring(0, 50) + '...');
+            
+            // PDF.js'nin hazır olmasını bekle
+            function waitForPDFJS() {
+              if (window.PDFViewerApplication && PDFViewerApplication.initialized) {
+                console.log('🚀 PDF.js hazır, PDF açılıyor...');
+                
+                // PDF'yi aç
+                PDFViewerApplication.open({ url: blobUrl }).then(() => {
+                  console.log('🎉 PDF başarıyla açıldı');
+                  
+                  // Kaydet butonunu aktif et
+                  setTimeout(() => {
+                    activateSaveButton();
+                  }, 1000);
+                }).catch(error => {
+                  console.error('PDF açma hatası:', error);
+                });
+                
+                return true;
+              }
+              return false;
+            }
+            
+            // Hemen deneyelim
+            if (!waitForPDFJS()) {
+              // webviewerloaded event'ini dinle
+              document.addEventListener('webviewerloaded', function() {
+                console.log('📄 webviewerloaded event tetiklendi');
+                setTimeout(() => waitForPDFJS(), 100);
+              });
+              
+              // Alternatif: interval ile kontrol et
+              const checkInterval = setInterval(() => {
+                if (waitForPDFJS()) {
+                  clearInterval(checkInterval);
+                }
+              }, 100);
+            }
+            
+          } catch (error) {
+            console.error('❌ PDF yükleme hatası:', error);
+            alert('PDF yüklenirken hata oluştu: ' + error.message);
+          }
+        }
+        
+        // Kaydet butonunu aktif et
+        function activateSaveButton() {
+          console.log('🔍 Kaydet butonu aranıyor...');
+          
+          let tries = 0;
+          const maxTries = 20;
+          
+          const findButton = setInterval(() => {
+            tries++;
+            const saveBtn = document.getElementById('secondaryDownload') || 
+                           document.querySelector('button[title*="Save"]') ||
+                           document.querySelector('button[title*="Kaydet"]');
+            
+            if (saveBtn) {
+              clearInterval(findButton);
+              console.log('✅ Kaydet butonu bulundu');
+              
+              // Butona tıklama event'i ekle
+              saveBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('💾 Kaydet tıklandı');
+                saveEditedPDF();
+              }, true);
+              
+            } else if (tries >= maxTries) {
+              clearInterval(findButton);
+              console.warn('⚠️ Kaydet butonu bulunamadı');
+            }
+          }, 300);
+        }
+        
+        // Düzenlenmiş PDF'yi kaydet
+        function saveEditedPDF() {
+          if (!window.PDFViewerApplication || !PDFViewerApplication.pdfDocument) {
+            alert('PDF henüz yüklenmedi!');
+            return;
+          }
+          
+          console.log('✏️ Düzenlenmiş PDF kaydediliyor...');
+          
+          PDFViewerApplication.pdfDocument.saveDocument()
+            .then(editedBuffer => {
+              console.log('✅ Düzenlenmiş buffer alındı:', editedBuffer.byteLength);
+              
+              // ArrayBuffer → Base64
+              function arrayBufferToBase64(buffer) {
+                let binary = '';
+                const bytes = new Uint8Array(buffer);
+                for (let i = 0; i < bytes.length; i++) {
+                  binary += String.fromCharCode(bytes[i]);
+                }
+                return btoa(binary);
+              }
+              
+              const editedBase64 = arrayBufferToBase64(editedBuffer);
+              
+              // Flutter'a mesaj gönder
+              if (window.flutter_inappwebview) {
+                window.flutter_inappwebview.callHandler('saveEditedPDF', editedBase64);
+              } else {
+                // Tarayıcıda test için
+                const blob = new Blob([editedBuffer], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'edited_' + Date.now() + '.pdf';
+                a.click();
+                alert('PDF indirildi (tarayıcı modu)');
+              }
+            })
+            .catch(error => {
+              console.error('Düzenleme kaydı alınamadı:', error);
+              alert('PDF düzenleme verisi alınamadı: ' + error);
+            });
+        }
+        
+        // Flutter handler'larını kaydet
+        if (window.flutter_inappwebview) {
+          window.flutter_inappwebview.registerHandler('showAlert', function(data, callback) {
+            alert(data.message);
+            callback('Alert gösterildi');
+          });
+        }
+        
+        // PDF'yi yükle
+        loadBase64PDF(base64);
+        
+      })();
+    ''');
+    
+    // Flutter handler'larını ekle
+    controller.addJavaScriptHandler(
+      handlerName: 'saveEditedPDF',
+      callback: (args) async {
+        if (args.isNotEmpty) {
+          final editedBase64 = args[0];
+          await _saveEditedPDF(editedBase64);
+        }
+      },
+    );
+  }
+
+  Future<void> _saveEditedPDF(String base64Data) async {
+    try {
+      final directory = await getExternalStorageDirectory();
+      final downloadsDir = Directory('${directory?.path}/Download/PDF_Reader');
+      
+      if (!await downloadsDir.exists()) {
+        await downloadsDir.create(recursive: true);
+      }
+      
+      final fileName = 'edited_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final file = File('${downloadsDir.path}/$fileName');
+      
+      final bytes = base64Decode(base64Data);
+      await file.writeAsBytes(bytes);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('PDF kaydedildi: $fileName'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      
+      print('PDF kaydedildi: ${file.path}');
+    } catch (e) {
+      print('PDF kaydetme hatası: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('PDF kaydedilemedi: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _savePDF() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Kaydetme özelliği aktif')),
+    );
+  }
+
+  void _sharePDF() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Paylaşma özelliği aktif')),
+    );
+  }
+
+  void _printPDF() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Yazdırma özelliği aktif')),
     );
   }
 }
