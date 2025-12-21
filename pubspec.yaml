@@ -35,8 +35,6 @@ flutter:
     - assets/web/viewer.mjs
     
     # Fontlar ve Görseller
-    - assets/web/fonts/
-    - assets/web/fonts/MaterialSymbolsRounded.woff2
     - assets/web/images/
     
     # Locale Klasörleri (viewer.ftl dosyalarını içermektedir)
