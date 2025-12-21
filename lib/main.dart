@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:path_provider/path_provider.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,6 +55,7 @@ class _WebViewPageState extends State<WebViewPage> {
           onWebViewCreated: (controller) {
             webViewController = controller;
             
+            // JavaScript handler'larını ekle
             controller.addJavaScriptHandler(
               handlerName: 'openSettings',
               callback: (args) {
@@ -70,6 +70,7 @@ class _WebViewPageState extends State<WebViewPage> {
               },
             );
             
+            // İzin kontrolü için handler
             controller.addJavaScriptHandler(
               handlerName: 'checkPermission',
               callback: (args) async {
@@ -77,18 +78,25 @@ class _WebViewPageState extends State<WebViewPage> {
               },
             );
             
+            // PDF listesi için handler (DOSYA BİLGİLERİYLE BİRLİKTE)
             controller.addJavaScriptHandler(
               handlerName: 'listPDFs',
               callback: (args) async {
-                return await _scanDeviceForPDFs();
+                final pdfs = await _scanDeviceForPDFs();
+                // JSON formatında döndür: {path, size, date}
+                return pdfs.map((p) => '${p['path']}||${p['size']}||${p['date']}').join('@@@');
               },
             );
             
-            // Uygulama geri geldiğinde kontrol
+            // Tekil dosya bilgisi için handler
             controller.addJavaScriptHandler(
-              handlerName: 'onResume',
+              handlerName: 'getFileInfo',
               callback: (args) async {
-                return await _checkAndroidPermission();
+                if (args.isNotEmpty) {
+                  final filePath = args[0] as String;
+                  return await _getFileInfo(filePath);
+                }
+                return '';
               },
             );
           },
@@ -150,96 +158,79 @@ class _WebViewPageState extends State<WebViewPage> {
     return 'denied';
   }
 
-  // GERÇEK TARAMA FONKSİYONU
-  Future<String> _scanDeviceForPDFs() async {
+  // GERÇEK TARAMA FONKSİYONU (DOSYA BİLGİLERİYLE)
+  Future<List<Map<String, String>>> _scanDeviceForPDFs() async {
+    final List<Map<String, String>> pdfFiles = [];
+    
     try {
       final permissionStatus = await _checkAndroidPermission();
       if (permissionStatus != 'granted') {
-        return 'PERMISSION_DENIED';
+        return pdfFiles;
       }
-      
-      print('Starting real PDF scan...');
-      
-      // Tüm önemli dizinleri tarayalım
-      final List<String> pdfPaths = [];
       
       // Android'in ana dizinleri
       final List<String> directoriesToScan = [
         '/storage/emulated/0/',
         '/sdcard/',
-        '/storage/self/primary/',
       ];
       
       for (var directoryPath in directoriesToScan) {
         try {
           final dir = Directory(directoryPath);
           if (await dir.exists()) {
-            print('Scanning directory: $directoryPath');
             final files = await _scanDirectoryForPDFs(dir);
-            pdfPaths.addAll(files);
+            pdfFiles.addAll(files);
           }
         } catch (e) {
           print('Error scanning $directoryPath: $e');
         }
       }
       
-      // Ek olarak Downloads, Documents, DCIM gibi spesifik klasörler
-      final List<String> specificFolders = [
-        'Download',
-        'Documents',
-        'DCIM',
-        'Pictures',
-        'Books',
-        'Telegram',
-        'WhatsApp',
-        'Movies',
-        'Music'
-      ];
+      print('Found ${pdfFiles.length} PDF files with real info');
       
-      for (var folder in specificFolders) {
-        try {
-          final path = '/storage/emulated/0/$folder';
-          final dir = Directory(path);
-          if (await dir.exists()) {
-            print('Scanning folder: $folder');
-            final files = await _scanDirectoryForPDFs(dir);
-            pdfPaths.addAll(files);
-          }
-        } catch (e) {
-          print('Error scanning folder $folder: $e');
-        }
-      }
-      
-      print('Found ${pdfPaths.length} PDF files');
-      
-      if (pdfPaths.isEmpty) {
-        return 'NO_PDFS_FOUND||';
-      }
-      
-      return pdfPaths.join('||');
     } catch (e) {
       print('Error in _scanDeviceForPDFs: $e');
-      return 'ERROR||$e';
     }
+    
+    return pdfFiles;
   }
 
-  // Dizin tarama fonksiyonu
-  Future<List<String>> _scanDirectoryForPDFs(Directory dir) async {
-    final List<String> pdfFiles = [];
+  // Dizin tarama (GERÇEK DOSYA BİLGİLERİYLE)
+  Future<List<Map<String, String>>> _scanDirectoryForPDFs(Directory dir) async {
+    final List<Map<String, String>> pdfFiles = [];
     
     try {
       final List<FileSystemEntity> entities = dir.listSync(recursive: true);
       
       for (var entity in entities) {
-        if (entity is File) {
-          final path = entity.path.toLowerCase();
-          if (path.endsWith('.pdf')) {
-            pdfFiles.add(entity.path);
+        if (entity is File && entity.path.toLowerCase().endsWith('.pdf')) {
+          try {
+            final file = File(entity.path);
+            final stat = await file.stat();
+            
+            // Dosya boyutunu formatla
+            String formattedSize = _formatFileSize(stat.size);
+            
+            // Dosya tarihini formatla
+            String formattedDate = _formatFileDate(stat.modified);
+            
+            pdfFiles.add({
+              'path': entity.path,
+              'size': formattedSize,
+              'date': formattedDate,
+            });
             
             // Çok fazla dosya bulunursa sınırla
-            if (pdfFiles.length > 1000) {
+            if (pdfFiles.length > 500) {
               break;
             }
+          } catch (e) {
+            // Dosya bilgisi alınamazsa varsayılan değerler
+            pdfFiles.add({
+              'path': entity.path,
+              'size': '~1 MB',
+              'date': _getCurrentDate(),
+            });
           }
         }
       }
@@ -248,6 +239,62 @@ class _WebViewPageState extends State<WebViewPage> {
     }
     
     return pdfFiles;
+  }
+
+  // Dosya boyutunu formatla (Bytes → KB/MB/GB)
+  String _formatFileSize(int bytes) {
+    if (bytes <= 0) return '0 B';
+    
+    const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    final i = (log(bytes) / log(1024)).floor();
+    
+    return '${(bytes / pow(1024, i)).toStringAsFixed(1)} ${suffixes[i]}';
+  }
+
+  // Dosya tarihini formatla
+  String _formatFileDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    // Bugün mü?
+    if (difference.inDays == 0) {
+      return 'Bugün ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    }
+    // Dün mü?
+    else if (difference.inDays == 1) {
+      return 'Dün ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    }
+    // Bu hafta içinde mi?
+    else if (difference.inDays < 7) {
+      return '${difference.inDays} gün önce';
+    }
+    // Tarihi formatla
+    else {
+      return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+    }
+  }
+
+  // Tekil dosya bilgisi al
+  Future<String> _getFileInfo(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (await file.exists()) {
+        final stat = await file.stat();
+        final size = _formatFileSize(stat.size);
+        final date = _formatFileDate(stat.modified);
+        
+        return '$size||$date';
+      }
+    } catch (e) {
+      print('Error getting file info for $filePath: $e');
+    }
+    
+    return '~1 MB||${_getCurrentDate()}';
+  }
+
+  String _getCurrentDate() {
+    final now = DateTime.now();
+    return '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}.${now.year}';
   }
 
   void _showSnackBar(String message) {
