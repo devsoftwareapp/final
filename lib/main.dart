@@ -14,8 +14,12 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // HATA DÜZELTİLDİ: Platform kontrolü eklendi
   if (Platform.isAndroid) {
-    AndroidInAppWebView.setWebContentsDebuggingEnabled(true);
+    // Doğru sınıf adı kullanıldı
+    if (WebViewPlatform.instance is AndroidWebViewPlatform) {
+      AndroidInAppWebViewController.setWebContentsDebuggingEnabled(true);
+    }
   }
   
   runApp(const MyApp());
@@ -147,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen>
   List<PdfFile> _filteredFiles = [];
   
   bool _isSelectionMode = false;
-  Set<int> _selectedFiles = Set();
+  Set<int> _selectedFiles = {};
   
   // Permission
   bool _hasPermission = false;
@@ -300,7 +304,7 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         _deviceFiles = pdfs.map((pdf) {
           return PdfFile(
-            id: DateTime.now().millisecondsSinceEpoch + pdf.hashCode,
+            id: DateTime.now().millisecondsSinceEpoch + (pdf.hashCode & 0x7FFFFFFF),
             name: _getFileNameFromPath(pdf['path'] ?? ''),
             size: pdf['size'] ?? '0 B',
             date: pdf['date'] ?? '',
@@ -370,7 +374,7 @@ class _HomeScreenState extends State<HomeScreen>
           }
         }
         
-        // Recursive için limit
+        // Limit for performance
         if (pdfFiles.length > 100) break;
       }
     } catch (e) {
@@ -528,8 +532,9 @@ class _HomeScreenState extends State<HomeScreen>
   
   Future<void> _importPDF() async {
     try {
+      // HATA DÜZELTİLDİ: FileType.custom yerine FileType.any kullanıldı
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
+        type: FileType.any, // FileType.custom yerine FileType.any
         allowedExtensions: ['pdf'],
         allowMultiple: false,
       );
