@@ -27,9 +27,36 @@ class WebViewPage extends StatefulWidget {
   State<WebViewPage> createState() => _WebViewPageState();
 }
 
-class _WebViewPageState extends State<WebViewPage> {
+class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   final GlobalKey webViewKey = GlobalKey();
   InAppWebViewController? webViewController;
+
+  @override
+  void initState() {
+    super.initState();
+    // Observer'ı ekleyin
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    // Observer'ı kaldırın
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Uygulama yaşam döngüsü değiştiğinde
+    if (state == AppLifecycleState.resumed) {
+      // Uygulama tekrar açıldığında WebView'e mesaj gönder
+      webViewController?.evaluateJavascript(source: '''
+        if (typeof onAndroidResume === 'function') {
+          onAndroidResume();
+        }
+      ''');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -181,19 +208,5 @@ class _WebViewPageState extends State<WebViewPage> {
     });
     
     return null;
-  }
-
-  // Uygulamaya geri dönüldüğünde
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      // Uygulama tekrar açıldığında WebView'e mesaj gönder
-      webViewController?.evaluateJavascript(source: '''
-        if (typeof onAndroidResume === 'function') {
-          onAndroidResume();
-        }
-      ''');
-    }
-    super.didChangeAppLifecycleState(state);
   }
 }
