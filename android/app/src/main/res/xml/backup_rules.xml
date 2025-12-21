@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Uygulama verilerini yedekle -->
+    <include domain="sharedpref" path="."/>
+    <include domain="database" path="."/>
+    <include domain="file" path="."/>
+    <include domain="external" path="."/>
+    
+    <!-- Yedeklemeyecek dosyalar -->
+    <exclude domain="sharedpref" path="debug_preferences.xml"/>
+    <exclude domain="file" path="cache/"/>
+    <exclude domain="file" path="no_backup/"/>
+    <exclude domain="external" path="Android/data/com.devsoftaware.pdfreader/cache/"/>
+</full-backup-content>
