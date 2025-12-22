@@ -1,20 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- External storage -->
-    <external-path name="external_storage" path="." />
-    
-    <!-- External files -->
-    <external-files-path name="external_files" path="." />
-    
-    <!-- Cache directory -->
+    <!-- Cache dizini -->
     <cache-path name="cache" path="." />
+    
+    <!-- Files dizini -->
+    <files-path name="files" path="." />
     
     <!-- External cache -->
     <external-cache-path name="external_cache" path="." />
     
-    <!-- Files directory -->
-    <files-path name="files" path="." />
+    <!-- External files -->
+    <external-files-path name="external_files" path="." />
     
-    <!-- Root directory -->
-    <root-path name="root" path="." />
+    <!-- External storage root (Android 10 ve altı) -->
+    <external-path name="external_storage" path="." />
+    
+    <!-- Downloads dizini -->
+    <external-path name="downloads" path="Download" />
+    
+    <!-- DCIM dizini (fotoğraflar) -->
+    <external-path name="dcim" path="DCIM" />
+    
+    <!-- Documents dizini -->
+    <external-path name="documents" path="Documents" />
+    
+    <!-- Pictures dizini -->
+    <external-path name="pictures" path="Pictures" />
+    
+    <!-- Movies dizini -->
+    <external-path name="movies" path="Movies" />
+    
+    <!-- PDF Reader özel klasörü -->
+    <external-path name="pdf_reader" path="PDF Reader" />
 </paths>
