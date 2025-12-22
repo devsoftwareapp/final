@@ -13,7 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
-import 'package:open_file/open_file';
+import 'package:open_file/open_file.dart'; // ✅ open_file paketi eklendi
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -2005,8 +2005,9 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       final tempFile = File('${tempDir.path}/$fileName');
       await tempFile.writeAsBytes(bytes);
       
-      // Dosyayı paylaş
-      await OpenFile.open(tempFile.path);
+      // Dosyayı paylaş - open_file paketi kullanarak
+      final result = await OpenFile.open(tempFile.path);
+      print('Open file result: ${result.message}');
       
     } catch (e) {
       print('Share error: $e');
@@ -2018,7 +2019,8 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
 
   Future<void> _openSavedFile(String filePath) async {
     try {
-      await OpenFile.open(filePath);
+      final result = await OpenFile.open(filePath);
+      print('Open file result: ${result.message}');
     } catch (e) {
       print('Open file error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
