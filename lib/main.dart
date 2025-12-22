@@ -105,7 +105,7 @@ class PdfFile {
   }
 }
 
-enum FileType { device, imported, recent, favorite }
+enum FileType { device, imported, recent, favorite, custom }
 
 // --- MAIN HOME SCREEN ---
 
@@ -999,7 +999,8 @@ class _HomeScreenState extends State<HomeScreen>
             style: Theme.of(context).textTheme.bodyLarge,
           ),
         ],
-      );
+      ),
+    );
   }
   
   @override
@@ -1421,7 +1422,7 @@ class _ToolCard extends StatelessWidget {
   }
 }
 
-// PDF Viewer Screen (Aynı kalacak - yukarıdaki gibi)
+// PDF Viewer Screen (Basitleştirilmiş)
 class PDFViewerScreen extends StatefulWidget {
   final PdfFile pdfFile;
   final String base64Data;
@@ -1439,15 +1440,50 @@ class PDFViewerScreen extends StatefulWidget {
 }
 
 class _PDFViewerScreenState extends State<PDFViewerScreen> {
-  // ... (PDF Viewer kodları aynı kalacak)
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.fileName),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.save),
+            onPressed: () {},
+          ),
+          IconButton(
+            icon: const Icon(Icons.share),
+            onPressed: () {},
+          ),
+        ],
       ),
       body: Center(
-        child: Text('PDF Viewer: ${widget.fileName}'),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.picture_as_pdf,
+              size: 100,
+              color: Colors.red,
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'PDF Viewer: ${widget.fileName}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Boyut: ${widget.pdfFile.size}',
+              style: const TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton(
+              onPressed: () {
+                // PDF görüntüleme işlevi buraya eklenecek
+              },
+              child: const Text('PDF\'i Aç'),
+            ),
+          ],
+        ),
       ),
     );
   }
