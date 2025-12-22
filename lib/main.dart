@@ -13,7 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
-import 'package:open_file/open_file.dart';
+import 'package:open_file/open_file';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,7 +34,6 @@ class MyApp extends StatelessWidget {
       title: 'PDF Reader',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primaryColor: const Color(0xFFE53935),
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFFE53935),
           brightness: Brightness.light,
@@ -42,13 +41,13 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       darkTheme: ThemeData(
-        primaryColor: const Color(0xFFE53935),
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFFE53935),
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
-    themeMode: ThemeMode.system,
+      ),
+      themeMode: ThemeMode.system,
       home: const HomeScreen(),
     );
   }
