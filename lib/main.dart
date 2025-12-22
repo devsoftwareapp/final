@@ -48,8 +48,7 @@ class MyApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
-      ),
-      themeMode: ThemeMode.system,
+    themeMode: ThemeMode.system,
       home: const HomeScreen(),
     );
   }
@@ -665,7 +664,7 @@ class _HomeScreenState extends State<HomeScreen>
       MaterialPageRoute(
         builder: (context) => PDFViewerScreen(
           pdfFile: file,
-          base64Data: base64Data!, // DÜZELTİLDİ: "!" eklendi
+          base64Data: base64Data!,
         ),
       ),
     );
@@ -1506,8 +1505,8 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   
   @override
   Widget build(BuildContext context) {
-    // viewer.html URL'sini oluştur (base64 ve fileName parametreleri ile)
-    final viewerUrl = 'file:///android_asset/flutter_assets/assets/web/viewer.html?base64=data:application/pdf;base64,${widget.base64Data}&fileName=${Uri.encodeComponent(widget.pdfFile.name)}';
+    // viewer.html URL'sini oluştur - sadece viewer'ı aç
+    final viewerUrl = 'file:///android_asset/flutter_assets/assets/web/viewer.html';
     
     return Scaffold(
       appBar: AppBar(
@@ -1560,12 +1559,8 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                 _isLoading = false;
               });
               
-              // WebView hazır olduğunda JavaScript'e bildir
-              await controller.evaluateJavascript(source: '''
-                if (typeof flutter_inappwebview !== 'undefined') {
-                  window.dispatchEvent(new Event('flutterInAppWebViewPlatformReady'));
-                }
-              ''');
+              // WebView hazır olduğunda JavaScript'e PDF verisini yükle
+              await _loadPDFData();
             },
             onProgressChanged: (controller, progress) {
               setState(() {
@@ -1598,6 +1593,208 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _loadPDFData() async {
+    try {
+      // JavaScript'e PDF verisini yükle
+      await _webViewController.evaluateJavascript(source: '''
+        // PDF verisini base64 formatında oluştur
+        var pdfData = 'data:application/pdf;base64,${widget.base64Data}';
+        
+        // PDF'yi yükle
+        function loadPDF() {
+          try {
+            // PDF.js'in mevcut PDF'i kaldırmasına izin ver
+            if (window.PDFViewerApplication) {
+              // Önce mevcut PDF'i kaldır
+              if (window.PDFViewerApplication.pdfDocument) {
+                window.PDFViewerApplication.pdfDocument.destroy();
+              }
+              
+              // Yeni PDF'i yükle
+              window.PDFViewerApplication.open(pdfData).then(function() {
+                console.log('PDF başarıyla yüklendi');
+                
+                // PDF yüklendikten sonra başlığı güncelle
+                document.title = '${widget.pdfFile.name}';
+                
+                // Flutter'a bildir
+                if (window.flutter_inappwebview) {
+                  window.flutter_inappwebview.callHandler('pdfLoaded', {
+                    fileName: '${widget.pdfFile.name}',
+                    size: '${widget.pdfFile.size}',
+                    date: '${widget.pdfFile.date}'
+                  });
+                }
+              }).catch(function(error) {
+                console.error('PDF yükleme hatası:', error);
+                
+                // Manuel olarak secondaryOpenFile butonunu tetikle
+                setTimeout(function() {
+                  var secondaryOpenButton = document.getElementById('secondaryOpenFile');
+                  if (secondaryOpenButton) {
+                    console.log('secondaryOpenFile butonu bulundu, tıklanıyor...');
+                    
+                    // Base64 verisi ile özel bir olay oluştur
+                    var event = new CustomEvent('pdfjs:openfile', {
+                      detail: {
+                        data: pdfData,
+                        fileName: '${widget.pdfFile.name}'
+                      }
+                    });
+                    document.dispatchEvent(event);
+                    
+                    // Alternatif olarak doğrudan butona tıkla
+                    secondaryOpenButton.click();
+                  } else {
+                    console.error('secondaryOpenFile butonu bulunamadı');
+                    
+                    // Drop event'i simüle et
+                    var dropEvent = new CustomEvent('drop', {
+                      detail: {
+                        dataTransfer: {
+                          files: [{
+                            type: 'application/pdf',
+                            name: '${widget.pdfFile.name}',
+                            data: pdfData
+                          }]
+                        }
+                      }
+                    });
+                    document.dispatchEvent(dropEvent);
+                  }
+                }, 1000);
+              });
+            } else {
+              console.error('PDFViewerApplication bulunamadı');
+              
+              // PDFViewerApplication yüklenene kadar bekle
+              setTimeout(loadPDF, 500);
+            }
+          } catch (error) {
+            console.error('PDF yükleme hatası:', error);
+          }
+        }
+        
+        // DOM hazır olduğunda PDF'yi yükle
+        if (document.readyState === 'complete') {
+          loadPDF();
+        } else {
+          document.addEventListener('DOMContentLoaded', loadPDF);
+        }
+        
+        // Dosya açma için yardımcı fonksiyonlar
+        window.loadPDFFromFlutter = function(base64Data, fileName) {
+          try {
+            var dataUrl = 'data:application/pdf;base64,' + base64Data;
+            if (window.PDFViewerApplication) {
+              window.PDFViewerApplication.open(dataUrl);
+              if (fileName) {
+                document.title = fileName;
+              }
+            }
+          } catch (error) {
+            console.error('Flutter PDF yükleme hatası:', error);
+          }
+        };
+        
+        window.getCurrentPDFBase64 = function() {
+          return new Promise(function(resolve, reject) {
+            try {
+              if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) {
+                // Bu kısım PDF.js'e bağlı olarak değişebilir
+                // Gerçek uygulamada PDF.js API'sini kullanmanız gerekebilir
+                resolve('${widget.base64Data}');
+              } else {
+                reject('PDF yüklü değil');
+              }
+            } catch (error) {
+              reject(error);
+            }
+          });
+        };
+        
+        window.getPDFFileName = function() {
+          return '${widget.pdfFile.name}';
+        };
+      ''');
+    } catch (e) {
+      print('PDF yükleme hatası: $e');
+      
+      // Alternatif yöntem: doğrudan base64 verisi ile yükle
+      await _loadPDFAlternative();
+    }
+  }
+
+  Future<void> _loadPDFAlternative() async {
+    try {
+      // PDF'yi data URL formatında aç
+      final pdfDataUrl = 'data:application/pdf;base64,${widget.base64Data}';
+      
+      await _webViewController.evaluateJavascript(source: '''
+        // Doğrudan PDF'yi aç
+        function openPDFDirectly() {
+          try {
+            // PDFViewerApplication'ı kontrol et
+            if (window.PDFViewerApplication) {
+              console.log('PDFViewerApplication mevcut, PDF açılıyor...');
+              
+              // PDF'yi aç
+              window.PDFViewerApplication.open('$pdfDataUrl').then(function() {
+                console.log('PDF başarıyla açıldı');
+                document.title = '${widget.pdfFile.name}';
+              }).catch(function(error) {
+                console.error('PDF açma hatası:', error);
+                
+                // Eğer open çalışmazsa, fileinputchange event'ini tetikle
+                setTimeout(function() {
+                  console.log('Alternatif yöntem deneniyor...');
+                  
+                  // File input oluştur
+                  var fileInput = document.createElement('input');
+                  fileInput.type = 'file';
+                  fileInput.accept = 'application/pdf';
+                  
+                  // Event oluştur
+                  var event = new Event('change', { bubbles: true });
+                  event.file = {
+                    name: '${widget.pdfFile.name}',
+                    type: 'application/pdf',
+                    size: ${widget.base64Data.length},
+                    data: '$pdfDataUrl'
+                  };
+                  
+                  // Event'i tetikle
+                  document.dispatchEvent(new CustomEvent('fileinputchange', {
+                    detail: {
+                      source: this,
+                      fileInput: fileInput
+                    }
+                  }));
+                }, 500);
+              });
+            } else {
+              console.error('PDFViewerApplication bulunamadı');
+              
+              // 2 saniye sonra tekrar dene
+              setTimeout(openPDFDirectly, 2000);
+            }
+          } catch (error) {
+            console.error('PDF açma hatası:', error);
+          }
+        }
+        
+        // Sayfa yüklendikten sonra PDF'yi aç
+        if (document.readyState === 'complete') {
+          openPDFDirectly();
+        } else {
+          document.addEventListener('DOMContentLoaded', openPDFDirectly);
+        }
+      ''');
+    } catch (e) {
+      print('Alternatif yükleme hatası: $e');
+    }
   }
 
   void _setupJavaScriptHandlers(InAppWebViewController controller) {
@@ -1642,6 +1839,9 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       handlerName: 'pdfLoaded',
       callback: (args) {
         print('PDF Loaded: ${args[0]}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF yüklendi: ${args[0]['fileName']}')),
+        );
       },
     );
     
@@ -1682,6 +1882,15 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                 fileName: getPDFFileName()
               });
             }
+          }).catch(error => {
+            console.error('Base64 alma hatası:', error);
+            // Alternatif: widget'ın base64 verisini kullan
+            if (window.flutter_inappwebview) {
+              window.flutter_inappwebview.callHandler('savePDF', {
+                base64: '${widget.base64Data}',
+                fileName: '${widget.pdfFile.name}'
+              });
+            }
           });
         } else {
           // Alternatif: Doğrudan mevcut base64'i kullan
@@ -1710,6 +1919,15 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
               window.flutter_inappwebview.callHandler('sharePDF', {
                 base64: base64,
                 fileName: getPDFFileName()
+              });
+            }
+          }).catch(error => {
+            console.error('Base64 alma hatası:', error);
+            // Alternatif: widget'ın base64 verisini kullan
+            if (window.flutter_inappwebview) {
+              window.flutter_inappwebview.callHandler('sharePDF', {
+                base64: '${widget.base64Data}',
+                fileName: '${widget.pdfFile.name}'
               });
             }
           });
