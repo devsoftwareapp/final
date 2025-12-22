@@ -64,7 +64,7 @@ class PdfFile {
   final String? path;
   final String? base64;
   final int timestamp;
-  final FileType fileType;
+  final PdfFileType fileType; // DEĞİŞTİRİLDİ: FileType -> PdfFileType
 
   PdfFile({
     required this.id,
@@ -75,7 +75,7 @@ class PdfFile {
     this.path,
     this.base64,
     required this.timestamp,
-    this.fileType = FileType.device,
+    this.fileType = PdfFileType.device, // DEĞİŞTİRİLDİ
   });
 
   Map<String, dynamic> toJson() => {
@@ -87,7 +87,7 @@ class PdfFile {
     'path': path,
     'base64': base64,
     'timestamp': timestamp,
-    'fileType': fileType.index,
+    'fileType': fileType.index, // DEĞİŞTİRİLDİ
   };
 
   static PdfFile fromJson(Map<String, dynamic> json) {
@@ -100,12 +100,13 @@ class PdfFile {
       path: json['path'],
       base64: json['base64'] ?? '',
       timestamp: json['timestamp'],
-      fileType: FileType.values[json['fileType'] ?? 0],
+      fileType: PdfFileType.values[json['fileType'] ?? 0], // DEĞİŞTİRİLDİ
     );
   }
 }
 
-enum FileType { device, imported, recent, favorite, custom }
+// DEĞİŞTİRİLDİ: FileType -> PdfFileType (isim çakışmasını önlemek için)
+enum PdfFileType { device, imported, recent, favorite }
 
 // --- MAIN HOME SCREEN ---
 
@@ -311,7 +312,7 @@ class _HomeScreenState extends State<HomeScreen>
               date: _formatFileDate(stat.modified),
               path: file.path,
               timestamp: stat.modified.millisecondsSinceEpoch,
-              fileType: FileType.device,
+              fileType: PdfFileType.device, // DEĞİŞTİRİLDİ
             );
           } catch (e) {
             return PdfFile(
@@ -321,7 +322,7 @@ class _HomeScreenState extends State<HomeScreen>
               date: _getCurrentDate(),
               path: file.path,
               timestamp: DateTime.now().millisecondsSinceEpoch,
-              fileType: FileType.device,
+              fileType: PdfFileType.device, // DEĞİŞTİRİLDİ
             );
           }
         }).toList();
@@ -487,7 +488,7 @@ class _HomeScreenState extends State<HomeScreen>
         path: file.path,
         base64: file.base64 ?? '',
         timestamp: DateTime.now().millisecondsSinceEpoch,
-        fileType: FileType.recent,
+        fileType: PdfFileType.recent, // DEĞİŞTİRİLDİ
       ));
       
       if (_recentFiles.length > 20) {
@@ -516,7 +517,7 @@ class _HomeScreenState extends State<HomeScreen>
             path: file.path,
             base64: file.base64 ?? '',
             timestamp: DateTime.now().millisecondsSinceEpoch,
-            fileType: FileType.favorite,
+            fileType: PdfFileType.favorite, // DEĞİŞTİRİLDİ
           ));
         }
       } else {
@@ -547,7 +548,7 @@ class _HomeScreenState extends State<HomeScreen>
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         allowedExtensions: ['pdf'],
         allowMultiple: true,
-        type: FileType.custom,
+        type: FileType.custom, // BURASI DEĞİŞMEDİ! file_picker paketinin kendi FileType'ı
       );
       
       if (result != null && result.files.isNotEmpty) {
@@ -570,7 +571,7 @@ class _HomeScreenState extends State<HomeScreen>
               date: _getCurrentDate(),
               base64: base64Data,
               timestamp: DateTime.now().millisecondsSinceEpoch,
-              fileType: FileType.imported,
+              fileType: PdfFileType.imported, // DEĞİŞTİRİLDİ
             );
             
             setState(() {
@@ -607,7 +608,7 @@ class _HomeScreenState extends State<HomeScreen>
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         allowedExtensions: ['pdf'],
         allowMultiple: true,
-        type: FileType.custom,
+        type: FileType.custom, // BURASI DEĞİŞMEDİ! file_picker paketinin kendi FileType'ı
       );
       
       if (result != null && result.files.isNotEmpty) {
@@ -623,7 +624,7 @@ class _HomeScreenState extends State<HomeScreen>
               date: _formatFileDate(stat.modified),
               path: file.path,
               timestamp: stat.modified.millisecondsSinceEpoch,
-              fileType: FileType.device,
+              fileType: PdfFileType.device, // DEĞİŞTİRİLDİ
             );
             
             // Cihaz dosyalarına ekle (izinsiz görünmeyecek)
