@@ -159,6 +159,40 @@ class _HomeScreenState extends State<HomeScreen>
     _loadData();
   }
   
+  void _handleScroll() {
+    if (_currentScreenIndex != 0) return;
+    
+    final currentOffset = _scrollController.offset;
+    final isScrollingDown = currentOffset > _lastScrollOffset;
+    final isScrollingUp = currentOffset < _lastScrollOffset;
+    
+    const threshold = 50.0;
+    
+    if (isScrollingDown && currentOffset > threshold) {
+      if (_isAppBarVisible) {
+        setState(() {
+          _isAppBarVisible = false;
+        });
+      }
+    } else if (isScrollingUp) {
+      if (!_isAppBarVisible) {
+        setState(() {
+          _isAppBarVisible = true;
+        });
+      }
+    }
+    
+    _lastScrollOffset = currentOffset;
+  }
+  
+  void _scrollToTop() {
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+  
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -168,6 +202,16 @@ class _HomeScreenState extends State<HomeScreen>
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkPermissionAndInitialize();
+      if (_currentScreenIndex == 0 && _currentHomeTabIndex == 1) {
+        _scanDeviceFiles();
+      }
+    }
   }
   
   // ACROBAT STRATEJİSİ: İlk açılışta izin kontrolü
@@ -955,8 +999,7 @@ class _HomeScreenState extends State<HomeScreen>
             style: Theme.of(context).textTheme.bodyLarge,
           ),
         ],
-      ),
-    );
+      );
   }
   
   @override
