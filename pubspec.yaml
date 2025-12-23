@@ -34,6 +34,8 @@ flutter:
     - assets/web/viewer.html
     - assets/web/viewer.css
     - assets/web/viewer.mjs
+    - assets/web/index.html
+    - assets/web/pdfviewer.html
     
     # Fontlar ve Görseller
     - assets/web/images/
