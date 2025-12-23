@@ -7,7 +7,7 @@ import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
-import 'pdfviewer.dart'; // PDFViewerScreen import edildi
+import 'pdfviewer.dart';
 
 void main() {
   runApp(const MyApp());
@@ -76,7 +76,7 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     _checkPermissions();
-    // Status bar rengini ayarla
+    
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.white,
       statusBarIconBrightness: Brightness.dark,
@@ -109,13 +109,15 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _setupJavaScriptHandlers() async {
-    // PDF açma handler'ı - PDFViewerScreen'e yönlendir
+    // PDF açma handler'ı
     _webViewController.addJavaScriptHandler(
       handlerName: 'openPDF',
       callback: (args) async {
         if (args.length >= 2 && mounted) {
           final pdfBase64 = args[0];
           final pdfName = args[1];
+          
+          print('Opening PDF: $pdfName, base64 length: ${pdfBase64.length}');
           
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -183,12 +185,24 @@ class _MainScreenState extends State<MainScreen> {
       },
     );
 
-    // Geri butonu için handler - webview'in kendi geri butonu kullanılacak
+    // Geri butonu için handler
     _webViewController.addJavaScriptHandler(
       handlerName: 'goBack',
       callback: (args) async {
         if (await _webViewController.canGoBack()) {
           await _webViewController.goBack();
+        }
+        return null;
+      },
+    );
+
+    // Toast gösterimi için handler
+    _webViewController.addJavaScriptHandler(
+      handlerName: 'showToast',
+      callback: (args) async {
+        if (args.isNotEmpty) {
+          final message = args[0];
+          _showFlutterToast(message);
         }
         return null;
       },
@@ -247,19 +261,11 @@ class _MainScreenState extends State<MainScreen> {
         
         await File(filePath).writeAsBytes(bytes);
 
-        await _webViewController.evaluateJavascript(source: '''
-          if (window.showToast) {
-            window.showToast('Dosya kaydedildi: $fileName');
-          }
-        ''');
+        _showFlutterToast('Dosya kaydedildi: $fileName');
       }
     } catch (e) {
       print('Save file error: $e');
-      await _webViewController.evaluateJavascript(source: '''
-        if (window.showToast) {
-          window.showToast('Dosya kaydedilemedi: $e');
-        }
-      ''');
+      _showFlutterToast('Dosya kaydedilemedi');
     }
   }
 
@@ -276,13 +282,11 @@ class _MainScreenState extends State<MainScreen> {
       final file = await File(tempPath).writeAsBytes(bytes);
 
       await _launchFileShareIntent(file.path);
+      
+      _showFlutterToast('Dosya paylaşılıyor...');
     } catch (e) {
       print('Share file error: $e');
-      await _webViewController.evaluateJavascript(source: '''
-        if (window.showToast) {
-          window.showToast('Dosya paylaşılamadı: $e');
-        }
-      ''');
+      _showFlutterToast('Dosya paylaşılamadı');
     }
   }
 
@@ -291,12 +295,18 @@ class _MainScreenState extends State<MainScreen> {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     } else {
-      await _webViewController.evaluateJavascript(source: '''
-        if (window.showToast) {
-          window.showToast('Dosya paylaşılamadı: Uygulama bulunamadı');
-        }
-      ''');
+      _showFlutterToast('Paylaşım uygulaması bulunamadı');
     }
+  }
+
+  void _showFlutterToast(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+        backgroundColor: Colors.grey[800],
+      ),
+    );
   }
 
   Widget _buildErrorPage() {
@@ -372,12 +382,11 @@ class _MainScreenState extends State<MainScreen> {
       backgroundColor: Colors.white,
       body: WillPopScope(
         onWillPop: () async {
-          // Android geri tuşu kontrolü
           if (await _webViewController.canGoBack()) {
             await _webViewController.goBack();
-            return false; // Uygulamadan çıkma, sadece webview'de geri git
+            return false;
           }
-          return true; // Uygulamadan çık
+          return true;
         },
         child: AnnotatedRegion<SystemUiOverlayStyle>(
           value: const SystemUiOverlayStyle(
@@ -392,7 +401,6 @@ class _MainScreenState extends State<MainScreen> {
             bottom: false,
             child: Stack(
               children: [
-                // Status bar ve navigation bar padding'i
                 Padding(
                   padding: EdgeInsets.only(
                     top: MediaQuery.of(context).padding.top,
@@ -446,8 +454,11 @@ class _MainScreenState extends State<MainScreen> {
                         // Flutter ile iletişim için global fonksiyonlar
                         window.flutterHandler = {
                           openPDF: function(pdfBase64, pdfName) {
+                            console.log('Opening PDF via Flutter:', pdfName);
                             if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
                               window.flutter_inappwebview.callHandler('openPDF', pdfBase64, pdfName);
+                            } else {
+                              console.error('Flutter handler not available');
                             }
                           },
                           openFilePicker: function() {
@@ -469,6 +480,11 @@ class _MainScreenState extends State<MainScreen> {
                             if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
                               window.flutter_inappwebview.callHandler('goBack');
                             }
+                          },
+                          showToast: function(message) {
+                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                              window.flutter_inappwebview.callHandler('showToast', message);
+                            }
                           }
                         };
                         
@@ -476,6 +492,25 @@ class _MainScreenState extends State<MainScreen> {
                         window.openPDF = function(pdfBase64, pdfName) {
                           window.flutterHandler.openPDF(pdfBase64, pdfName);
                         };
+                        
+                        // localStorage desteği için
+                        if (typeof window.localStorage === 'undefined') {
+                          window.localStorage = {
+                            _data: {},
+                            setItem: function(key, value) {
+                              this._data[key] = value;
+                            },
+                            getItem: function(key) {
+                              return this._data[key] || null;
+                            },
+                            removeItem: function(key) {
+                              delete this._data[key];
+                            },
+                            clear: function() {
+                              this._data = {};
+                            }
+                          };
+                        }
                       ''');
                     },
                     onProgressChanged: (controller, progress) {
@@ -495,7 +530,7 @@ class _MainScreenState extends State<MainScreen> {
                       
                       if (uri == null) return NavigationActionPolicy.ALLOW;
                       
-                      // PDF dosyalarını handle et - artık JavaScript handler ile yapılıyor
+                      // PDF dosyalarını handle et
                       if (uri.toString().endsWith('.pdf')) {
                         return NavigationActionPolicy.CANCEL;
                       }
