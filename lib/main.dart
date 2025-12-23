@@ -3,8 +3,10 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import 'dart:convert'; // base64Decode için eklendi
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart'; // SystemNavigator için eklendi
 
 void main() {
   runApp(const MyApp());
@@ -40,7 +42,7 @@ class _MainScreenState extends State<MainScreen> {
   bool _isLoading = true;
   bool _hasError = false;
 
-  // WebView için Android ayarları
+  // WebView için ayarlar - GÜNCEL VERSİYON
   final InAppWebViewGroupOptions options = InAppWebViewGroupOptions(
     crossPlatform: InAppWebViewOptions(
       useShouldOverrideUrlLoading: true,
@@ -59,8 +61,8 @@ class _MainScreenState extends State<MainScreen> {
       thirdPartyCookiesEnabled: true,
       allowFileAccess: true,
       allowContentAccess: true,
-      allowFileAccessFromFileURLs: true,
-      allowUniversalAccessFromFileURLs: true,
+      // NOT: allowFileAccessFromFileURLs ve allowUniversalAccessFromFileURLs 
+      // yeni versiyonda desteklenmiyor, kaldırıldı
       databaseEnabled: true,
       domStorageEnabled: true,
     ),
@@ -85,10 +87,10 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  // JavaScript handler'ları
+  // JavaScript handler'ları - DÜZELTİLDİ: await kaldırıldı
   Future<void> _setupJavaScriptHandlers() async {
     // JavaScript ile iletişim için handler ekle
-    await _webViewController.addJavaScriptHandler(
+    _webViewController.addJavaScriptHandler(
       handlerName: 'openFilePicker',
       callback: (args) async {
         await _openFilePicker();
@@ -96,7 +98,7 @@ class _MainScreenState extends State<MainScreen> {
       },
     );
 
-    await _webViewController.addJavaScriptHandler(
+    _webViewController.addJavaScriptHandler(
       handlerName: 'openExternalUrl',
       callback: (args) async {
         if (args.isNotEmpty) {
@@ -109,7 +111,7 @@ class _MainScreenState extends State<MainScreen> {
       },
     );
 
-    await _webViewController.addJavaScriptHandler(
+    _webViewController.addJavaScriptHandler(
       handlerName: 'getStoragePath',
       callback: (args) async {
         final dir = await getApplicationDocumentsDirectory();
@@ -117,7 +119,7 @@ class _MainScreenState extends State<MainScreen> {
       },
     );
 
-    await _webViewController.addJavaScriptHandler(
+    _webViewController.addJavaScriptHandler(
       handlerName: 'saveFile',
       callback: (args) async {
         if (args.length >= 2) {
@@ -129,7 +131,7 @@ class _MainScreenState extends State<MainScreen> {
       },
     );
 
-    await _webViewController.addJavaScriptHandler(
+    _webViewController.addJavaScriptHandler(
       handlerName: 'shareFile',
       callback: (args) async {
         if (args.length >= 2) {
@@ -159,16 +161,26 @@ class _MainScreenState extends State<MainScreen> {
         // JavaScript'e dosya verisini gönder
         await _webViewController.evaluateJavascript(source: '''
           if (window.handleFileSelect) {
-            window.handleFileSelect('${file.name}', ${file.size}, '${base64}');
+            const fileData = {
+              name: '${file.name.replaceAll("'", "\\'")}',
+              size: ${file.size},
+              data: '${base64.replaceAll("'", "\\'")}'
+            };
+            window.handleFileSelect(fileData);
           }
         ''');
       }
     } catch (e) {
       print('File picker error: $e');
+      await _webViewController.evaluateJavascript(source: '''
+        if (window.showToast) {
+          window.showToast('Dosya seçilemedi: $e');
+        }
+      ''');
     }
   }
 
-  // Dosya kaydet
+  // Dosya kaydet - DÜZELTİLDİ: base64Decode eklendi
   Future<void> _saveFile(String fileName, String base64Data) async {
     try {
       final dir = await getExternalStorageDirectory();
@@ -179,13 +191,19 @@ class _MainScreenState extends State<MainScreen> {
         }
 
         final filePath = '${downloadsDir.path}/$fileName';
-        final bytes = base64Decode(base64Data.split(',').last);
+        
+        // Base64 verisini decode et
+        final dataPart = base64Data.contains(',') 
+            ? base64Data.split(',').last 
+            : base64Data;
+        final bytes = base64.decode(dataPart);
+        
         await File(filePath).writeAsBytes(bytes);
 
         // JavaScript'e başarı mesajı gönder
         await _webViewController.evaluateJavascript(source: '''
           if (window.showToast) {
-            window.showToast('Dosya kaydedildi: $filePath');
+            window.showToast('Dosya kaydedildi: $fileName');
           }
         ''');
       }
@@ -199,18 +217,29 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  // Dosya paylaş
+  // Dosya paylaş - DÜZELTİLDİ: base64Decode eklendi
   Future<void> _shareFile(String fileName, String base64Data) async {
     try {
       final dir = await getTemporaryDirectory();
       final tempPath = '${dir.path}/$fileName';
-      final bytes = base64Decode(base64Data.split(',').last);
+      
+      // Base64 verisini decode et
+      final dataPart = base64Data.contains(',') 
+          ? base64Data.split(',').last 
+          : base64Data;
+      final bytes = base64.decode(dataPart);
+      
       final file = await File(tempPath).writeAsBytes(bytes);
 
       // Intent ile paylaş
       await _launchFileShareIntent(file.path);
     } catch (e) {
       print('Share file error: $e');
+      await _webViewController.evaluateJavascript(source: '''
+        if (window.showToast) {
+          window.showToast('Dosya paylaşılamadı: $e');
+        }
+      ''');
     }
   }
 
@@ -219,6 +248,12 @@ class _MainScreenState extends State<MainScreen> {
     final uri = Uri.parse('file://$filePath');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
+    } else {
+      await _webViewController.evaluateJavascript(source: '''
+        if (window.showToast) {
+          window.showToast('Dosya paylaşılamadı: Uygulama bulunamadı');
+        }
+      ''');
     }
   }
 
@@ -314,21 +349,32 @@ class _MainScreenState extends State<MainScreen> {
                     setItem: function(key, value) {
                       this._data[key] = value;
                       try {
-                        Android.saveToStorage('localStorage_' + key, value);
-                      } catch(e) {}
+                        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                          window.flutter_inappwebview.callHandler('saveToStorage', 'localStorage_' + key, value);
+                        }
+                      } catch(e) {
+                        console.log('Storage save error:', e);
+                      }
                     },
                     getItem: function(key) {
                       try {
-                        return Android.getFromStorage('localStorage_' + key) || this._data[key] || null;
+                        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                          return window.flutter_inappwebview.callHandler('getFromStorage', 'localStorage_' + key) || this._data[key] || null;
+                        }
                       } catch(e) {
+                        console.log('Storage get error:', e);
                         return this._data[key] || null;
                       }
                     },
                     removeItem: function(key) {
                       delete this._data[key];
                       try {
-                        Android.removeFromStorage('localStorage_' + key);
-                      } catch(e) {}
+                        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                          window.flutter_inappwebview.callHandler('removeFromStorage', 'localStorage_' + key);
+                        }
+                      } catch(e) {
+                        console.log('Storage remove error:', e);
+                      }
                     },
                     clear: function() {
                       this._data = {};
@@ -354,6 +400,13 @@ class _MainScreenState extends State<MainScreen> {
                     }
                   };
                 }
+                
+                // PDF açma fonksiyonu
+                window.openPDF = function(pdfId) {
+                  if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                    window.flutter_inappwebview.callHandler('openPDF', pdfId);
+                  }
+                };
               ''');
             },
             onProgressChanged: (controller, progress) {
@@ -369,16 +422,20 @@ class _MainScreenState extends State<MainScreen> {
               });
             },
             shouldOverrideUrlLoading: (controller, navigationAction) async {
-              final uri = navigationAction.request.url!;
+              final uri = navigationAction.request.url;
+              
+              if (uri == null) return NavigationActionPolicy.ALLOW;
               
               // PDF dosyalarını doğrudan aç
               if (uri.toString().endsWith('.pdf')) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PDFViewerScreen(pdfUrl: uri.toString()),
-                  ),
-                );
+                // PDF Viewer'e yönlendir
+                if (mounted) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => PDFViewerScreen(pdfUrl: uri.toString()),
+                    ),
+                  );
+                }
                 return NavigationActionPolicy.CANCEL;
               }
               
@@ -461,6 +518,7 @@ class _MainScreenState extends State<MainScreen> {
                     TextButton(
                       onPressed: () {
                         Navigator.pop(context);
+                        // DÜZELTİLDİ: SystemNavigator import edildi
                         SystemNavigator.pop();
                       },
                       child: const Text('Çıkış'),
