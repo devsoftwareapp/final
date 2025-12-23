@@ -1,27 +1,12 @@
-import 'dart:io';
-import 'dart:async';
-import 'dart:convert';
-import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:path/path.dart' as path;
-import 'package:flutter/services.dart';
-import 'package:open_file/open_file.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  if (Platform.isAndroid) {
-    AndroidInAppWebViewController.setWebContentsDebuggingEnabled(true);
-  }
-  
   runApp(const MyApp());
 }
 
@@ -32,1531 +17,287 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'PDF Reader',
-      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFE53935),
-          brightness: Brightness.light,
-        ),
+        primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFE53935),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
-      themeMode: ThemeMode.system,
-      home: const HomeScreen(),
+      home: const MainScreen(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
-// --- DATA MODELS ---
-
-class PdfFile {
-  final int id;
-  String name;
-  String size;
-  String date;
-  bool isFavorite;
-  final String? path;
-  final String? base64;
-  final int timestamp;
-  final PdfFileType fileType; // DEĞİŞTİRİLDİ: FileType -> PdfFileType
-
-  PdfFile({
-    required this.id,
-    required this.name,
-    required this.size,
-    required this.date,
-    this.isFavorite = false,
-    this.path,
-    this.base64,
-    required this.timestamp,
-    this.fileType = PdfFileType.device, // DEĞİŞTİRİLDİ
-  });
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'size': size,
-    'date': date,
-    'isFavorite': isFavorite,
-    'path': path,
-    'base64': base64,
-    'timestamp': timestamp,
-    'fileType': fileType.index, // DEĞİŞTİRİLDİ
-  };
-
-  static PdfFile fromJson(Map<String, dynamic> json) {
-    return PdfFile(
-      id: json['id'],
-      name: json['name'],
-      size: json['size'],
-      date: json['date'],
-      isFavorite: json['isFavorite'] ?? false,
-      path: json['path'],
-      base64: json['base64'] ?? '',
-      timestamp: json['timestamp'],
-      fileType: PdfFileType.values[json['fileType'] ?? 0], // DEĞİŞTİRİLDİ
-    );
-  }
-}
-
-// DEĞİŞTİRİLDİ: FileType -> PdfFileType (file_picker ile çakışmayı önlemek için)
-enum PdfFileType { device, imported, recent, favorite }
-
-class ToolItem {
-  final int id;
-  final String title;
-  final IconData icon;
-  final Color color;
-  final String page;
-
-  ToolItem({
-    required this.id,
-    required this.title,
-    required this.icon,
-    required this.color,
-    required this.page,
-  });
-}
-
-class CloudService {
-  final int id;
-  final String name;
-  final IconData icon;
-  final Color color;
-  final String serviceType;
-
-  CloudService({
-    required this.id,
-    required this.name,
-    required this.icon,
-    required this.color,
-    required this.serviceType,
-  });
-}
-
-// --- MAIN HOME SCREEN ---
-
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class MainScreen extends StatefulWidget {
+  const MainScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<MainScreen> createState() => _MainScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> 
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  late TabController _tabController;
-  int _currentScreenIndex = 0;
-  int _currentHomeTabIndex = 0;
-  
-  List<PdfFile> _recentFiles = [];
-  List<PdfFile> _deviceFiles = [];
-  List<PdfFile> _favoriteFiles = [];
-  List<PdfFile> _importedFiles = [];
-  
-  bool _isSearching = false;
-  final TextEditingController _searchController = TextEditingController();
-  List<PdfFile> _filteredFiles = [];
-  
-  bool _isSelectionMode = false;
-  Set<int> _selectedFiles = {};
-  
-  bool _hasPermission = false;
-  bool _permissionChecked = false;
-  
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  bool _showFabMenu = false;
-  bool _isConnected = true;
-  late StreamSubscription<ConnectivityResult> _connectivitySubscription;
-  
-  final ScrollController _scrollController = ScrollController();
-  bool _isAppBarVisible = true;
-  double _lastScrollOffset = 0;
-  
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    
-    _tabController = TabController(length: 3, vsync: this);
-    _tabController.addListener(_handleTabChange);
-    
-    _scrollController.addListener(_handleScroll);
-    
-    _initConnectivity();
-    _checkPermission();
-    _loadData();
-  }
-  
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _tabController.removeListener(_handleTabChange);
-    _tabController.dispose();
-    _searchController.dispose();
-    _scrollController.removeListener(_handleScroll);
-    _scrollController.dispose();
-    _connectivitySubscription.cancel();
-    super.dispose();
-  }
-  
-  void _handleScroll() {
-    if (_currentScreenIndex != 0) return;
-    
-    final currentOffset = _scrollController.offset;
-    final isScrollingDown = currentOffset > _lastScrollOffset;
-    final isScrollingUp = currentOffset < _lastScrollOffset;
-    
-    const threshold = 50.0;
-    
-    if (isScrollingDown && currentOffset > threshold) {
-      if (_isAppBarVisible) {
-        setState(() {
-          _isAppBarVisible = false;
-        });
-      }
-    } else if (isScrollingUp) {
-      if (!_isAppBarVisible) {
-        setState(() {
-          _isAppBarVisible = true;
-        });
-      }
-    }
-    
-    _lastScrollOffset = currentOffset;
-  }
-  
-  void _scrollToTop() {
-    _scrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
-  }
-  
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _checkPermission();
-      if (_currentScreenIndex == 0 && _currentHomeTabIndex == 1) {
-        _scanDeviceFiles();
-      }
-    }
-  }
-  
-  void _initConnectivity() {
-    _connectivitySubscription = Connectivity()
-        .onConnectivityChanged
-        .listen((ConnectivityResult result) {
-      setState(() {
-        _isConnected = result != ConnectivityResult.none;
-      });
-    });
-  }
-  
-  Future<void> _checkPermission() async {
-    if (Platform.isAndroid) {
-      try {
-        var status = await Permission.manageExternalStorage.status;
-        setState(() {
-          _hasPermission = status.isGranted;
-          _permissionChecked = true;
-        });
-        
-        if (_hasPermission && _deviceFiles.isEmpty) {
-          _scanDeviceFiles();
-        }
-      } catch (e) {
-        print('Permission error: $e');
-      }
-    } else {
-      setState(() {
-        _hasPermission = true;
-        _permissionChecked = true;
-      });
-    }
-  }
-  
-  Future<void> _requestPermission() async {
-    if (Platform.isAndroid) {
-      var status = await Permission.manageExternalStorage.request();
-      setState(() {
-        _hasPermission = status.isGranted;
-      });
-      
-      if (_hasPermission) {
-        _scanDeviceFiles();
-      } else {
-        _openAppSettings();
-      }
-    }
-  }
-  
-  Future<void> _openAppSettings() async {
-    await openAppSettings();
-  }
-  
-  Future<void> _loadData() async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    final recentJson = prefs.getStringList('recent_files') ?? [];
-    _recentFiles = recentJson.map((json) => PdfFile.fromJson(jsonDecode(json))).toList();
-    
-    final favoriteJson = prefs.getStringList('favorite_files') ?? [];
-    _favoriteFiles = favoriteJson.map((json) => PdfFile.fromJson(jsonDecode(json))).toList();
-    
-    final importedJson = prefs.getStringList('imported_files') ?? [];
-    _importedFiles = importedJson.map((json) => PdfFile.fromJson(jsonDecode(json))).toList();
-    
-    _updateFilteredFiles();
-  }
-  
-  Future<void> _saveData() async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    await prefs.setStringList(
-      'recent_files',
-      _recentFiles.map((file) => jsonEncode(file.toJson())).toList(),
-    );
-    
-    await prefs.setStringList(
-      'favorite_files',
-      _favoriteFiles.map((file) => jsonEncode(file.toJson())).toList(),
-    );
-    
-    await prefs.setStringList(
-      'imported_files',
-      _importedFiles.map((file) => jsonEncode(file.toJson())).toList(),
-    );
-  }
-  
-  Future<void> _scanDeviceFiles() async {
-    if (!_hasPermission) return;
-    
-    try {
-      final List<Map<String, String>> pdfs = await _getDevicePDFs();
-      
-      setState(() {
-        _deviceFiles = pdfs.map((pdf) {
-          return PdfFile(
-            id: DateTime.now().millisecondsSinceEpoch + (pdf.hashCode & 0x7FFFFFFF),
-            name: _getFileNameFromPath(pdf['path'] ?? ''),
-            size: pdf['size'] ?? '0 B',
-            date: pdf['date'] ?? '',
-            path: pdf['path'],
-            timestamp: DateTime.now().millisecondsSinceEpoch,
-            fileType: PdfFileType.device, // DEĞİŞTİRİLDİ
-          );
-        }).toList();
-        
-        _updateFilteredFiles();
-      });
-    } catch (e) {
-      print('Scan error: $e');
-    }
-  }
-  
-  Future<List<Map<String, String>>> _getDevicePDFs() async {
-    final List<Map<String, String>> pdfFiles = [];
-    
-    try {
-      final List<String> directories = [
-        '/storage/emulated/0/',
-        '/sdcard/',
-        '/storage/emulated/0/Download/',
-        '/storage/emulated/0/Documents/',
-      ];
-      
-      for (var dirPath in directories) {
-        try {
-          final dir = Directory(dirPath);
-          if (await dir.exists()) {
-            final files = await _scanDirectory(dir);
-            pdfFiles.addAll(files);
-          }
-        } catch (e) {
-          print('Error scanning $dirPath: $e');
-        }
-      }
-    } catch (e) {
-      print('Get device PDFs error: $e');
-    }
-    
-    return pdfFiles;
-  }
-  
-  Future<List<Map<String, String>>> _scanDirectory(Directory dir) async {
-    final List<Map<String, String>> pdfFiles = [];
-    
-    try {
-      final List<FileSystemEntity> entities = await dir.list().toList();
-      
-      for (var entity in entities) {
-        if (entity is File && entity.path.toLowerCase().endsWith('.pdf')) {
-          try {
-            final stat = await entity.stat();
-            pdfFiles.add({
-              'path': entity.path,
-              'size': _formatFileSize(stat.size),
-              'date': _formatFileDate(stat.modified),
-            });
-          } catch (e) {
-            pdfFiles.add({
-              'path': entity.path,
-              'size': '~1 MB',
-              'date': _getCurrentDate(),
-            });
-          }
-        }
-        
-        if (pdfFiles.length > 100) break;
-      }
-    } catch (e) {
-      print('Scan directory error: ${dir.path} - $e');
-    }
-    
-    return pdfFiles;
-  }
-  
-  String _formatFileSize(int bytes) {
-    if (bytes <= 0) return '0 B';
-    
-    const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    final i = (math.log(bytes) / math.log(1024)).floor();
-    
-    return '${(bytes / math.pow(1024, i)).toStringAsFixed(1)} ${suffixes[i]}';
-  }
-  
-  String _formatFileDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-    
-    if (difference.inDays == 0) {
-      return 'Bugün ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
-    } else if (difference.inDays == 1) {
-      return 'Dün ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays} gün önce';
-    } else {
-      return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
-    }
-  }
-  
-  String _getCurrentDate() {
-    final now = DateTime.now();
-    return '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}.${now.year}';
-  }
-  
-  String _getFileNameFromPath(String filePath) {
-    return path.basename(filePath);
-  }
-  
-  void _handleTabChange() {
-    if (_tabController.indexIsChanging) {
-      setState(() {
-        _currentHomeTabIndex = _tabController.index;
-        _updateFilteredFiles();
-        _scrollToTop();
-      });
-    }
-  }
-  
-  void _updateFilteredFiles() {
-    List<PdfFile> sourceList;
-    
-    switch (_currentHomeTabIndex) {
-      case 0:
-        sourceList = _recentFiles;
-        break;
-      case 1:
-        sourceList = [..._deviceFiles, ..._importedFiles];
-        break;
-      case 2:
-        sourceList = _favoriteFiles;
-        break;
-      default:
-        sourceList = [];
-    }
-    
-    if (_searchController.text.isEmpty) {
-      _filteredFiles = List.from(sourceList);
-    } else {
-      final query = _searchController.text.toLowerCase();
-      _filteredFiles = sourceList.where((file) {
-        return file.name.toLowerCase().contains(query);
-      }).toList();
-    }
-    
-    setState(() {});
-  }
-  
-  void _toggleSearch() {
-    setState(() {
-      _isSearching = !_isSearching;
-      if (!_isSearching) {
-        _searchController.clear();
-        _updateFilteredFiles();
-      }
-    });
-  }
-  
-  void _addToRecent(PdfFile file) {
-    setState(() {
-      _recentFiles.removeWhere((f) => f.id == file.id);
-      _recentFiles.insert(0, PdfFile(
-        id: file.id,
-        name: file.name,
-        size: file.size,
-        date: file.date,
-        isFavorite: file.isFavorite,
-        path: file.path,
-        base64: file.base64 ?? '',
-        timestamp: DateTime.now().millisecondsSinceEpoch,
-        fileType: PdfFileType.recent, // DEĞİŞTİRİLDİ
-      ));
-      
-      if (_recentFiles.length > 20) {
-        _recentFiles = _recentFiles.sublist(0, 20);
-      }
-      
-      _saveData();
-      if (_currentScreenIndex == 0 && _currentHomeTabIndex == 0) {
-        _updateFilteredFiles();
-      }
-    });
-  }
-  
-  void _toggleFavorite(PdfFile file) {
-    setState(() {
-      file.isFavorite = !file.isFavorite;
-      
-      if (file.isFavorite) {
-        if (!_favoriteFiles.any((f) => f.id == file.id)) {
-          _favoriteFiles.insert(0, PdfFile(
-            id: file.id,
-            name: file.name,
-            size: file.size,
-            date: file.date,
-            isFavorite: true,
-            path: file.path,
-            base64: file.base64 ?? '',
-            timestamp: DateTime.now().millisecondsSinceEpoch,
-            fileType: PdfFileType.favorite, // DEĞİŞTİRİLDİ
-          ));
-        }
-      } else {
-        _favoriteFiles.removeWhere((f) => f.id == file.id);
-      }
-      
-      _updateFileInList(_recentFiles, file);
-      _updateFileInList(_deviceFiles, file);
-      _updateFileInList(_importedFiles, file);
-      
-      _saveData();
-      if (_currentScreenIndex == 0) {
-        _updateFilteredFiles();
-      }
-    });
-  }
-  
-  void _updateFileInList(List<PdfFile> list, PdfFile updatedFile) {
-    final index = list.indexWhere((f) => f.id == updatedFile.id);
-    if (index != -1) {
-      list[index] = updatedFile;
-    }
-  }
-  
-  Future<void> _importPDF() async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        allowedExtensions: ['pdf'],
-        allowMultiple: false,
-      );
-      
-      if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
-        final tempDir = await getTemporaryDirectory();
-        final tempFile = File('${tempDir.path}/${file.name}');
-        
-        String? base64Data;
-        
-        if (file.path != null) {
-          final sourceFile = File(file.path!);
-          await sourceFile.copy(tempFile.path);
-          final bytes = await tempFile.readAsBytes();
-          base64Data = base64Encode(bytes);
-        } else if (file.bytes != null) {
-          await tempFile.writeAsBytes(file.bytes!);
-          final bytes = await tempFile.readAsBytes();
-          base64Data = base64Encode(bytes);
-        }
-        
-        if (base64Data != null) {
-          final newFile = PdfFile(
-            id: DateTime.now().millisecondsSinceEpoch,
-            name: file.name,
-            size: _formatFileSize(file.size),
-            date: _getCurrentDate(),
-            base64: base64Data,
-            timestamp: DateTime.now().millisecondsSinceEpoch,
-            fileType: PdfFileType.imported, // DEĞİŞTİRİLDİ
-          );
-          
-          setState(() {
-            _importedFiles.insert(0, newFile);
-            _addToRecent(newFile);
-            if (_currentScreenIndex != 0 || _currentHomeTabIndex != 1) {
-              _currentScreenIndex = 0;
-              _currentHomeTabIndex = 1;
-              _tabController.animateTo(1);
-            } else {
-              _updateFilteredFiles();
-            }
-          });
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${file.name} başarıyla yüklendi')),
-          );
-        }
-      }
-    } catch (e) {
-      print('Import error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Dosya yüklenirken hata oluştu')),
-      );
-    }
-  }
-  
-  // DEĞİŞTİRİLDİ: PDF açma fonksiyonu - DÜZELTİLMİŞ VERSİYON
-  Future<void> _openPDFViewer(PdfFile file) async {
-    _addToRecent(file);
-    
-    try {
-      // PDF verisini hazırla
-      String base64Data;
-      
-      if (file.base64 != null) {
-        base64Data = file.base64!;
-      } else if (file.path != null) {
-        final fileBytes = await File(file.path!).readAsBytes();
-        base64Data = base64Encode(fileBytes);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('PDF verisi bulunamadı')),
-        );
-        return;
-      }
-      
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PDFViewerScreen(
-            pdfFile: file,
-            base64Data: base64Data,
-            fileName: file.name,
-          ),
-        ),
-      );
-    } catch (e) {
-      print('PDF açma hatası: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PDF açılamadı: ${e.toString()}')),
-      );
-    }
-  }
-  
-  Widget _buildPDFCard(PdfFile file, int index) {
-    final theme = Theme.of(context);
-    final isSelected = _selectedFiles.contains(file.id);
-    
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      color: isSelected ? theme.primaryColor.withOpacity(0.1) : null,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isSelected ? theme.primaryColor : theme.dividerColor,
-          width: isSelected ? 2 : 1,
-        ),
-      ),
-      child: InkWell(
-        onTap: () {
-          if (_isSelectionMode) {
-            setState(() {
-              if (_selectedFiles.contains(file.id)) {
-                _selectedFiles.remove(file.id);
-              } else {
-                _selectedFiles.add(file.id);
-              }
-              if (_selectedFiles.isEmpty) {
-                _isSelectionMode = false;
-              }
-            });
-          } else {
-            _openPDFViewer(file);
-          }
-        },
-        onLongPress: () {
-          setState(() {
-            _isSelectionMode = true;
-            _selectedFiles.add(file.id);
-          });
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              if (_isSelectionMode)
-                Checkbox(
-                  value: _selectedFiles.contains(file.id),
-                  onChanged: (value) {
-                    setState(() {
-                      if (value == true) {
-                        _selectedFiles.add(file.id);
-                      } else {
-                        _selectedFiles.remove(file.id);
-                      }
-                    });
-                  },
-                ),
-              
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: theme.primaryColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.picture_as_pdf,
-                  color: theme.primaryColor,
-                  size: 32,
-                ),
-              ),
-              
-              const SizedBox(width: 12),
-              
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      file.name,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Text(
-                          file.size,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          width: 4,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: theme.textTheme.bodySmall?.color,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          file.date,
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              
-              IconButton(
-                onPressed: () => _toggleFavorite(file),
-                icon: Icon(
-                  file.isFavorite ? Icons.star : Icons.star_border,
-                  color: file.isFavorite ? Colors.amber : theme.iconTheme.color,
-                ),
-              ),
-              
-              if (!_isSelectionMode)
-                PopupMenuButton(
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      child: Text('Paylaş'),
-                    ),
-                    const PopupMenuItem(
-                      child: Text('Yeniden Adlandır'),
-                    ),
-                    PopupMenuItem(
-                      child: const Text('Sil', style: TextStyle(color: Colors.red)),
-                      onTap: () {
-                        _deleteFile(file);
-                      },
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-  
-  void _deleteFile(PdfFile file) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sil'),
-        content: Text('"${file.name}" dosyasını silmek istediğinize emin misiniz?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _recentFiles.removeWhere((f) => f.id == file.id);
-                _deviceFiles.removeWhere((f) => f.id == file.id);
-                _importedFiles.removeWhere((f) => f.id == file.id);
-                _favoriteFiles.removeWhere((f) => f.id == file.id);
-                _selectedFiles.remove(file.id);
-                _updateFilteredFiles();
-                _saveData();
-              });
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('"${file.name}" silindi')),
-              );
-            },
-            child: const Text('Sil', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildPermissionBanner() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme.of(context).dividerColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Icon(
-            Icons.folder_open,
-            size: 64,
-            color: Theme.of(context).primaryColor.withOpacity(0.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Cihazınızdaki PDF\'lere erişebilmem için izin gerekli',
-            style: Theme.of(context).textTheme.titleMedium,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Devam etmek için Tüm Dosya Erişimi izni verin.',
-            style: Theme.of(context).textTheme.bodyMedium,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _requestPermission,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).primaryColor,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text('Ayarlardan Erişim Ver'),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildEmptyState(String message) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.folder_open,
-            size: 64,
-            color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildToolsGrid() {
-    final tools = [
-      ToolItem(id: 1, title: 'PDF Birleştir', icon: Icons.merge, color: const Color(0xFFE53935), page: 'merge'),
-      ToolItem(id: 2, title: 'Sesli Okuma', icon: Icons.volume_up, color: const Color(0xFF4CAF50), page: 'tts'),
-      ToolItem(id: 3, title: 'OCR Metin Çıkar', icon: Icons.text_fields, color: const Color(0xFF2196F3), page: 'ocr'),
-      ToolItem(id: 4, title: 'PDF İmzala', icon: Icons.draw, color: const Color(0xFF9C27B0), page: 'sign'),
-      ToolItem(id: 5, title: 'PDF Sıkıştır', icon: Icons.compress, color: const Color(0xFFFF9800), page: 'compress'),
-      ToolItem(id: 6, title: 'Sayfa Düzenle', icon: Icons.reorder, color: const Color(0xFF795548), page: 'organize'),
-      ToolItem(id: 7, title: 'Resimden PDF', icon: Icons.image, color: const Color(0xFF00BCD4), page: 'image2pdf'),
-      ToolItem(id: 8, title: 'PDF\'den Resim', icon: Icons.picture_as_pdf, color: const Color(0xFF607D8B), page: 'pdf2image'),
-    ];
-    
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 1.2,
-      ),
-      itemCount: tools.length,
-      itemBuilder: (context, index) {
-        final tool = tools[index];
-        return Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: InkWell(
-            onTap: () {
-              _navigateToToolPage(tool.page);
-            },
-            borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: tool.color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(tool.icon, color: tool.color, size: 28),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    tool.title,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-  
-  void _navigateToToolPage(String page) {
-    switch (page) {
-      case 'merge':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const MergeScreen()),
-        );
-        break;
-      case 'tts':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const TTSScreen()),
-        );
-        break;
-      case 'ocr':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const OCRScreen()),
-        );
-        break;
-      case 'sign':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const SignScreen()),
-        );
-        break;
-      case 'compress':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const CompressScreen()),
-        );
-        break;
-      case 'organize':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const OrganizeScreen()),
-        );
-        break;
-      case 'image2pdf':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const ImageToPdfScreen()),
-        );
-        break;
-      case 'pdf2image':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const PdfToImageScreen()),
-        );
-        break;
-    }
-  }
-  
-  Widget _buildCloudServicesList() {
-    final cloudServices = [
-      CloudService(id: 1, name: 'Google Drive', icon: Icons.cloud, color: const Color(0xFF4285F4), serviceType: 'google_drive'),
-      CloudService(id: 2, name: 'OneDrive', icon: Icons.cloud, color: const Color(0xFF0078D4), serviceType: 'onedrive'),
-      CloudService(id: 3, name: 'Dropbox', icon: Icons.cloud, color: const Color(0xFF0061FF), serviceType: 'dropbox'),
-    ];
-    
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text(
-          'Bu aygıtta',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Bağlı bulut hesapları',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).textTheme.bodySmall?.color,
-          ),
-        ),
-        const SizedBox(height: 24),
-        
-        Column(
-          children: cloudServices.map((service) {
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ListTile(
-                leading: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: service.color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(service.icon, color: service.color),
-                ),
-                title: Text(service.name),
-                trailing: Icon(Icons.add, color: Theme.of(context).primaryColor),
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${service.name} bağlanıyor...')),
-                  );
-                },
-              ),
-            );
-          }).toList(),
-        ),
-        
-        const SizedBox(height: 24),
-        const Divider(),
-        const SizedBox(height: 16),
-        
-        Text(
-          'E-postalardaki PDF\'ler',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 16),
-        
-        Card(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: ListTile(
-            leading: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: const Color(0xFFEA4335).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.mail, color: Color(0xFFEA4335)),
-            ),
-            title: const Text('Gmail'),
-            trailing: Icon(Icons.add, color: Theme.of(context).primaryColor),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Gmail bağlanıyor...')),
-              );
-            },
-          ),
-        ),
-        
-        const SizedBox(height: 32),
-        Center(
-          child: OutlinedButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Daha fazla dosya göz atılıyor...')),
-              );
-            },
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Theme.of(context).primaryColor,
-              side: BorderSide(color: Theme.of(context).primaryColor),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-            ),
-            child: const Text('Daha fazla dosyaya göz atın'),
-          ),
-        ),
-      ],
-    );
-  }
-  
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
-    return Scaffold(
-      key: _scaffoldKey,
-      appBar: _currentScreenIndex == 0 ? 
-        (_isSearching ? _buildSearchAppBar(theme) : _buildMainAppBar(theme)) : 
-        _buildSimpleAppBar(theme),
-      body: _buildBody(theme),
-      bottomNavigationBar: _buildBottomNavBar(theme),
-      floatingActionButton: _currentScreenIndex == 0 ? _buildFAB(theme) : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-    );
-  }
-  
-  AppBar _buildMainAppBar(ThemeData theme) {
-    return AppBar(
-      title: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: theme.primaryColor,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: const Icon(Icons.picture_as_pdf, color: Colors.white, size: 20),
-          ),
-          const SizedBox(width: 12),
-          const Text('PDF Reader'),
-        ],
-      ),
-      actions: [
-        if (_isSelectionMode) ...[
-          IconButton(
-            onPressed: () {
-              setState(() {
-                _selectedFiles.clear();
-                _isSelectionMode = false;
-              });
-            },
-            icon: const Icon(Icons.close),
-          ),
-          Text('${_selectedFiles.length} seçildi'),
-          const SizedBox(width: 8),
-        ] else ...[
-          IconButton(
-            onPressed: _toggleSearch,
-            icon: const Icon(Icons.search),
-          ),
-          IconButton(
-            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-            icon: const Icon(Icons.menu),
-          ),
-        ],
-      ],
-      bottom: _isAppBarVisible
-          ? TabBar(
-              controller: _tabController,
-              tabs: const [
-                Tab(icon: Icon(Icons.history), text: 'Son'),
-                Tab(icon: Icon(Icons.phone_iphone), text: 'Cihazda'),
-                Tab(icon: Icon(Icons.star), text: 'Favoriler'),
-              ],
-            )
-          : null,
-    );
-  }
-  
-  AppBar _buildSimpleAppBar(ThemeData theme) {
-    String title;
-    switch (_currentScreenIndex) {
-      case 1:
-        title = 'Araçlar';
-        break;
-      case 2:
-        title = 'Dosyalar';
-        break;
-      default:
-        title = 'PDF Reader';
-    }
-    
-    return AppBar(
-      title: Text(title),
-      actions: [
-        IconButton(
-          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-          icon: const Icon(Icons.menu),
-        ),
-      ],
-    );
-  }
-  
-  AppBar _buildSearchAppBar(ThemeData theme) {
-    return AppBar(
-      leading: IconButton(
-        onPressed: _toggleSearch,
-        icon: const Icon(Icons.arrow_back),
-      ),
-      title: TextField(
-        controller: _searchController,
-        decoration: const InputDecoration(
-          hintText: 'PDF Ara...',
-          border: InputBorder.none,
-        ),
-        autofocus: true,
-        onChanged: (value) => _updateFilteredFiles(),
-      ),
-      actions: [
-        if (_searchController.text.isNotEmpty)
-          IconButton(
-            onPressed: () {
-              _searchController.clear();
-              _updateFilteredFiles();
-            },
-            icon: const Icon(Icons.clear),
-          ),
-      ],
-    );
-  }
-  
-  Widget _buildBody(ThemeData theme) {
-    switch (_currentScreenIndex) {
-      case 0:
-        return _buildHomeScreen();
-      case 1:
-        return _buildToolsGrid();
-      case 2:
-        return _buildCloudServicesList();
-      default:
-        return Container();
-    }
-  }
-  
-  Widget _buildHomeScreen() {
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification is ScrollUpdateNotification && 
-            notification.dragDetails != null) {
-          final delta = notification.dragDetails!.delta.dx;
-          if (delta.abs() > 10) {
-            if (delta < 0 && _currentHomeTabIndex < 2) {
-              _tabController.animateTo(_currentHomeTabIndex + 1);
-            } else if (delta > 0 && _currentHomeTabIndex > 0) {
-              _tabController.animateTo(_currentHomeTabIndex - 1);
-            }
-          }
-        }
-        return false;
-      },
-      child: Column(
-        children: [
-          if (!_isAppBarVisible && _currentScreenIndex == 0)
-            Container(
-              color: Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).colorScheme.surface,
-              child: TabBar(
-                controller: _tabController,
-                tabs: const [
-                  Tab(icon: Icon(Icons.history), text: 'Son'),
-                  Tab(icon: Icon(Icons.phone_iphone), text: 'Cihazda'),
-                  Tab(icon: Icon(Icons.star), text: 'Favoriler'),
-                ],
-              ),
-            ),
-          
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildRecentTab(),
-                _buildDeviceTab(),
-                _buildFavoritesTab(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildRecentTab() {
-    if (_filteredFiles.isEmpty) {
-      return _buildEmptyState('Henüz dosya yok');
-    }
-    
-    return ListView.builder(
-      controller: _scrollController,
-      itemCount: _filteredFiles.length,
-      itemBuilder: (context, index) {
-        return _buildPDFCard(_filteredFiles[index], index);
-      },
-    );
-  }
-  
-  Widget _buildDeviceTab() {
-    if (!_permissionChecked) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    
-    if (!_hasPermission) {
-      return _buildPermissionBanner();
-    }
-    
-    if (_filteredFiles.isEmpty) {
-      return _buildEmptyState('Cihazınızda PDF bulunamadı');
-    }
-    
-    return RefreshIndicator(
-      onRefresh: _scanDeviceFiles,
-      child: ListView.builder(
-        controller: _scrollController,
-        itemCount: _filteredFiles.length,
-        itemBuilder: (context, index) {
-          return _buildPDFCard(_filteredFiles[index], index);
-        },
-      ),
-    );
-  }
-  
-  Widget _buildFavoritesTab() {
-    if (_filteredFiles.isEmpty) {
-      return _buildEmptyState('Henüz favori dosyanız yok');
-    }
-    
-    return ListView.builder(
-      controller: _scrollController,
-      itemCount: _filteredFiles.length,
-      itemBuilder: (context, index) {
-        return _buildPDFCard(_filteredFiles[index], index);
-      },
-    );
-  }
-  
-  Widget _buildBottomNavBar(ThemeData theme) {
-    return BottomNavigationBar(
-      currentIndex: _currentScreenIndex,
-      onTap: (index) {
-        setState(() {
-          _currentScreenIndex = index;
-          _isSearching = false;
-          _isSelectionMode = false;
-          _selectedFiles.clear();
-          _isAppBarVisible = true;
-        });
-      },
-      items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home),
-          label: 'Ana Sayfa',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.tune),
-          label: 'Araçlar',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.folder),
-          label: 'Dosyalar',
-        ),
-      ],
-    );
-  }
-  
-  Widget _buildFAB(ThemeData theme) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_showFabMenu) ...[
-          _buildFABMenuItem(
-            icon: Icons.document_scanner,
-            label: 'Belge Tara',
-            onTap: () {
-              setState(() => _showFabMenu = false);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Kamera açılıyor...')),
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          _buildFABMenuItem(
-            icon: Icons.upload_file,
-            label: 'PDF Yükle',
-            onTap: () {
-              setState(() => _showFabMenu = false);
-              _importPDF();
-            },
-          ),
-          const SizedBox(height: 8),
-        ],
-        FloatingActionButton(
-          onPressed: () {
-            setState(() => _showFabMenu = !_showFabMenu);
-          },
-          backgroundColor: theme.primaryColor,
-          child: Icon(_showFabMenu ? Icons.close : Icons.add),
-        ),
-      ],
-    );
-  }
-  
-  Widget _buildFABMenuItem({required IconData icon, required String label, required VoidCallback onTap}) {
-    return Material(
-      elevation: 4,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 160,
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Icon(icon, size: 20),
-                const SizedBox(width: 12),
-                Text(label, style: Theme.of(context).textTheme.bodyMedium),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// --- PDF VIEWER SCREEN ---
-
-class PDFViewerScreen extends StatefulWidget {
-  final PdfFile pdfFile;
-  final String base64Data;
-  final String fileName;
-
-  const PDFViewerScreen({
-    super.key,
-    required this.pdfFile,
-    required this.base64Data,
-    required this.fileName,
-  });
-
-  @override
-  State<PDFViewerScreen> createState() => _PDFViewerScreenState();
-}
-
-class _PDFViewerScreenState extends State<PDFViewerScreen> {
+class _MainScreenState extends State<MainScreen> {
   late InAppWebViewController _webViewController;
   double _progress = 0;
   bool _isLoading = true;
-  bool _isSaving = false;
-  bool _pdfLoaded = false;
-  
+  bool _hasError = false;
+
+  // WebView için Android ayarları
+  final InAppWebViewGroupOptions options = InAppWebViewGroupOptions(
+    crossPlatform: InAppWebViewOptions(
+      useShouldOverrideUrlLoading: true,
+      mediaPlaybackRequiresUserGesture: false,
+      javaScriptEnabled: true,
+      javaScriptCanOpenWindowsAutomatically: true,
+      clearCache: false,
+      cacheEnabled: true,
+      transparentBackground: true,
+      supportZoom: false,
+      disableVerticalScroll: false,
+      disableHorizontalScroll: false,
+    ),
+    android: AndroidInAppWebViewOptions(
+      useHybridComposition: true,
+      thirdPartyCookiesEnabled: true,
+      allowFileAccess: true,
+      allowContentAccess: true,
+      allowFileAccessFromFileURLs: true,
+      allowUniversalAccessFromFileURLs: true,
+      databaseEnabled: true,
+      domStorageEnabled: true,
+    ),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPermissions();
+  }
+
+  Future<void> _checkPermissions() async {
+    // Android için gerekli izinleri kontrol et
+    final storageStatus = await Permission.storage.status;
+    if (!storageStatus.isGranted) {
+      await Permission.storage.request();
+    }
+    
+    final manageExternalStorageStatus = await Permission.manageExternalStorage.status;
+    if (!manageExternalStorageStatus.isGranted) {
+      await Permission.manageExternalStorage.request();
+    }
+  }
+
+  // JavaScript handler'ları
+  Future<void> _setupJavaScriptHandlers() async {
+    // JavaScript ile iletişim için handler ekle
+    await _webViewController.addJavaScriptHandler(
+      handlerName: 'openFilePicker',
+      callback: (args) async {
+        await _openFilePicker();
+        return null;
+      },
+    );
+
+    await _webViewController.addJavaScriptHandler(
+      handlerName: 'openExternalUrl',
+      callback: (args) async {
+        if (args.isNotEmpty) {
+          final url = args[0];
+          if (await canLaunchUrl(Uri.parse(url))) {
+            await launchUrl(Uri.parse(url));
+          }
+        }
+        return null;
+      },
+    );
+
+    await _webViewController.addJavaScriptHandler(
+      handlerName: 'getStoragePath',
+      callback: (args) async {
+        final dir = await getApplicationDocumentsDirectory();
+        return dir.path;
+      },
+    );
+
+    await _webViewController.addJavaScriptHandler(
+      handlerName: 'saveFile',
+      callback: (args) async {
+        if (args.length >= 2) {
+          final fileName = args[0];
+          final base64Data = args[1];
+          await _saveFile(fileName, base64Data);
+        }
+        return null;
+      },
+    );
+
+    await _webViewController.addJavaScriptHandler(
+      handlerName: 'shareFile',
+      callback: (args) async {
+        if (args.length >= 2) {
+          final fileName = args[0];
+          final base64Data = args[1];
+          await _shareFile(fileName, base64Data);
+        }
+        return null;
+      },
+    );
+  }
+
+  // Dosya seçici aç
+  Future<void> _openFilePicker() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final bytes = await File(file.path!).readAsBytes();
+        final base64 = UriData.fromBytes(bytes).toString();
+        
+        // JavaScript'e dosya verisini gönder
+        await _webViewController.evaluateJavascript(source: '''
+          if (window.handleFileSelect) {
+            window.handleFileSelect('${file.name}', ${file.size}, '${base64}');
+          }
+        ''');
+      }
+    } catch (e) {
+      print('File picker error: $e');
+    }
+  }
+
+  // Dosya kaydet
+  Future<void> _saveFile(String fileName, String base64Data) async {
+    try {
+      final dir = await getExternalStorageDirectory();
+      if (dir != null) {
+        final downloadsDir = Directory('${dir.path}/Download');
+        if (!downloadsDir.existsSync()) {
+          downloadsDir.createSync(recursive: true);
+        }
+
+        final filePath = '${downloadsDir.path}/$fileName';
+        final bytes = base64Decode(base64Data.split(',').last);
+        await File(filePath).writeAsBytes(bytes);
+
+        // JavaScript'e başarı mesajı gönder
+        await _webViewController.evaluateJavascript(source: '''
+          if (window.showToast) {
+            window.showToast('Dosya kaydedildi: $filePath');
+          }
+        ''');
+      }
+    } catch (e) {
+      print('Save file error: $e');
+      await _webViewController.evaluateJavascript(source: '''
+        if (window.showToast) {
+          window.showToast('Dosya kaydedilemedi: $e');
+        }
+      ''');
+    }
+  }
+
+  // Dosya paylaş
+  Future<void> _shareFile(String fileName, String base64Data) async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final tempPath = '${dir.path}/$fileName';
+      final bytes = base64Decode(base64Data.split(',').last);
+      final file = await File(tempPath).writeAsBytes(bytes);
+
+      // Intent ile paylaş
+      await _launchFileShareIntent(file.path);
+    } catch (e) {
+      print('Share file error: $e');
+    }
+  }
+
+  // Android Intent ile dosya paylaş
+  Future<void> _launchFileShareIntent(String filePath) async {
+    final uri = Uri.parse('file://$filePath');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  // Hata sayfası
+  Widget _buildErrorPage() {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Colors.red,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Sayfa yüklenemedi',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'İnternet bağlantınızı kontrol edin',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _hasError = false;
+                  _isLoading = true;
+                });
+                _loadWebView();
+              },
+              child: const Text('Tekrar Dene'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // WebView yükle
+  Future<void> _loadWebView() async {
+    try {
+      final assetPath = 'assets/web/index.html';
+      await _webViewController.loadFile(assetFilePath: assetPath);
+    } catch (e) {
+      print('Load webview error: $e');
+      setState(() {
+        _hasError = true;
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // viewer.html dosyasını aç
-    final viewerUrl = 'file:///android_asset/flutter_assets/assets/web/viewer.html';
-    
+    if (_hasError) {
+      return _buildErrorPage();
+    }
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.fileName),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _isSaving ? null : _savePDF,
-          ),
-          IconButton(
-            icon: const Icon(Icons.share),
-            onPressed: _isSaving ? null : _sharePDF,
-          ),
-        ],
-      ),
       body: Stack(
         children: [
+          // WebView
           InAppWebView(
-            initialUrlRequest: URLRequest(url: WebUri(viewerUrl)),
-            initialOptions: InAppWebViewGroupOptions(
-              crossPlatform: InAppWebViewOptions(
-                javaScriptEnabled: true,
-                useShouldOverrideUrlLoading: true,
-                allowFileAccessFromFileURLs: true,
-                allowUniversalAccessFromFileURLs: true,
-                transparentBackground: true,
-                mediaPlaybackRequiresUserGesture: false,
-              ),
-              android: AndroidInAppWebViewOptions(
-                useHybridComposition: true,
-                allowContentAccess: true,
-                allowFileAccess: true,
-                builtInZoomControls: true,
-                displayZoomControls: false,
-              ),
-              ios: IOSInAppWebViewOptions(
-                allowsInlineMediaPlayback: true,
-              ),
+            initialOptions: options,
+            initialUrlRequest: URLRequest(
+              url: WebUri('about:blank'),
             ),
-            onWebViewCreated: (controller) {
+            onWebViewCreated: (controller) async {
               _webViewController = controller;
+              await _setupJavaScriptHandlers();
+              await _loadWebView();
             },
             onLoadStart: (controller, url) {
               setState(() {
                 _isLoading = true;
-                _pdfLoaded = false;
               });
             },
             onLoadStop: (controller, url) async {
@@ -1564,427 +305,206 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                 _isLoading = false;
               });
               
-              // WebView hazır olduğunda PDF'i yükle
-              if (!_pdfLoaded) {
-                await _loadPDFData();
-              }
+              // LocalStorage desteği için JavaScript enjekte et
+              await controller.evaluateJavascript(source: '''
+                // LocalStorage desteği
+                if (typeof window.localStorage === 'undefined') {
+                  window.localStorage = {
+                    _data: {},
+                    setItem: function(key, value) {
+                      this._data[key] = value;
+                      try {
+                        Android.saveToStorage('localStorage_' + key, value);
+                      } catch(e) {}
+                    },
+                    getItem: function(key) {
+                      try {
+                        return Android.getFromStorage('localStorage_' + key) || this._data[key] || null;
+                      } catch(e) {
+                        return this._data[key] || null;
+                      }
+                    },
+                    removeItem: function(key) {
+                      delete this._data[key];
+                      try {
+                        Android.removeFromStorage('localStorage_' + key);
+                      } catch(e) {}
+                    },
+                    clear: function() {
+                      this._data = {};
+                    }
+                  };
+                }
+                
+                // SessionStorage desteği
+                if (typeof window.sessionStorage === 'undefined') {
+                  window.sessionStorage = {
+                    _data: {},
+                    setItem: function(key, value) {
+                      this._data[key] = value;
+                    },
+                    getItem: function(key) {
+                      return this._data[key] || null;
+                    },
+                    removeItem: function(key) {
+                      delete this._data[key];
+                    },
+                    clear: function() {
+                      this._data = {};
+                    }
+                  };
+                }
+              ''');
             },
             onProgressChanged: (controller, progress) {
               setState(() {
                 _progress = progress / 100;
               });
             },
-            onConsoleMessage: (controller, consoleMessage) {
-              print('WebView Console: ${consoleMessage.message}');
-              
-              // PDF yüklendiğini kontrol et
-              if (consoleMessage.message.contains('PDF yüklendi') || 
-                  consoleMessage.message.contains('PDF document loaded')) {
-                setState(() {
-                  _pdfLoaded = true;
-                });
-              }
-            },
             onLoadError: (controller, url, code, message) {
-              print('WebView Load Error: $message');
+              print('Load error: $code - $message');
               setState(() {
+                _hasError = true;
                 _isLoading = false;
               });
             },
+            shouldOverrideUrlLoading: (controller, navigationAction) async {
+              final uri = navigationAction.request.url!;
+              
+              // PDF dosyalarını doğrudan aç
+              if (uri.toString().endsWith('.pdf')) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PDFViewerScreen(pdfUrl: uri.toString()),
+                  ),
+                );
+                return NavigationActionPolicy.CANCEL;
+              }
+              
+              // Harici URL'leri varsayılan tarayıcıda aç
+              if (uri.toString().startsWith('http')) {
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri);
+                  return NavigationActionPolicy.CANCEL;
+                }
+              }
+              
+              return NavigationActionPolicy.ALLOW;
+            },
+            onConsoleMessage: (controller, consoleMessage) {
+              print('Console: ${consoleMessage.message}');
+            },
           ),
-          
+
+          // Loading Progress Bar
           if (_isLoading)
-            LinearProgressIndicator(
-              value: _progress,
-              backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                Theme.of(context).primaryColor,
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: LinearProgressIndicator(
+                value: _progress,
+                backgroundColor: Colors.transparent,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Theme.of(context).primaryColor,
+                ),
               ),
             ),
-          
-          if (_isSaving)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black54,
-                child: const Center(
-                  child: CircularProgressIndicator(),
+
+          // Loading Overlay
+          if (_isLoading && _progress < 1.0)
+            Container(
+              color: Colors.black.withOpacity(0.7),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Theme.of(context).primaryColor,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Yükleniyor...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
         ],
       ),
+      
+      // Back Button için geri tuşu kontrolü
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          if (await _webViewController.canGoBack()) {
+            await _webViewController.goBack();
+          } else {
+            // Eğer geri gidilemiyorsa uygulamadan çık
+            if (mounted) {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Çıkış'),
+                  content: const Text('Uygulamadan çıkmak istiyor musunuz?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('İptal'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        SystemNavigator.pop();
+                      },
+                      child: const Text('Çıkış'),
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
+        },
+        child: const Icon(Icons.arrow_back),
+        backgroundColor: Theme.of(context).primaryColor,
+      ),
     );
   }
+}
 
-  Future<void> _loadPDFData() async {
-    try {
-      // index.html'deki mantığı uygula: base64 verisini data URL'ye dönüştür
-      final dataUrl = 'data:application/pdf;base64,${widget.base64Data}';
-      
-      // JavaScript kodunu çalıştır
-      await _webViewController.evaluateJavascript(source: '''
-        (function() {
-          try {
-            console.log('PDF yükleniyor: ${widget.fileName}');
-            
-            // PDF.js viewer'ının PDF'i açmasını sağla
-            if (window.PDFViewerApplication) {
-              console.log('PDFViewerApplication bulundu, PDF açılıyor...');
-              
-              // PDF'i aç
-              window.PDFViewerApplication.open("$dataUrl").then(function() {
-                console.log('PDF başarıyla yüklendi');
-                document.title = '${widget.fileName}';
-                
-                // Flutter'a bildir
-                if (window.flutter_inappwebview) {
-                  window.flutter_inappwebview.callHandler('pdfLoaded', {
-                    fileName: '${widget.fileName}',
-                    pages: window.PDFViewerApplication.pdfViewer.pagesCount
-                  });
-                }
-              }).catch(function(error) {
-                console.error('PDF açma hatası:', error);
-                
-                // Alternatif yöntem: PDF.js API'sini doğrudan kullan
-                setTimeout(function() {
-                  try {
-                    // PDF.js kütüphanesini doğrudan kullan
-                    if (window.pdfjsLib) {
-                      console.log('pdfjsLib kullanılıyor...');
-                      pdfjsLib.getDocument("$dataUrl").promise.then(function(pdf) {
-                        console.log('PDF yüklendi: ' + pdf.numPages + ' sayfa');
-                        
-                        // Viewer'a PDF'i yükle
-                        if (window.PDFViewerApplication) {
-                          window.PDFViewerApplication.pdfDocument = pdf;
-                          window.PDFViewerApplication.pdfViewer.setDocument(pdf);
-                          window.PDFViewerApplication.page = 1;
-                        }
-                      });
-                    }
-                  } catch (e) {
-                    console.error('Alternatif yöntem hatası:', e);
-                  }
-                }, 1000);
-              });
-            } else {
-              console.error('PDFViewerApplication bulunamadı, bekleniyor...');
-              
-              // PDFViewerApplication yüklenene kadar bekle
-              var checkInterval = setInterval(function() {
-                if (window.PDFViewerApplication) {
-                  clearInterval(checkInterval);
-                  console.log('PDFViewerApplication yüklendi, tekrar deneniyor...');
-                  
-                  // Tekrar dene
-                  window.PDFViewerApplication.open("$dataUrl").then(function() {
-                    console.log('PDF başarıyla yüklendi (ikinci deneme)');
-                    document.title = '${widget.fileName}';
-                  });
-                }
-              }, 500);
-              
-              // 10 saniye sonra timeout
-              setTimeout(function() {
-                clearInterval(checkInterval);
-                console.error('PDFViewerApplication yüklenemedi');
-              }, 10000);
-            }
-          } catch (error) {
-            console.error('PDF yükleme hatası:', error);
-          }
-        })();
-      ''');
-      
-      // 2 saniye sonra kontrol et
-      await Future.delayed(const Duration(seconds: 2));
-      
-      // PDF'in yüklenip yüklenmediğini kontrol et
-      await _checkPDFLoaded();
-      
-    } catch (e) {
-      print('PDF yükleme hatası: $e');
-      
-      // Alternatif yöntem: POST message ile veri gönder
-      await _loadPDFAlternative();
-    }
-  }
-
-  Future<void> _loadPDFAlternative() async {
-    try {
-      // index.html'deki tam mantığı uygula
-      final dataUrl = 'data:application/pdf;base64,${widget.base64Data}';
-      
-      await _webViewController.evaluateJavascript(source: '''
-        // index.html'deki mantık
-        function loadPDFFromBase64(base64Data, fileName) {
-          try {
-            // Base64'ü binary'ye çevir
-            const binaryString = atob(base64Data);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            
-            // Blob oluştur
-            const blob = new Blob([bytes], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            
-            // PDF'i aç
-            if (window.PDFViewerApplication) {
-              window.PDFViewerApplication.open(url).then(function() {
-                console.log('PDF başarıyla yüklendi (Blob yöntemi)');
-                document.title = fileName;
-              });
-            } else {
-              // Viewer hazır değilse, event gönder
-              const event = new CustomEvent('pdfopen', {
-                detail: { url: url, filename: fileName }
-              });
-              document.dispatchEvent(event);
-            }
-          } catch (error) {
-            console.error('PDF yükleme hatası (Blob):', error);
-          }
-        }
-        
-        // PDF'i yükle
-        loadPDFFromBase64('${widget.base64Data}', '${widget.fileName}');
-      ''');
-    } catch (e) {
-      print('Alternatif yükleme hatası: $e');
-    }
-  }
-
-  Future<void> _checkPDFLoaded() async {
-    try {
-      final result = await _webViewController.evaluateJavascript(source: '''
-        (function() {
-          if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) {
-            return {
-              loaded: true,
-              pages: window.PDFViewerApplication.pdfViewer.pagesCount,
-              currentPage: window.PDFViewerApplication.page
-            };
-          }
-          return { loaded: false };
-        })();
-      ''');
-      
-      print('PDF yükleme durumu: $result');
-      
-      if (result != null && result['loaded'] == true) {
-        setState(() {
-          _pdfLoaded = true;
-        });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PDF yüklendi: ${widget.fileName}')),
-        );
-      } else {
-        // Tekrar dene
-        await Future.delayed(const Duration(seconds: 1));
-        await _loadPDFData();
-      }
-    } catch (e) {
-      print('PDF kontrol hatası: $e');
-    }
-  }
-
-  Future<void> _savePDF() async {
-    setState(() {
-      _isSaving = true;
-    });
-    
-    try {
-      await _savePDFToDevice(widget.base64Data, widget.fileName);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Kaydetme hatası: ${e.toString()}')),
-      );
-    } finally {
-      setState(() {
-        _isSaving = false;
-      });
-    }
-  }
-
-  Future<void> _sharePDF() async {
-    try {
-      await _sharePDFFile(widget.base64Data, widget.fileName);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Paylaşma hatası: ${e.toString()}')),
-      );
-    }
-  }
-
-  Future<void> _savePDFToDevice(String base64Data, String fileName) async {
-    try {
-      // Base64'i decode et
-      final bytes = base64Decode(base64Data);
-      
-      // Downloads/PDF_Reader dizinini oluştur
-      final downloadsDir = await getExternalStorageDirectory();
-      if (downloadsDir == null) {
-        throw Exception('Downloads dizini bulunamadı');
-      }
-      
-      final pdfReaderDir = Directory('${downloadsDir.path}/PDF_Reader');
-      if (!await pdfReaderDir.exists()) {
-        await pdfReaderDir.create(recursive: true);
-      }
-      
-      // Dosyayı kaydet
-      final file = File('${pdfReaderDir.path}/$fileName');
-      await file.writeAsBytes(bytes);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('PDF kaydedildi: $fileName'),
-          action: SnackBarAction(
-            label: 'Aç',
-            onPressed: () => _openSavedFile(file.path),
+// PDF Görüntüleyici Ekranı
+class PDFViewerScreen extends StatelessWidget {
+  final String pdfUrl;
+  
+  const PDFViewerScreen({super.key, required this.pdfUrl});
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('PDF Görüntüleyici'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: InAppWebView(
+        initialOptions: InAppWebViewGroupOptions(
+          crossPlatform: InAppWebViewOptions(
+            javaScriptEnabled: true,
+          ),
+          android: AndroidInAppWebViewOptions(
+            useHybridComposition: true,
           ),
         ),
-      );
-      
-      print('PDF saved to: ${file.path}');
-      
-    } catch (e) {
-      print('Save error: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _sharePDFFile(String base64Data, String fileName) async {
-    try {
-      // Base64'i decode et
-      final bytes = base64Decode(base64Data);
-      
-      // Geçici dosya oluştur
-      final tempDir = await getTemporaryDirectory();
-      final tempFile = File('${tempDir.path}/$fileName');
-      await tempFile.writeAsBytes(bytes);
-      
-      // Dosyayı paylaş
-      final result = await OpenFile.open(tempFile.path);
-      print('Open file result: ${result.message}');
-      
-    } catch (e) {
-      print('Share error: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _openSavedFile(String filePath) async {
-    try {
-      final result = await OpenFile.open(filePath);
-      print('Open file result: ${result.message}');
-    } catch (e) {
-      print('Open file error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Dosya açma hatası: ${e.toString()}')),
-      );
-    }
-  }
-}
-
-// --- TOOL SCREENS (PLACEHOLDER) ---
-
-class MergeScreen extends StatelessWidget {
-  const MergeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('PDF Birleştir')),
-      body: const Center(child: Text('PDF Birleştirme Ekranı')),
-    );
-  }
-}
-
-class TTSScreen extends StatelessWidget {
-  const TTSScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Sesli Okuma')),
-      body: const Center(child: Text('Sesli Okuma Ekranı')),
-    );
-  }
-}
-
-class OCRScreen extends StatelessWidget {
-  const OCRScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('OCR Metin Çıkar')),
-      body: const Center(child: Text('OCR Ekranı')),
-    );
-  }
-}
-
-class SignScreen extends StatelessWidget {
-  const SignScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('PDF İmzala')),
-      body: const Center(child: Text('PDF İmzalama Ekranı')),
-    );
-  }
-}
-
-class CompressScreen extends StatelessWidget {
-  const CompressScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('PDF Sıkıştır')),
-      body: const Center(child: Text('PDF Sıkıştırma Ekranı')),
-    );
-  }
-}
-
-class OrganizeScreen extends StatelessWidget {
-  const OrganizeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Sayfa Düzenle')),
-      body: const Center(child: Text('Sayfa Düzenleme Ekranı')),
-    );
-  }
-}
-
-class ImageToPdfScreen extends StatelessWidget {
-  const ImageToPdfScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Resimden PDF')),
-      body: const Center(child: Text('Resimden PDF Ekranı')),
-    );
-  }
-}
-
-class PdfToImageScreen extends StatelessWidget {
-  const PdfToImageScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('PDF\'den Resim')),
-      body: const Center(child: Text('PDF\'den Resim Ekranı')),
+        initialUrlRequest: URLRequest(url: WebUri(pdfUrl)),
+      ),
     );
   }
 }
