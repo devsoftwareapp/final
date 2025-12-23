@@ -27,7 +27,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   bool _hasError = false;
   String _currentPdfName = 'PDF';
 
-  // WebView için ayarlar
   final InAppWebViewGroupOptions options = InAppWebViewGroupOptions(
     crossPlatform: InAppWebViewOptions(
       useShouldOverrideUrlLoading: true,
@@ -56,7 +55,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
     super.initState();
     _currentPdfName = widget.pdfName ?? 'PDF';
     
-    // Status bar ve navigation bar ayarları
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.white,
       statusBarIconBrightness: Brightness.dark,
@@ -67,7 +65,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
 
   @override
   void dispose() {
-    // Sistem UI'yı varsayılana sıfırla
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
@@ -77,9 +74,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
     super.dispose();
   }
 
-  // JavaScript handler'ları kur
   Future<void> _setupJavaScriptHandlers() async {
-    // Geri butonu için handler
     _webViewController.addJavaScriptHandler(
       handlerName: 'goBack',
       callback: (args) async {
@@ -90,23 +85,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       },
     );
 
-    // PDF verisi için handler
-    _webViewController.addJavaScriptHandler(
-      handlerName: 'getPdfData',
-      callback: (args) async {
-        return widget.pdfBase64;
-      },
-    );
-
-    // PDF ismi için handler
-    _webViewController.addJavaScriptHandler(
-      handlerName: 'getPdfName',
-      callback: (args) async {
-        return _currentPdfName;
-      },
-    );
-
-    // Dosya kaydetme için handler
     _webViewController.addJavaScriptHandler(
       handlerName: 'saveFile',
       callback: (args) async {
@@ -119,7 +97,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       },
     );
 
-    // Dosya paylaşma için handler
     _webViewController.addJavaScriptHandler(
       handlerName: 'shareFile',
       callback: (args) async {
@@ -132,7 +109,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       },
     );
 
-    // Toast mesajı için handler
     _webViewController.addJavaScriptHandler(
       handlerName: 'showToast',
       callback: (args) async {
@@ -145,7 +121,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
     );
   }
 
-  // Dosya kaydet
   Future<void> _saveFile(String fileName, String base64Data) async {
     try {
       final dir = await getExternalStorageDirectory();
@@ -164,28 +139,14 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
         
         await File(filePath).writeAsBytes(bytes);
 
-        // JavaScript'e başarı mesajı gönder
-        await _webViewController.evaluateJavascript(source: '''
-          if (window.showToast) {
-            window.showToast('Dosya kaydedildi: $fileName');
-          }
-        ''');
-        
-        // Flutter toast göster
         _showFlutterToast('Dosya kaydedildi: $fileName');
       }
     } catch (e) {
       print('Save file error: $e');
-      await _webViewController.evaluateJavascript(source: '''
-        if (window.showToast) {
-          window.showToast('Dosya kaydedilemedi: $e');
-        }
-      ''');
       _showFlutterToast('Dosya kaydedilemedi');
     }
   }
 
-  // Dosya paylaş
   Future<void> _shareFile(String fileName, String base64Data) async {
     try {
       final dir = await getTemporaryDirectory();
@@ -207,7 +168,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
     }
   }
 
-  // Android Intent ile dosya paylaş
   Future<void> _launchFileShareIntent(String filePath) async {
     final uri = Uri.parse('file://$filePath');
     if (await canLaunchUrl(uri)) {
@@ -217,7 +177,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
     }
   }
 
-  // Flutter toast mesajı göster
   void _showFlutterToast(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -228,7 +187,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
     );
   }
 
-  // Hata sayfası
   Widget _buildErrorPage() {
     return Scaffold(
       backgroundColor: Colors.white,
@@ -266,7 +224,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
     );
   }
 
-  // WebView yükle
   Future<void> _loadWebView() async {
     try {
       final assetPath = 'assets/web/pdfviewer.html';
@@ -282,9 +239,70 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
     }
   }
 
+  // PDF verisini doğrudan HTML'e enjekte et
+  Future<void> _injectPDFData() async {
+    if (widget.pdfBase64 == null) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
+    // PDF verisini doğrudan JavaScript'e enjekte et
+    await _webViewController.evaluateJavascript(source: '''
+      // PDF verisini global değişkene ata
+      window.pdfViewerData = {
+        pdfData: '${widget.pdfBase64!.replaceAll("'", "\\'")}',
+        pdfName: '${_currentPdfName.replaceAll("'", "\\'")}'
+      };
+      
+      console.log('PDF Data injected, name:', window.pdfViewerData.pdfName);
+      
+      // initializePDFViewer fonksiyonunu çağır
+      if (typeof initializePDFViewer === 'function') {
+        initializePDFViewer();
+      } else {
+        console.error('initializePDFViewer function not found');
+      }
+      
+      // Safe area CSS ayarları
+      const style = document.createElement('style');
+      style.textContent = \`
+        :root {
+          --safe-area-top: ${MediaQuery.of(context).padding.top}px;
+          --safe-area-bottom: ${MediaQuery.of(context).padding.bottom}px;
+        }
+        body {
+          padding-top: env(safe-area-inset-top, var(--safe-area-top));
+          padding-bottom: env(safe-area-inset-bottom, var(--safe-area-bottom));
+          background-color: #000;
+        }
+        #topbar {
+          padding-top: env(safe-area-inset-top, var(--safe-area-top));
+          height: calc(56px + env(safe-area-inset-top, var(--safe-area-top)));
+        }
+        iframe {
+          height: calc(100vh - 56px - env(safe-area-inset-top, var(--safe-area-top)) - env(safe-area-inset-bottom, var(--safe-area-bottom)));
+        }
+        @media (max-width: 480px) {
+          #topbar {
+            height: calc(48px + env(safe-area-inset-top, var(--safe-area-top)));
+          }
+          iframe {
+            height: calc(100vh - 48px - env(safe-area-inset-top, var(--safe-area-top)) - env(safe-area-inset-bottom, var(--safe-area-bottom)));
+          }
+        }
+      \`;
+      document.head.appendChild(style);
+    ''');
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_hasError) {
+    if (_hasError || widget.pdfBase64 == null) {
       return _buildErrorPage();
     }
 
@@ -303,7 +321,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
           bottom: false,
           child: Stack(
             children: [
-              // Status bar ve navigation bar padding'i
               Padding(
                 padding: EdgeInsets.only(
                   top: MediaQuery.of(context).padding.top,
@@ -327,75 +344,13 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                     }
                   },
                   onLoadStop: (controller, url) async {
+                    // WebView yüklendiğinde PDF verisini enjekte et
+                    await _injectPDFData();
+                    
                     if (mounted) {
                       setState(() {
                         _isLoading = false;
                       });
-                    }
-                    
-                    // PDF verisini JavaScript'e gönder
-                    if (widget.pdfBase64 != null) {
-                      await controller.evaluateJavascript(source: '''
-                        // PDF verisini localStorage'a kaydet
-                        if (window.localStorage) {
-                          localStorage.setItem('pdfData', '${widget.pdfBase64?.replaceAll("'", "\\'")}');
-                          localStorage.setItem('pdfName', '${_currentPdfName.replaceAll("'", "\\'")}');
-                        }
-                        
-                        // Status bar ve navigation bar için CSS ayarları
-                        const style = document.createElement('style');
-                        style.textContent = \`
-                          :root {
-                            --safe-area-top: ${MediaQuery.of(context).padding.top}px;
-                            --safe-area-bottom: ${MediaQuery.of(context).padding.bottom}px;
-                          }
-                          body {
-                            padding-top: env(safe-area-inset-top, var(--safe-area-top));
-                            padding-bottom: env(safe-area-inset-bottom, var(--safe-area-bottom));
-                            background-color: #000;
-                          }
-                          #topbar {
-                            padding-top: env(safe-area-inset-top, var(--safe-area-top));
-                            height: calc(56px + env(safe-area-inset-top, var(--safe-area-top)));
-                          }
-                          iframe {
-                            height: calc(100vh - 56px - env(safe-area-inset-top, var(--safe-area-top)) - env(safe-area-inset-bottom, var(--safe-area-bottom)));
-                          }
-                          @media (max-width: 480px) {
-                            #topbar {
-                              height: calc(48px + env(safe-area-inset-top, var(--safe-area-top)));
-                            }
-                            iframe {
-                              height: calc(100vh - 48px - env(safe-area-inset-top, var(--safe-area-top)) - env(safe-area-inset-bottom, var(--safe-area-bottom)));
-                            }
-                          }
-                        \`;
-                        document.head.appendChild(style);
-                        
-                        // Flutter ile iletişim için global fonksiyonlar
-                        window.flutterHandler = {
-                          goBack: function() {
-                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                              window.flutter_inappwebview.callHandler('goBack');
-                            }
-                          },
-                          saveFile: function(fileName, base64Data) {
-                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                              window.flutter_inappwebview.callHandler('saveFile', fileName, base64Data);
-                            }
-                          },
-                          shareFile: function(fileName, base64Data) {
-                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                              window.flutter_inappwebview.callHandler('shareFile', fileName, base64Data);
-                            }
-                          },
-                          showToast: function(message) {
-                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                              window.flutter_inappwebview.callHandler('showToast', message);
-                            }
-                          }
-                        };
-                      ''');
                     }
                   },
                   onProgressChanged: (controller, progress) {
@@ -419,7 +374,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                     
                     if (uri == null) return NavigationActionPolicy.ALLOW;
                     
-                    // Harici URL'leri varsayılan tarayıcıda aç
                     if (uri.toString().startsWith('http')) {
                       if (await canLaunchUrl(uri)) {
                         await launchUrl(uri);
@@ -435,7 +389,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                 ),
               ),
 
-              // Loading Progress Bar
               if (_isLoading)
                 Positioned(
                   top: MediaQuery.of(context).padding.top,
@@ -450,7 +403,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                   ),
                 ),
 
-              // Loading Overlay
               if (_isLoading && _progress < 1.0)
                 Container(
                   color: Colors.black.withOpacity(0.7),
@@ -480,7 +432,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
         ),
       ),
       
-      // FAB (Geri Butonu)
       floatingActionButton: Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 16),
         child: FloatingActionButton(
