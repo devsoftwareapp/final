@@ -113,10 +113,9 @@ class _MainScreenState extends State<MainScreen> {
     _webViewController.addJavaScriptHandler(
       handlerName: 'openPDF',
       callback: (args) async {
-        if (args.length >= 3 && mounted) {
-          final pdfId = args[0];
-          final pdfBase64 = args[1];
-          final pdfName = args[2];
+        if (args.length >= 2 && mounted) {
+          final pdfBase64 = args[0];
+          final pdfName = args[1];
           
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -444,70 +443,11 @@ class _MainScreenState extends State<MainScreen> {
                         \`;
                         document.head.appendChild(style);
                         
-                        // LocalStorage desteği
-                        if (typeof window.localStorage === 'undefined') {
-                          window.localStorage = {
-                            _data: {},
-                            setItem: function(key, value) {
-                              this._data[key] = value;
-                              try {
-                                if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                                  window.flutter_inappwebview.callHandler('saveToStorage', 'localStorage_' + key, value);
-                                }
-                              } catch(e) {
-                                console.log('Storage save error:', e);
-                              }
-                            },
-                            getItem: function(key) {
-                              try {
-                                if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                                  return window.flutter_inappwebview.callHandler('getFromStorage', 'localStorage_' + key) || this._data[key] || null;
-                                }
-                              } catch(e) {
-                                console.log('Storage get error:', e);
-                                return this._data[key] || null;
-                              }
-                            },
-                            removeItem: function(key) {
-                              delete this._data[key];
-                              try {
-                                if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                                  window.flutter_inappwebview.callHandler('removeFromStorage', 'localStorage_' + key);
-                                }
-                              } catch(e) {
-                                console.log('Storage remove error:', e);
-                              }
-                            },
-                            clear: function() {
-                              this._data = {};
-                            }
-                          };
-                        }
-                        
-                        // SessionStorage desteği
-                        if (typeof window.sessionStorage === 'undefined') {
-                          window.sessionStorage = {
-                            _data: {},
-                            setItem: function(key, value) {
-                              this._data[key] = value;
-                            },
-                            getItem: function(key) {
-                              return this._data[key] || null;
-                            },
-                            removeItem: function(key) {
-                              delete this._data[key];
-                            },
-                            clear: function() {
-                              this._data = {};
-                            }
-                          };
-                        }
-                        
                         // Flutter ile iletişim için global fonksiyonlar
                         window.flutterHandler = {
-                          openPDF: function(pdfId, pdfBase64, pdfName) {
+                          openPDF: function(pdfBase64, pdfName) {
                             if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                              window.flutter_inappwebview.callHandler('openPDF', pdfId, pdfBase64, pdfName);
+                              window.flutter_inappwebview.callHandler('openPDF', pdfBase64, pdfName);
                             }
                           },
                           openFilePicker: function() {
@@ -533,8 +473,8 @@ class _MainScreenState extends State<MainScreen> {
                         };
                         
                         // PDF açma fonksiyonunu güncelle
-                        window.openPDF = function(pdfId, pdfBase64, pdfName) {
-                          window.flutterHandler.openPDF(pdfId, pdfBase64, pdfName);
+                        window.openPDF = function(pdfBase64, pdfName) {
+                          window.flutterHandler.openPDF(pdfBase64, pdfName);
                         };
                       ''');
                     },
