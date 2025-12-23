@@ -66,6 +66,16 @@
         android:allowBackup="true"
         android:theme="@style/LaunchTheme">
         
+        <!-- WebView için önemli -->
+        <meta-data
+            android:name="android.webkit.WebView.EnableSafeBrowsing"
+            android:value="true" />
+            
+        <!-- InAppWebView için gerekli -->
+        <meta-data
+            android:name="android.webkit.WebView.MetricsOptOut"
+            android:value="true" />
+        
         <!-- Ana Activity -->
         <activity
             android:name=".MainActivity"
@@ -145,13 +155,23 @@
         <!-- FileProvider (PDF paylaşımı için) -->
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.devsoftaware.pdfreader.fileprovider"
+            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- PDF Viewer Activity (Opsiyonel - sadece PDF açmak için) -->
+        <activity
+            android:name=".PDFViewerActivity"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:screenOrientation="portrait"
+            android:exported="false">
+        </activity>
 
     </application>
 
