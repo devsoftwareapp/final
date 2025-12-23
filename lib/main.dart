@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
+import 'pdfviewer.dart'; // PDFViewerScreen import edildi
 
 void main() {
   runApp(const MyApp());
@@ -22,7 +23,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,
-        appBarTheme: AppBarTheme(
+        appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
           elevation: 0,
@@ -86,7 +87,6 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
-    // Sistem UI'yı varsayılana sıfırla
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
@@ -109,6 +109,28 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _setupJavaScriptHandlers() async {
+    // PDF açma handler'ı - PDFViewerScreen'e yönlendir
+    _webViewController.addJavaScriptHandler(
+      handlerName: 'openPDF',
+      callback: (args) async {
+        if (args.length >= 3 && mounted) {
+          final pdfId = args[0];
+          final pdfBase64 = args[1];
+          final pdfName = args[2];
+          
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => PDFViewerScreen(
+                pdfBase64: pdfBase64,
+                pdfName: pdfName,
+              ),
+            ),
+          );
+        }
+        return null;
+      },
+    );
+
     _webViewController.addJavaScriptHandler(
       handlerName: 'openFilePicker',
       callback: (args) async {
@@ -157,6 +179,17 @@ class _MainScreenState extends State<MainScreen> {
           final fileName = args[0];
           final base64Data = args[1];
           await _shareFile(fileName, base64Data);
+        }
+        return null;
+      },
+    );
+
+    // Geri butonu için handler - webview'in kendi geri butonu kullanılacak
+    _webViewController.addJavaScriptHandler(
+      handlerName: 'goBack',
+      callback: (args) async {
+        if (await _webViewController.canGoBack()) {
+          await _webViewController.goBack();
         }
         return null;
       },
@@ -269,6 +302,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildErrorPage() {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -299,6 +333,17 @@ class _MainScreenState extends State<MainScreen> {
               },
               child: const Text('Tekrar Dene'),
             ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                SystemNavigator.pop();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey[300],
+                foregroundColor: Colors.black,
+              ),
+              child: const Text('Uygulamadan Çık'),
+            ),
           ],
         ),
       ),
@@ -326,286 +371,255 @@ class _MainScreenState extends State<MainScreen> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: const SystemUiOverlayStyle(
-          statusBarColor: Colors.white,
-          statusBarIconBrightness: Brightness.dark,
-          systemNavigationBarColor: Colors.white,
-          systemNavigationBarIconBrightness: Brightness.dark,
-          systemNavigationBarDividerColor: Colors.transparent,
-        ),
-        child: SafeArea(
-          top: false, // Status bar için SafeArea devre dışı
-          bottom: false, // Navigation bar için SafeArea devre dışı
-          child: Stack(
-            children: [
-              // Status bar padding'i
-              Padding(
-                padding: EdgeInsets.only(
-                  top: MediaQuery.of(context).padding.top,
-                  bottom: MediaQuery.of(context).padding.bottom,
-                ),
-                child: InAppWebView(
-                  initialOptions: options,
-                  initialUrlRequest: URLRequest(
-                    url: WebUri('about:blank'),
+      body: WillPopScope(
+        onWillPop: () async {
+          // Android geri tuşu kontrolü
+          if (await _webViewController.canGoBack()) {
+            await _webViewController.goBack();
+            return false; // Uygulamadan çıkma, sadece webview'de geri git
+          }
+          return true; // Uygulamadan çık
+        },
+        child: AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            statusBarColor: Colors.white,
+            statusBarIconBrightness: Brightness.dark,
+            systemNavigationBarColor: Colors.white,
+            systemNavigationBarIconBrightness: Brightness.dark,
+            systemNavigationBarDividerColor: Colors.transparent,
+          ),
+          child: SafeArea(
+            top: false,
+            bottom: false,
+            child: Stack(
+              children: [
+                // Status bar ve navigation bar padding'i
+                Padding(
+                  padding: EdgeInsets.only(
+                    top: MediaQuery.of(context).padding.top,
+                    bottom: MediaQuery.of(context).padding.bottom,
                   ),
-                  onWebViewCreated: (controller) async {
-                    _webViewController = controller;
-                    await _setupJavaScriptHandlers();
-                    await _loadWebView();
-                  },
-                  onLoadStart: (controller, url) {
-                    setState(() {
-                      _isLoading = true;
-                    });
-                  },
-                  onLoadStop: (controller, url) async {
-                    setState(() {
-                      _isLoading = false;
-                    });
-                    
-                    await controller.evaluateJavascript(source: '''
-                      // Status bar ve navigation bar için CSS ayarları
-                      const style = document.createElement('style');
-                      style.textContent = \`
-                        :root {
-                          --safe-area-top: ${MediaQuery.of(context).padding.top}px;
-                          --safe-area-bottom: ${MediaQuery.of(context).padding.bottom}px;
-                        }
-                        body {
-                          padding-top: env(safe-area-inset-top, var(--safe-area-top));
-                          padding-bottom: env(safe-area-inset-bottom, var(--safe-area-bottom));
-                          background-color: #ffffff;
-                        }
-                        .top-bar {
-                          padding-top: env(safe-area-inset-top, var(--safe-area-top));
-                        }
-                      \`;
-                      document.head.appendChild(style);
+                  child: InAppWebView(
+                    initialOptions: options,
+                    initialUrlRequest: URLRequest(
+                      url: WebUri('about:blank'),
+                    ),
+                    onWebViewCreated: (controller) async {
+                      _webViewController = controller;
+                      await _setupJavaScriptHandlers();
+                      await _loadWebView();
+                    },
+                    onLoadStart: (controller, url) {
+                      setState(() {
+                        _isLoading = true;
+                      });
+                    },
+                    onLoadStop: (controller, url) async {
+                      setState(() {
+                        _isLoading = false;
+                      });
                       
-                      // LocalStorage desteği
-                      if (typeof window.localStorage === 'undefined') {
-                        window.localStorage = {
-                          _data: {},
-                          setItem: function(key, value) {
-                            this._data[key] = value;
-                            try {
-                              if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                                window.flutter_inappwebview.callHandler('saveToStorage', 'localStorage_' + key, value);
+                      await controller.evaluateJavascript(source: '''
+                        // Status bar ve navigation bar için CSS ayarları
+                        const style = document.createElement('style');
+                        style.textContent = \`
+                          :root {
+                            --safe-area-top: ${MediaQuery.of(context).padding.top}px;
+                            --safe-area-bottom: ${MediaQuery.of(context).padding.bottom}px;
+                          }
+                          body {
+                            padding-top: env(safe-area-inset-top, var(--safe-area-top));
+                            padding-bottom: env(safe-area-inset-bottom, var(--safe-area-bottom));
+                            background-color: #ffffff;
+                          }
+                          .top-bar {
+                            padding-top: env(safe-area-inset-top, var(--safe-area-top));
+                          }
+                          .bottom-bar {
+                            padding-bottom: env(safe-area-inset-bottom, var(--safe-area-bottom));
+                          }
+                          .fab-container {
+                            bottom: calc(80px + env(safe-area-inset-bottom, var(--safe-area-bottom)));
+                          }
+                        \`;
+                        document.head.appendChild(style);
+                        
+                        // LocalStorage desteği
+                        if (typeof window.localStorage === 'undefined') {
+                          window.localStorage = {
+                            _data: {},
+                            setItem: function(key, value) {
+                              this._data[key] = value;
+                              try {
+                                if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                                  window.flutter_inappwebview.callHandler('saveToStorage', 'localStorage_' + key, value);
+                                }
+                              } catch(e) {
+                                console.log('Storage save error:', e);
                               }
-                            } catch(e) {
-                              console.log('Storage save error:', e);
+                            },
+                            getItem: function(key) {
+                              try {
+                                if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                                  return window.flutter_inappwebview.callHandler('getFromStorage', 'localStorage_' + key) || this._data[key] || null;
+                                }
+                              } catch(e) {
+                                console.log('Storage get error:', e);
+                                return this._data[key] || null;
+                              }
+                            },
+                            removeItem: function(key) {
+                              delete this._data[key];
+                              try {
+                                if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                                  window.flutter_inappwebview.callHandler('removeFromStorage', 'localStorage_' + key);
+                                }
+                              } catch(e) {
+                                console.log('Storage remove error:', e);
+                              }
+                            },
+                            clear: function() {
+                              this._data = {};
                             }
-                          },
-                          getItem: function(key) {
-                            try {
-                              if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                                return window.flutter_inappwebview.callHandler('getFromStorage', 'localStorage_' + key) || this._data[key] || null;
-                              }
-                            } catch(e) {
-                              console.log('Storage get error:', e);
+                          };
+                        }
+                        
+                        // SessionStorage desteği
+                        if (typeof window.sessionStorage === 'undefined') {
+                          window.sessionStorage = {
+                            _data: {},
+                            setItem: function(key, value) {
+                              this._data[key] = value;
+                            },
+                            getItem: function(key) {
                               return this._data[key] || null;
+                            },
+                            removeItem: function(key) {
+                              delete this._data[key];
+                            },
+                            clear: function() {
+                              this._data = {};
                             }
-                          },
-                          removeItem: function(key) {
-                            delete this._data[key];
-                            try {
-                              if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                                window.flutter_inappwebview.callHandler('removeFromStorage', 'localStorage_' + key);
-                              }
-                            } catch(e) {
-                              console.log('Storage remove error:', e);
-                            }
-                          },
-                          clear: function() {
-                            this._data = {};
-                          }
-                        };
-                      }
-                      
-                      // SessionStorage desteği
-                      if (typeof window.sessionStorage === 'undefined') {
-                        window.sessionStorage = {
-                          _data: {},
-                          setItem: function(key, value) {
-                            this._data[key] = value;
-                          },
-                          getItem: function(key) {
-                            return this._data[key] || null;
-                          },
-                          removeItem: function(key) {
-                            delete this._data[key];
-                          },
-                          clear: function() {
-                            this._data = {};
-                          }
-                        };
-                      }
-                      
-                      // PDF açma fonksiyonu
-                      window.openPDF = function(pdfId) {
-                        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                          window.flutter_inappwebview.callHandler('openPDF', pdfId);
+                          };
                         }
-                      };
-                    ''');
-                  },
-                  onProgressChanged: (controller, progress) {
-                    setState(() {
-                      _progress = progress / 100;
-                    });
-                  },
-                  onLoadError: (controller, url, code, message) {
-                    print('Load error: $code - $message');
-                    setState(() {
-                      _hasError = true;
-                      _isLoading = false;
-                    });
-                  },
-                  shouldOverrideUrlLoading: (controller, navigationAction) async {
-                    final uri = navigationAction.request.url;
-                    
-                    if (uri == null) return NavigationActionPolicy.ALLOW;
-                    
-                    if (uri.toString().endsWith('.pdf')) {
-                      if (mounted) {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => PDFViewerScreen(pdfUrl: uri.toString()),
-                          ),
-                        );
-                      }
-                      return NavigationActionPolicy.CANCEL;
-                    }
-                    
-                    if (uri.toString().startsWith('http')) {
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(uri);
+                        
+                        // Flutter ile iletişim için global fonksiyonlar
+                        window.flutterHandler = {
+                          openPDF: function(pdfId, pdfBase64, pdfName) {
+                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                              window.flutter_inappwebview.callHandler('openPDF', pdfId, pdfBase64, pdfName);
+                            }
+                          },
+                          openFilePicker: function() {
+                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                              window.flutter_inappwebview.callHandler('openFilePicker');
+                            }
+                          },
+                          saveFile: function(fileName, base64Data) {
+                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                              window.flutter_inappwebview.callHandler('saveFile', fileName, base64Data);
+                            }
+                          },
+                          shareFile: function(fileName, base64Data) {
+                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                              window.flutter_inappwebview.callHandler('shareFile', fileName, base64Data);
+                            }
+                          },
+                          goBack: function() {
+                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                              window.flutter_inappwebview.callHandler('goBack');
+                            }
+                          }
+                        };
+                        
+                        // PDF açma fonksiyonunu güncelle
+                        window.openPDF = function(pdfId, pdfBase64, pdfName) {
+                          window.flutterHandler.openPDF(pdfId, pdfBase64, pdfName);
+                        };
+                      ''');
+                    },
+                    onProgressChanged: (controller, progress) {
+                      setState(() {
+                        _progress = progress / 100;
+                      });
+                    },
+                    onLoadError: (controller, url, code, message) {
+                      print('Load error: $code - $message');
+                      setState(() {
+                        _hasError = true;
+                        _isLoading = false;
+                      });
+                    },
+                    shouldOverrideUrlLoading: (controller, navigationAction) async {
+                      final uri = navigationAction.request.url;
+                      
+                      if (uri == null) return NavigationActionPolicy.ALLOW;
+                      
+                      // PDF dosyalarını handle et - artık JavaScript handler ile yapılıyor
+                      if (uri.toString().endsWith('.pdf')) {
                         return NavigationActionPolicy.CANCEL;
                       }
-                    }
-                    
-                    return NavigationActionPolicy.ALLOW;
-                  },
-                  onConsoleMessage: (controller, consoleMessage) {
-                    print('Console: ${consoleMessage.message}');
-                  },
+                      
+                      // Harici URL'leri varsayılan tarayıcıda aç
+                      if (uri.toString().startsWith('http')) {
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri);
+                          return NavigationActionPolicy.CANCEL;
+                        }
+                      }
+                      
+                      return NavigationActionPolicy.ALLOW;
+                    },
+                    onConsoleMessage: (controller, consoleMessage) {
+                      print('Console: ${consoleMessage.message}');
+                    },
+                  ),
                 ),
-              ),
 
-              // Loading Progress Bar
-              if (_isLoading)
-                Positioned(
-                  top: MediaQuery.of(context).padding.top,
-                  left: 0,
-                  right: 0,
-                  child: LinearProgressIndicator(
-                    value: _progress,
-                    backgroundColor: Colors.transparent,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Theme.of(context).primaryColor,
+                // Loading Progress Bar
+                if (_isLoading)
+                  Positioned(
+                    top: MediaQuery.of(context).padding.top,
+                    left: 0,
+                    right: 0,
+                    child: LinearProgressIndicator(
+                      value: _progress,
+                      backgroundColor: Colors.transparent,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Theme.of(context).primaryColor,
+                      ),
                     ),
                   ),
-                ),
 
-              // Loading Overlay
-              if (_isLoading && _progress < 1.0)
-                Container(
-                  color: Colors.black.withOpacity(0.7),
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Theme.of(context).primaryColor,
+                // Loading Overlay
+                if (_isLoading && _progress < 1.0)
+                  Container(
+                    color: Colors.black.withOpacity(0.7),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Theme.of(context).primaryColor,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Yükleniyor...',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Yükleniyor...',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-      
-      floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 16),
-        child: FloatingActionButton(
-          onPressed: () async {
-            if (await _webViewController.canGoBack()) {
-              await _webViewController.goBack();
-            } else {
-              if (mounted) {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Çıkış'),
-                    content: const Text('Uygulamadan çıkmak istiyor musunuz?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('İptal'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          SystemNavigator.pop();
-                        },
-                        child: const Text('Çıkış'),
-                      ),
-                    ],
-                  ),
-                );
-              }
-            }
-          },
-          child: const Icon(Icons.arrow_back),
-          backgroundColor: Theme.of(context).primaryColor,
-        ),
-      ),
-    );
-  }
-}
-
-class PDFViewerScreen extends StatelessWidget {
-  final String pdfUrl;
-  
-  const PDFViewerScreen({super.key, required this.pdfUrl});
-  
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-        title: const Text('PDF Görüntüleyici'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: InAppWebView(
-        initialOptions: InAppWebViewGroupOptions(
-          crossPlatform: InAppWebViewOptions(
-            javaScriptEnabled: true,
-          ),
-          android: AndroidInAppWebViewOptions(
-            useHybridComposition: true,
-          ),
-        ),
-        initialUrlRequest: URLRequest(url: WebUri(pdfUrl)),
       ),
     );
   }
