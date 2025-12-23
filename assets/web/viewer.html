@@ -1132,202 +1132,54 @@
 
 
 <script>
-// PDF yüklendiğini izlemek için değişkenler
-window.pdfLoaded = false;
-window.viewerReady = false;
-
-async function openPdfFromBase64(base64, name = "PDF") {
-  if (!base64) {
-    console.error('No base64 data provided');
-    return;
-  }
-
-  console.log('Opening PDF:', name, 'Data length:', base64.length);
-
-  // Data URL formatındaysa temizle
-  if (base64.startsWith("data:application/pdf;base64,")) {
-    base64 = base64.substring("data:application/pdf;base64,".length);
-  }
-
-  try {
-    const raw = atob(base64);
-    const bytes = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i++) {
-      bytes[i] = raw.charCodeAt(i);
-    }
-
-    const blob = new Blob([bytes], { type: "application/pdf" });
-    const blobUrl = URL.createObjectURL(blob);
-
-    console.log('PDF blob created, URL:', blobUrl);
-
-    // PDF.js'nin hazır olmasını bekle
-    const wait = setInterval(() => {
-      if (
-        window.PDFViewerApplication &&
-        PDFViewerApplication.initialized &&
-        PDFViewerApplication.eventBus
-      ) {
-        clearInterval(wait);
-
-        console.log('Opening PDF with PDF.js');
-        PDFViewerApplication.open({ url: blobUrl });
-        document.title = name;
-
-        // PDF yüklendiğinde
-        PDFViewerApplication.eventBus.on("pagesloaded", () => {
-          console.log('PDF pages loaded');
-          window.pdfLoaded = true;
-          
-          // Flutter WebView'e mesaj gönder
-          if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-            try {
-              window.flutter_inappwebview.callHandler('onPDFReady', name);
-              console.log('PDF ready message sent to Flutter');
-            } catch (e) {
-              console.log('Error sending PDF ready message:', e);
-            }
-          }
-          
-          // Ayrıca parent'a da gönder (tarayıcıda test için)
-          if (window.parent !== window) {
-            window.parent.postMessage(
-              { type: "pdf-ready" },
-              "*"
-            );
-          }
-        });
-
-        // Hata durumunda
-        PDFViewerApplication.eventBus.on("error", (error) => {
-          console.error('PDF error:', error);
-          
-          // Flutter'a hata mesajı gönder
-          if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-            try {
-              window.flutter_inappwebview.callHandler('onPDFError', error.toString());
-            } catch (e) {
-              console.log('Error sending error message:', e);
-            }
-          }
-        });
-
-        // temizlik
-        setTimeout(() => {
-          try {
-            URL.revokeObjectURL(blobUrl);
-            console.log('Blob URL revoked');
-          } catch (e) {
-            console.log('Error revoking blob URL:', e);
-          }
-        }, 30000);
-      }
-    }, 100);
-
-    // Timeout
-    setTimeout(() => {
-      clearInterval(wait);
-      console.warn('PDF.js initialization timeout');
-    }, 10000);
-
-  } catch (error) {
-    console.error('Error opening PDF:', error);
+// PDF yüklendiğinde Flutter'a bildir
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('PDF viewer loaded');
+  
+  // PDF.js'nin hazır olduğunu dinle
+  document.addEventListener('webviewerloaded', () => {
+    console.log('PDF.js initialized');
     
-    // Flutter'a hata mesajı gönder
+    // Flutter'dan PDF yükleme için hazır olduğumuzu bildir
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
       try {
-        window.flutter_inappwebview.callHandler('onPDFError', error.toString());
-      } catch (e) {
-        console.log('Error sending error message:', e);
-      }
-    }
-  }
-}
-
-// Flutter WebView'den veya parent'tan gelen mesajları dinle
-window.addEventListener("message", (e) => {
-  console.log("Message received in viewer:", e.data?.type);
-  
-  if (e.data?.type === "pdfData") {
-    console.log('PDF data received via postMessage');
-    openPdfFromBase64(e.data.base64, e.data.name);
-  }
-});
-
-// viewer.html yüklendiğinde
-window.addEventListener("load", () => {
-  console.log("viewer.html loaded");
-  window.viewerReady = true;
-  
-  // Flutter WebView içindeysek
-  if (window.flutter_inappwebview) {
-    console.log("Running in Flutter WebView");
-    
-    // Flutter'a viewer'ın hazır olduğunu bildir
-    setTimeout(() => {
-      if (window.flutter_inappwebview.callHandler) {
-        try {
-          window.flutter_inappwebview.callHandler('onViewerReady');
-          console.log('Viewer ready message sent to Flutter');
-        } catch (e) {
-          console.log('Error sending viewer ready message:', e);
-          
-          // Alternatif: 2 saniye sonra tekrar dene
-          setTimeout(() => {
-            if (window.flutter_inappwebview.callHandler) {
-              try {
-                window.flutter_inappwebview.callHandler('onViewerReady');
-              } catch (e2) {
-                console.log('Second attempt failed:', e2);
-              }
-            }
-          }, 2000);
-        }
-      }
-    }, 500);
-  }
-  
-  // Tarayıcıda test için - sessionStorage'dan kontrol
-  const ss = sessionStorage.getItem("pdfData");
-  if (ss) {
-    console.log('Loading PDF from sessionStorage');
-    openPdfFromBase64(ss, sessionStorage.getItem("pdfName"));
-    sessionStorage.removeItem("pdfData");
-    sessionStorage.removeItem("pdfName");
-    return;
-  }
-
-  // URL parametrelerinden kontrol
-  const p = new URLSearchParams(location.search);
-  if (p.has("base64")) {
-    console.log('Loading PDF from URL parameters');
-    openPdfFromBase64(p.get("base64"));
-    return;
-  }
-
-  // window.name'den kontrol
-  if (window.name && window.name.startsWith("data:application/pdf")) {
-    console.log('Loading PDF from window.name');
-    openPdfFromBase64(window.name);
-    return;
-  }
-});
-
-// Eğer viewer hazırsa ve Flutter'dan henüz mesaj gelmediyse
-setTimeout(() => {
-  if (window.viewerReady && !window.pdfLoaded && window.flutter_inappwebview) {
-    console.log('Viewer ready but no PDF loaded yet');
-    
-    // Flutter'dan PDF verisi gelmesini iste
-    if (window.flutter_inappwebview.callHandler) {
-      try {
         window.flutter_inappwebview.callHandler('onViewerReady');
+        console.log('Viewer ready message sent');
       } catch (e) {
-        console.log('Error requesting PDF data:', e);
+        console.log('Error sending ready message:', e);
       }
     }
-  }
-}, 2000);
+  });
+  
+  // PDF yüklendiğinde
+  window.addEventListener('pagesloaded', () => {
+    console.log('PDF pages loaded');
+    
+    // Flutter'a PDF'in hazır olduğunu bildir
+    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+      try {
+        const title = document.title || 'PDF';
+        window.flutter_inappwebview.callHandler('onPDFReady', title);
+        console.log('PDF ready message sent:', title);
+      } catch (e) {
+        console.log('Error sending PDF ready message:', e);
+      }
+    }
+  });
+  
+  // PDF yükleme hatasında
+  window.addEventListener('error', (e) => {
+    console.error('PDF error:', e);
+    
+    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+      try {
+        window.flutter_inappwebview.callHandler('onPDFError', e.toString());
+      } catch (err) {
+        console.log('Error sending error message:', err);
+      }
+    }
+  });
+});
 </script>
   <!-- Bu viewer.html icine gomme --> 
   <!-- Bu viewer.html icine gomme --> 
