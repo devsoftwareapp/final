@@ -2173,7 +2173,7 @@ function toggleFavorite(pdfId) {
   updatePDFLists();
 }
 
-// PDF açma fonksiyonu - DÜZELTİLDİ: Direkt pdfviewer.html'ye yönlendir
+// PDF açma fonksiyonu - GÜNCELLENDİ: Direkt Flutter'a PDF verisini iletiyoruz
 function openPDF(pdfId) {
   // Context menu açıksa kapatalım
   if (document.getElementById('contextMenu').classList.contains('active')) {
@@ -2191,12 +2191,16 @@ function openPDF(pdfId) {
   const base64Data = pdfFiles[pdfId];
   
   if (base64Data) {
-    // PDF verilerini sessionStorage'a kaydet
-    sessionStorage.setItem("pdfData", base64Data);
-    sessionStorage.setItem("pdfName", pdf.name);
+    // Tam base64 URL oluştur
+    const fullBase64 = "data:application/pdf;base64," + base64Data;
     
-    // pdfviewer.html'ye yönlendir
-    window.location.href = "pdfviewer.html";
+    // PDF verisini Flutter'a gönder
+    if (window.flutterHandler && window.flutterHandler.openPDF) {
+      window.flutterHandler.openPDF(fullBase64, pdf.name);
+      console.log('PDF sent to Flutter:', pdf.name, 'Data length:', fullBase64.length);
+    } else {
+      alert('PDF açılamadı: Flutter bağlantısı yok');
+    }
   } else {
     // Eski versiyonlarda base64 data saklanmamış olabilir
     alert('Bu PDF dosyasının verileri bulunamadı. Lütfen dosyayı tekrar yükleyin.');
@@ -2209,17 +2213,15 @@ function openPDF(pdfId) {
         const reader = new FileReader();
         
         reader.onload = function(e) {
-          const base64 = e.target.result.split(",")[1];
-          
-          // PDF verilerini sessionStorage'a kaydet
-          sessionStorage.setItem("pdfData", base64);
-          sessionStorage.setItem("pdfName", file.name);
+          const base64 = e.target.result;
           
           // Güncellenmiş dosyayı listeye ekle
-          addPDF(file.name, file.size, new Date().toISOString(), base64);
+          addPDF(file.name, file.size, new Date().toISOString(), base64.split(",")[1]);
           
-          // pdfviewer.html'ye yönlendir
-          window.location.href = "pdfviewer.html";
+          // PDF verisini Flutter'a gönder
+          if (window.flutterHandler && window.flutterHandler.openPDF) {
+            window.flutterHandler.openPDF(base64, file.name);
+          }
         };
         
         reader.readAsDataURL(file);
