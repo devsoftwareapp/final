@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 
 class PDFViewerScreen extends StatefulWidget {
   final String? pdfBase64;
@@ -23,6 +25,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   bool _isLoading = true;
   bool _hasError = false;
   bool _pdfLoaded = false;
+  String? _tempPdfPath;
 
   final InAppWebViewGroupOptions options = InAppWebViewGroupOptions(
     crossPlatform: InAppWebViewOptions(
@@ -57,10 +60,15 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       systemNavigationBarColor: Colors.black,
       systemNavigationBarIconBrightness: Brightness.light,
     ));
+    
+    _createTempPDFFile();
   }
 
   @override
   void dispose() {
+    // Temizlik
+    _cleanupTempFile();
+    
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
@@ -70,17 +78,64 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
     super.dispose();
   }
 
-  Future<void> _setupJavaScriptHandlers() async {
-    // Viewer hazır olduğunda
-    _webViewController.addJavaScriptHandler(
-      handlerName: 'onViewerReady',
-      callback: (args) async {
-        print('Viewer is ready, injecting PDF data...');
-        await _injectPDFData();
-        return null;
-      },
-    );
+  Future<void> _createTempPDFFile() async {
+    if (widget.pdfBase64 == null) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
 
+    try {
+      // Base64'i temizle
+      String cleanBase64 = widget.pdfBase64!;
+      if (cleanBase64.startsWith('data:application/pdf;base64,')) {
+        cleanBase64 = cleanBase64.substring('data:application/pdf;base64,'.length);
+      }
+
+      // Base64'i decode et
+      final bytes = base64.decode(cleanBase64);
+      
+      // Geçici dosya oluştur
+      final tempDir = await getTemporaryDirectory();
+      final fileName = 'temp_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      _tempPdfPath = '${tempDir.path}/$fileName';
+      
+      final file = File(_tempPdfPath!);
+      await file.writeAsBytes(bytes);
+      
+      print('Temp PDF created: $_tempPdfPath, size: ${bytes.length} bytes');
+      
+    } catch (e) {
+      print('Error creating temp PDF: $e');
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _cleanupTempFile() async {
+    if (_tempPdfPath != null) {
+      try {
+        final file = File(_tempPdfPath!);
+        if (await file.exists()) {
+          await file.delete();
+          print('Temp PDF deleted: $_tempPdfPath');
+        }
+      } catch (e) {
+        print('Error deleting temp file: $e');
+      }
+      _tempPdfPath = null;
+    }
+  }
+
+  Future<void> _setupJavaScriptHandlers() async {
     // PDF yüklendiğinde
     _webViewController.addJavaScriptHandler(
       handlerName: 'onPDFReady',
@@ -92,17 +147,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
             _isLoading = false;
             _pdfLoaded = true;
           });
-        }
-        return null;
-      },
-    );
-
-    // Geri butonu için
-    _webViewController.addJavaScriptHandler(
-      handlerName: 'goBack',
-      callback: (args) async {
-        if (mounted) {
-          Navigator.of(context).pop();
         }
         return null;
       },
@@ -126,7 +170,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   }
 
   Future<void> _loadPDF() async {
-    if (widget.pdfBase64 == null) {
+    if (_tempPdfPath == null) {
       if (mounted) {
         setState(() {
           _hasError = true;
@@ -151,31 +195,51 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   }
 
   Future<void> _injectPDFData() async {
-    if (widget.pdfBase64 == null) return;
+    if (_tempPdfPath == null) return;
 
-    // PDF verisini temizle (data:application/pdf;base64, kısmını kaldır)
-    String cleanBase64 = widget.pdfBase64!;
-    if (cleanBase64.startsWith('data:application/pdf;base64,')) {
-      cleanBase64 = cleanBase64.substring('data:application/pdf;base64,'.length);
-    }
-
-    // PDF adını temizle
-    final pdfName = widget.pdfName?.replaceAll("'", "\\'") ?? 'PDF';
-
-    // PDF verisini viewer.html'e gönder
     try {
+      // file:// URL oluştur
+      final fileUrl = Uri.file(_tempPdfPath!).toString();
+      
+      // PDF.js'ye file URL'sini gönder
       await _webViewController.evaluateJavascript(source: '''
-        // PDF verisini postMessage ile gönder
-        window.postMessage({
-          type: "pdfData",
-          base64: "$cleanBase64",
-          name: "$pdfName"
-        }, "*");
+        console.log('Injecting PDF file URL:', "$fileUrl");
         
-        console.log('PDF data injected, name:', "$pdfName");
+        // PDFViewerApplication hazır olduğunda aç
+        const waitForPDFViewer = setInterval(() => {
+          if (window.PDFViewerApplication && PDFViewerApplication.initialized) {
+            clearInterval(waitForPDFViewer);
+            console.log('PDFViewerApplication ready, opening PDF...');
+            
+            PDFViewerApplication.open({ url: "$fileUrl" });
+            
+            // PDF yüklendiğinde Flutter'a haber ver
+            PDFViewerApplication.eventBus.on("pagesloaded", () => {
+              console.log('PDF pages loaded successfully');
+              if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                window.flutter_inappwebview.callHandler('onPDFReady', "${widget.pdfName?.replaceAll('"', '\\"') ?? 'PDF'}");
+              }
+            });
+            
+            // Hata durumunda
+            PDFViewerApplication.eventBus.on("error", (error) => {
+              console.error('PDF error:', error);
+              if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                window.flutter_inappwebview.callHandler('onPDFError', error.toString());
+              }
+            });
+          }
+        }, 100);
+        
+        // Timeout
+        setTimeout(() => {
+          clearInterval(waitForPDFViewer);
+          console.warn('PDFViewerApplication initialization timeout');
+        }, 10000);
       ''');
-
-      print('PDF data injected successfully');
+      
+      print('PDF file URL injected: $fileUrl');
+      
     } catch (e) {
       print('Error injecting PDF data: $e');
       if (mounted) {
@@ -217,23 +281,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                 }
               },
               child: const Text('Geri Dön'),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                if (mounted) {
-                  setState(() {
-                    _hasError = false;
-                    _isLoading = true;
-                  });
-                  _loadPDF();
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey[200],
-                foregroundColor: Colors.black,
-              ),
-              child: const Text('Tekrar Dene'),
             ),
           ],
         ),
@@ -306,10 +353,10 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                 initialUrlRequest: URLRequest(
                   url: WebUri('about:blank'),
                 ),
-                onWebViewCreated: (controller) {
+                onWebViewCreated: (controller) async {
                   _webViewController = controller;
-                  _setupJavaScriptHandlers();
-                  _loadPDF();
+                  await _setupJavaScriptHandlers();
+                  await _loadPDF();
                 },
                 onLoadStart: (controller, url) {
                   if (mounted) {
@@ -320,7 +367,8 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                   }
                 },
                 onLoadStop: (controller, url) async {
-                  print('Viewer loaded, waiting for viewer ready...');
+                  print('Viewer loaded, injecting PDF data...');
+                  await _injectPDFData();
                 },
                 onProgressChanged: (controller, progress) {
                   if (mounted) {
