@@ -258,9 +258,6 @@ const title = document.getElementById("title");
 const loadingOverlay = document.getElementById("loadingOverlay");
 const toast = document.getElementById("toast");
 
-const pdfData = sessionStorage.getItem("pdfData");
-const pdfName = sessionStorage.getItem("pdfName");
-
 // Tema uygula
 function applyTheme() {
   const selectedTheme = localStorage.getItem('selectedTheme') || 'device';
@@ -295,11 +292,6 @@ if (window.matchMedia) {
   });
 }
 
-// PDF adını göster
-if (pdfName) {
-  title.textContent = pdfName;
-}
-
 // PDF yükleme durumu
 let pdfReady = false;
 
@@ -315,31 +307,80 @@ function showToast(message, duration = 3000) {
 
 // Geri butonu
 function goBack() {
-  window.history.back();
+  if (typeof flutterHandler !== 'undefined' && flutterHandler.goBack) {
+    flutterHandler.goBack();
+  } else {
+    window.history.back();
+  }
 }
 
 // PDF görüntüleyiciyi başlat
 function initializePDFViewer() {
-  if (!pdfData) {
+  console.log('initializePDFViewer called');
+  
+  // Tarayıcıda: sessionStorage'dan al
+  // Flutter WebView'de: window.pdfViewerData'dan al
+  let pdfData, pdfName;
+  
+  if (typeof window.pdfViewerData !== 'undefined') {
+    // Flutter WebView modu
+    pdfData = window.pdfViewerData.pdfData;
+    pdfName = window.pdfViewerData.pdfName;
+    console.log('Using Flutter WebView data, PDF name:', pdfName, 'Data length:', pdfData?.length);
+  } else if (sessionStorage.getItem('pdfData')) {
+    // Tarayıcı modu - sessionStorage
+    pdfData = sessionStorage.getItem('pdfData');
+    pdfName = sessionStorage.getItem('pdfName');
+    console.log('Using sessionStorage data, PDF name:', pdfName, 'Data length:', pdfData?.length);
+  } else if (localStorage.getItem('pdfData')) {
+    // Fallback: localStorage
+    pdfData = localStorage.getItem('pdfData');
+    pdfName = localStorage.getItem('pdfName');
+    console.log('Using localStorage data, PDF name:', pdfName, 'Data length:', pdfData?.length);
+  } else {
+    console.error('No PDF data found in any source');
     showToast('PDF verisi bulunamadı', 3000);
     setTimeout(() => {
-      window.history.back();
+      goBack();
     }, 2000);
     return;
   }
 
+  // PDF adını göster
+  if (pdfName) {
+    title.textContent = pdfName;
+  }
+
+  if (!pdfData || pdfData.trim() === '') {
+    console.error('PDF data is empty or null');
+    showToast('PDF verisi boş veya geçersiz', 3000);
+    setTimeout(() => {
+      goBack();
+    }, 2000);
+    return;
+  }
+
+  console.log('Loading viewer.html with PDF data');
   iframe.src = "viewer.html";
 
   iframe.onload = () => {
+    console.log('viewer.html loaded, sending PDF data');
+    
     // PDF verisini iframe'e gönder
-    iframe.contentWindow.postMessage(
-      { 
-        type: "pdfData", 
-        base64: pdfData, 
-        name: pdfName 
-      },
-      "*"
-    );
+    try {
+      iframe.contentWindow.postMessage(
+        { 
+          type: "pdfData", 
+          base64: pdfData, 
+          name: pdfName 
+        },
+        "*"
+      );
+      console.log('PDF data sent to viewer');
+    } catch (error) {
+      console.error('Error sending PDF data:', error);
+      showToast('PDF verisi gönderilemedi', 3000);
+    }
     
     // Yükleme overlay'ini gizle
     setTimeout(() => {
@@ -347,7 +388,8 @@ function initializePDFViewer() {
     }, 1000);
   };
 
-  iframe.onerror = () => {
+  iframe.onerror = (error) => {
+    console.error('iframe load error:', error);
     showToast('PDF görüntüleyici yüklenirken hata oluştu', 3000);
     loadingOverlay.innerHTML = `
       <div style="color: #ff6b6b; font-size: 48px; margin-bottom: 16px;">
@@ -363,12 +405,16 @@ function initializePDFViewer() {
 
 // PDF hazır olduğunda mesaj dinleyici
 window.addEventListener("message", e => {
+  console.log('Received message:', e.data?.type);
+  
   if (e.data?.type === "pdf-ready") {
     pdfReady = true;
+    console.log('PDF is ready');
     showToast('PDF hazır', 1500);
   }
   
   if (e.data?.type === "pdf-error") {
+    console.error('PDF error:', e.data.message);
     showToast('PDF yüklenirken hata oluştu: ' + e.data.message, 4000);
     loadingOverlay.style.display = 'flex';
   }
@@ -382,24 +428,32 @@ function getApp() {
 // Son PDF blob'unu al
 async function getFinalBlob() {
   const app = getApp();
-  if (!app) return null;
+  if (!app) {
+    console.error('PDFViewerApplication not found');
+    return null;
+  }
 
   try {
+    console.log('Getting final PDF blob...');
+    
     // PDF render'ını zorla
     await app.pdfViewer.forceRendering();
     
     // Annotation'ları kaydet
     try {
       await app.pdfDocument.annotationStorage.flush();
+      console.log('Annotations flushed');
     } catch (err) {
       console.log("Annotation kaydetme hatası:", err);
     }
 
     // PDF verisini al
+    console.log('Saving document...');
     const data = await app.pdfDocument.saveDocument(
       app.pdfDocument.annotationStorage
     );
-
+    
+    console.log('PDF blob created, size:', data?.byteLength || 0);
     return new Blob([data], { type: "application/pdf" });
   } catch (error) {
     console.error("PDF blob oluşturma hatası:", error);
@@ -410,14 +464,20 @@ async function getFinalBlob() {
 
 /* YAZDIR */
 document.getElementById("printBtn").onclick = async () => {
+  console.log('Print button clicked');
+  
   if (!pdfReady) {
     showToast('PDF yükleniyor...', 2000);
     return;
   }
 
   const blob = await getFinalBlob();
-  if (!blob) return;
+  if (!blob) {
+    showToast('PDF oluşturulamadı', 3000);
+    return;
+  }
 
+  console.log('Creating print window...');
   const url = URL.createObjectURL(blob);
   
   // Gizli iframe oluştur
@@ -427,19 +487,24 @@ document.getElementById("printBtn").onclick = async () => {
   document.body.appendChild(printFrame);
 
   printFrame.onload = () => {
+    console.log('Print frame loaded, printing...');
     try {
       printFrame.contentWindow.print();
+      showToast('Yazdırma başlatıldı', 2000);
     } catch (err) {
+      console.error('Print error:', err);
       showToast('Yazdırma başlatılamadı', 3000);
     }
     
     setTimeout(() => {
       URL.revokeObjectURL(url);
       printFrame.remove();
+      console.log('Print resources cleaned up');
     }, 2000);
   };
   
-  printFrame.onerror = () => {
+  printFrame.onerror = (error) => {
+    console.error('Print frame error:', error);
     showToast('PDF yazdırma için açılamadı', 3000);
     URL.revokeObjectURL(url);
     printFrame.remove();
@@ -448,20 +513,27 @@ document.getElementById("printBtn").onclick = async () => {
 
 /* PAYLAŞ */
 document.getElementById("shareBtn").onclick = async () => {
+  console.log('Share button clicked');
+  
   if (!pdfReady) {
     showToast('PDF yükleniyor...', 2000);
     return;
   }
 
   const blob = await getFinalBlob();
-  if (!blob) return;
+  if (!blob) {
+    showToast('PDF oluşturulamadı', 3000);
+    return;
+  }
 
-  const fileName = pdfName || "document.pdf";
+  const fileName = title.textContent || "document.pdf";
   const file = new File([blob], fileName, { type: "application/pdf" });
+  console.log('File created for sharing:', fileName, 'size:', blob.size);
 
   // Web Share API kontrolü
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
+      console.log('Using Web Share API...');
       await navigator.share({ 
         files: [file],
         title: fileName,
@@ -470,10 +542,12 @@ document.getElementById("shareBtn").onclick = async () => {
       showToast('PDF paylaşıldı', 2000);
     } catch (error) {
       if (error.name !== 'AbortError') {
+        console.error('Share error:', error);
         showToast('Paylaşım başarısız oldu', 3000);
       }
     }
   } else {
+    console.log('Web Share API not available, downloading instead...');
     // Alternatif: dosya indirme
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -493,17 +567,22 @@ document.getElementById("shareBtn").onclick = async () => {
 
 /* KAYDET */
 document.getElementById("saveBtn").onclick = async () => {
+  console.log('Save button clicked');
+  
   if (!pdfReady) {
     showToast('PDF yükleniyor...', 2000);
     return;
   }
 
   const blob = await getFinalBlob();
-  if (!blob) return;
+  if (!blob) {
+    showToast('PDF oluşturulamadı', 3000);
+    return;
+  }
 
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  const fileName = pdfName || "document.pdf";
+  const fileName = title.textContent || "document.pdf";
 
   a.href = url;
   a.download = fileName;
@@ -516,10 +595,58 @@ document.getElementById("saveBtn").onclick = async () => {
   }, 1500);
   
   showToast('PDF kaydedildi', 2000);
+  console.log('PDF saved:', fileName);
 };
 
 // Sayfa yüklendiğinde PDF görüntüleyiciyi başlat
-document.addEventListener('DOMContentLoaded', initializePDFViewer);
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOMContentLoaded, checking for PDF data...');
+  
+  // window.pdfViewerData varsa hemen başlat
+  if (typeof window.pdfViewerData !== 'undefined') {
+    console.log('window.pdfViewerData found, initializing...');
+    initializePDFViewer();
+  } else {
+    // Tarayıcı modu için kısa bir delay
+    setTimeout(() => {
+      console.log('Checking storage for PDF data...');
+      if (sessionStorage.getItem('pdfData') || localStorage.getItem('pdfData')) {
+        initializePDFViewer();
+      } else {
+        console.log('No PDF data found, waiting for external initialization...');
+        // Dışarıdan initializePDFViewer çağrılacak
+      }
+    }, 100);
+  }
+});
+
+// Flutter ile iletişim için global fonksiyonlar
+window.flutterHandler = {
+  goBack: function() {
+    console.log('flutterHandler.goBack called');
+    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+      window.flutter_inappwebview.callHandler('goBack');
+    }
+  },
+  saveFile: function(fileName, base64Data) {
+    console.log('flutterHandler.saveFile called:', fileName);
+    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+      window.flutter_inappwebview.callHandler('saveFile', fileName, base64Data);
+    }
+  },
+  shareFile: function(fileName, base64Data) {
+    console.log('flutterHandler.shareFile called:', fileName);
+    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+      window.flutter_inappwebview.callHandler('shareFile', fileName, base64Data);
+    }
+  },
+  showToast: function(message) {
+    console.log('flutterHandler.showToast called:', message);
+    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+      window.flutter_inappwebview.callHandler('showToast', message);
+    }
+  }
+};
 
 // Klavye kısayolları
 document.addEventListener('keydown', (e) => {
