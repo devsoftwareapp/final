@@ -1,3 +1,26 @@
+// index_viewer_bridge.js - EN BAŞINA EKLEYİN
+
+// Global fonksiyonları tanımla
+window.showPage = window.showPage || function(id, el) {
+    console.log('Global showPage called:', id);
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.bottom-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(id)?.classList.add('active');
+    if (el) el.classList.add('active');
+};
+
+window.setTab = window.setTab || function(index) {
+    console.log('Global setTab called:', index);
+    const tabs = document.querySelectorAll('.tab');
+    const contents = document.querySelectorAll('.tab-content');
+    tabs.forEach(t => t.classList.remove('active'));
+    contents.forEach(c => c.classList.remove('active'));
+    tabs[index]?.classList.add('active');
+    contents[index]?.classList.add('active');
+};
+
+// Sonra diğer kodlar...
+
 // index_viewer_bridge.js - PDF Viewer ve Index arasında köprü (Flutter + Tarayıcı)
 // Hem Flutter inappwebview hem de mobil tarayıcılar için optimize edilmiştir
 
@@ -21,7 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // 📁 Geçici değişkenler
   let currentContextPDFId = null;
   let currentPDFViewerId = null;
-  let drawerOpen = false; // BURASI SATIR 394 - SADECE BURADA TANIMLANMIŞ
+  let drawerOpen = false;
   let fabOpen = false;
 
   // 🌉 Flutter <-> JavaScript Köprüsü
@@ -178,8 +201,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 🖨️ Tarayıcıda yazdırma
     printPDF: function(base64Data, fileName) {
-      directPrintPDF(base64Data, fileName);
-      return true;
+      return directPrintPDF(base64Data, fileName);
     },
     
     // 💾 Tarayıcıda kaydetme/indirme
@@ -244,16 +266,26 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   };
 
-  // 🖨️ Yazdırma fonksiyonu - DOĞRUDAN YAZICIYA GÖNDER
+  // 🖨️ Yazdırma fonksiyonu - GÜNCELLENDİ (DÜZELTİLDİ)
   function directPrintPDF(base64Data, pdfName) {
+    console.log('Yazdırma başlatılıyor:', pdfName);
+    
     if (!base64Data) {
-      alert('PDF verisi bulunamadı');
-      return;
+      showPDFToast('PDF verisi bulunamadı', 3000);
+      return false;
     }
 
     try {
+      // Base64 formatını temizle
+      let cleanBase64 = base64Data;
+      if (base64Data.startsWith("data:application/pdf;base64,")) {
+        cleanBase64 = base64Data.split(',')[1];
+      }
+      
+      console.log('Base64 temizlendi, yazdırma hazırlanıyor...');
+      
       // Base64'i decode et
-      const byteCharacters = atob(base64Data);
+      const byteCharacters = atob(cleanBase64);
       const byteNumbers = new Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
         byteNumbers[i] = byteCharacters.charCodeAt(i);
@@ -262,51 +294,106 @@ document.addEventListener('DOMContentLoaded', function() {
       const blob = new Blob([byteArray], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
 
+      console.log('Blob URL oluşturuldu:', url.substring(0, 50) + '...');
+
       // Gizli bir iframe oluştur ve PDF'i yükle
       const printFrame = document.createElement('iframe');
       printFrame.style.display = 'none';
       printFrame.style.position = 'fixed';
       printFrame.style.left = '-9999px';
       printFrame.style.top = '-9999px';
+      printFrame.style.width = '0';
+      printFrame.style.height = '0';
+      printFrame.style.border = 'none';
       printFrame.src = url;
+      
+      // Iframe'i body'e ekle
       document.body.appendChild(printFrame);
 
       // PDF yüklendiğinde yazdır
       printFrame.onload = function() {
+        console.log('PDF iframe yüklendi, yazdırma başlatılıyor...');
+        
         try {
           // Yazdırma diyaloğunu aç
           if (printFrame.contentWindow) {
-            printFrame.contentWindow.focus();
-            printFrame.contentWindow.print();
-            
-            // Toast mesajı göster
-            showPDFToast('Yazdırma başlatıldı', 2000);
+            // Kısa bir bekleme (PDF'in tam yüklenmesi için)
+            setTimeout(() => {
+              try {
+                printFrame.contentWindow.focus();
+                printFrame.contentWindow.print();
+                
+                // Toast mesajı göster
+                showPDFToast('Yazdırma başlatıldı', 2000);
+                console.log('Yazdırma diyaloğu açıldı');
+                
+                // Başarılı
+                return true;
+              } catch (printError) {
+                console.error('Yazdırma hatası:', printError);
+                showPDFToast('Yazdırma başlatılamadı', 3000);
+                return false;
+              }
+            }, 1000); // 1 saniye bekle
           }
-        } catch (printError) {
-          console.error('Yazdırma hatası:', printError);
-          alert('Yazdırma işlemi başlatılamadı. Lütfen tarayıcı ayarlarınızı kontrol edin.');
+        } catch (error) {
+          console.error('Yazdırma işlemi hatası:', error);
+          showPDFToast('Yazdırma hatası: ' + error.message, 3000);
+          return false;
         }
         
-        // Temizlik
+        // Temizlik - 10 saniye sonra
         setTimeout(() => {
+          try {
+            URL.revokeObjectURL(url);
+            if (printFrame.parentNode) {
+              printFrame.parentNode.removeChild(printFrame);
+            }
+            console.log('Yazdırma temizliği yapıldı');
+          } catch (cleanupError) {
+            console.error('Temizlik hatası:', cleanupError);
+          }
+        }, 10000);
+      };
+
+      // Hata durumu
+      printFrame.onerror = function(error) {
+        console.error('Iframe yükleme hatası:', error);
+        showPDFToast('PDF yazdırma için yüklenemedi', 3000);
+        
+        // Temizlik
+        try {
           URL.revokeObjectURL(url);
           if (printFrame.parentNode) {
             printFrame.parentNode.removeChild(printFrame);
           }
-        }, 5000);
+        } catch (cleanupError) {
+          console.error('Hata temizliği hatası:', cleanupError);
+        }
+        return false;
       };
 
-      // Hata durumu
-      printFrame.onerror = function() {
-        alert('PDF yazdırma için yüklenemedi');
-        URL.revokeObjectURL(url);
+      // Timeout
+      setTimeout(() => {
         if (printFrame.parentNode) {
-          printFrame.parentNode.removeChild(printFrame);
+          console.log('Yazdırma timeout oldu');
+          showPDFToast('Yazdırma zaman aşımına uğradı', 3000);
+          
+          try {
+            URL.revokeObjectURL(url);
+            printFrame.parentNode.removeChild(printFrame);
+          } catch (error) {
+            console.error('Timeout temizliği hatası:', error);
+          }
         }
-      };
+      }, 30000); // 30 saniye timeout
+      
+      return true;
+      
     } catch (error) {
       console.error('PDF yazdırma hatası:', error);
-      alert('PDF yazdırılırken bir hata oluştu: ' + error.message);
+      showPDFToast('PDF yazdırılırken bir hata oluştu: ' + error.message, 3000);
+      return false;
     }
   }
 
@@ -391,9 +478,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // 📚 Drawer fonksiyonları
-  // NOT: drawerOpen değişkeni yukarıda zaten tanımlanmış (satır 23)
-  // Burada tekrar tanımlamaya gerek yok
-
   window.toggleDrawer = function() {
     const drawer = document.getElementById('drawerSidebar');
     const overlay = document.getElementById('drawerOverlay');
@@ -614,7 +698,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     const base64Data = pdfFiles[currentContextPDFId];
     if (base64Data) {
-      PlatformActions.print(base64Data, pdf.name);
+      // Platforma özel yazdırma
+      const result = PlatformActions.print(base64Data, pdf.name);
+      if (!result) {
+        showPDFToast('Yazdırma başlatılamadı', 3000);
+      }
     } else {
       showPDFToast('PDF dosyası bulunamadı', 3000);
     }
@@ -785,7 +873,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Loading göster
     const loadingOverlay = document.getElementById('pdfLoadingOverlay');
-    if (loadingOverlay) loadingOverlay.style.display = 'flex';
+    if (loadingOverlay) {
+      loadingOverlay.style.display = 'flex';
+    }
     
     // Modal'ı göster
     const viewerModal = document.getElementById('pdfViewerModal');
@@ -806,42 +896,114 @@ document.addEventListener('DOMContentLoaded', function() {
 
   window.closePDFViewer = function() {
     const viewerModal = document.getElementById('pdfViewerModal');
-    if (viewerModal) viewerModal.style.display = 'none';
+    if (viewerModal) {
+      viewerModal.style.display = 'none';
+    }
     document.body.classList.remove('pdf-viewer-open');
     
     // Iframe'i temizle
     const iframe = document.getElementById('pdfViewerIframe');
-    if (iframe) iframe.src = 'about:blank';
+    if (iframe) {
+      iframe.src = 'about:blank';
+    }
     
     currentPDFViewerId = null;
   };
 
+  // 📄 PDF Iframe'de açma (GÜNCELLENDİ - URL PARAMETRESİ İLE)
   function openPDFInIframe(base64Data, pdfName) {
     const iframe = document.getElementById('pdfViewerIframe');
     if (!iframe) return;
     
-    // viewer.html'yi iframe'de aç
-    iframe.src = 'viewer.html';
+    console.log('Opening PDF in iframe:', pdfName);
     
-    // Iframe yüklendiğinde PDF verisini gönder
+    // URL parametresi olarak base64'i gönder
+    const encodedBase64 = encodeURIComponent(base64Data);
+    const viewerUrl = `viewer.html?base64=${encodedBase64}&name=${encodeURIComponent(pdfName)}`;
+    
+    console.log('Setting iframe src:', viewerUrl.substring(0, 100) + '...');
+    
+    // Iframe'i yükle
+    iframe.src = viewerUrl;
+    
+    // Iframe yüklendiğinde
     iframe.onload = function() {
-      // PDF verisini iframe'e gönder
-      iframe.contentWindow.postMessage(
-        { 
-          type: "pdfData", 
-          base64: base64Data, 
-          name: pdfName 
-        },
-        "*"
-      );
+      console.log('PDF iframe loaded, sending data via postMessage...');
       
-      // Loading'i gizle
+      // Mesaj gönder (backup yöntemi)
       setTimeout(() => {
-        const loadingOverlay = document.getElementById('pdfLoadingOverlay');
-        if (loadingOverlay) loadingOverlay.style.display = 'none';
-        showPDFToast('PDF hazır', 1500);
-      }, 1000);
+        iframe.contentWindow.postMessage(
+          { 
+            type: "pdfData", 
+            base64: base64Data, 
+            name: pdfName 
+          },
+          "*"
+        );
+        
+        console.log('PDF data sent to iframe');
+      }, 500);
     };
+    
+    // Viewer'dan gelen mesajları dinle
+    function handleViewerMessage(event) {
+      // Sadece viewer.html'den gelen mesajları işle
+      if (!event.source || event.source !== iframe.contentWindow) return;
+      
+      console.log('Message from viewer:', event.data?.type);
+      
+      switch(event.data?.type) {
+        case 'VIEWER_READY':
+          console.log('Viewer ready');
+          break;
+          
+        case 'PDF_VIEWER_READY':
+          console.log('PDF viewer ready:', event.data.fileName);
+          
+          // Loading'i gizle
+          setTimeout(() => {
+            const loadingOverlay = document.getElementById('pdfLoadingOverlay');
+            if (loadingOverlay) {
+              loadingOverlay.style.display = 'none';
+            }
+            
+            showPDFToast('PDF açıldı', 1500);
+          }, 500);
+          break;
+          
+        case 'PDF_PAGES_LOADED':
+          console.log('PDF pages loaded:', event.data.pageCount);
+          break;
+          
+        case 'PDF_ERROR':
+          console.error('PDF error:', event.data.error);
+          showPDFToast('PDF açılamadı: ' + event.data.error, 3000);
+          
+          const loadingOverlay = document.getElementById('pdfLoadingOverlay');
+          if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
+          }
+          break;
+          
+        case 'PDF_VIEWER_TIMEOUT':
+          console.error('PDF viewer timeout');
+          showPDFToast('PDF görüntüleyici hazırlanamadı', 3000);
+          
+          const loading = document.getElementById('pdfLoadingOverlay');
+          if (loading) {
+            loading.style.display = 'none';
+          }
+          break;
+      }
+    }
+    
+    // Mesaj listener'ını ekle
+    window.addEventListener('message', handleViewerMessage);
+    
+    // 10 saniye sonra listener'ı temizle
+    setTimeout(() => {
+      window.removeEventListener('message', handleViewerMessage);
+    }, 10000);
   }
 
   // 📄 PDF açma fonksiyonu
