@@ -7,7 +7,10 @@ import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
-import 'pdfviewer.dart';
+import 'package:share_plus/share_plus.dart';  // Yeni: Paylaşım için
+import 'package:printing/printing.dart';      // Yeni: Yazdırma için
+import 'package:open_file/open_file.dart';    // Yeni: Dosya açma için
+import 'pdfviewer.dart'; // PDF viewer sayfanız
 
 void main() {
   runApp(const MyApp());
@@ -69,6 +72,7 @@ class _MainScreenState extends State<MainScreen> {
       allowContentAccess: true,
       databaseEnabled: true,
       domStorageEnabled: true,
+      supportMultipleWindows: true,
     ),
   );
 
@@ -109,15 +113,225 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _setupJavaScriptHandlers() async {
-    // PDF açma handler'ı
+    print('Setting up JavaScript handlers...');
+    
+    // 🔗 PDF paylaşımı handler'ı
     _webViewController.addJavaScriptHandler(
-      handlerName: 'openPDF',
+      handlerName: 'sharePDF',
+      callback: (args) async {
+        if (args.isNotEmpty && mounted) {
+          try {
+            final data = args[0] as Map<String, dynamic>;
+            final base64 = data['base64'] as String;
+            final fileName = data['fileName'] as String;
+            
+            print('Sharing PDF: $fileName, base64 length: ${base64.length}');
+            
+            // Base64 verisini decode et
+            final dataPart = base64.contains(',') 
+                ? base64.split(',').last 
+                : base64;
+            final bytes = base64.decode(dataPart);
+            
+            // Geçici dosya oluştur
+            final tempDir = await getTemporaryDirectory();
+            final tempFile = File('${tempDir.path}/$fileName');
+            await tempFile.writeAsBytes(bytes);
+            
+            // Paylaş
+            await Share.shareXFiles(
+              [XFile(tempFile.path, mimeType: 'application/pdf')],
+              subject: fileName,
+              text: 'PDF dosyası',
+            );
+            
+            _showFlutterToast('PDF paylaşılıyor...');
+            
+            // Temizlik
+            Future.delayed(const Duration(seconds: 5), () {
+              tempFile.delete();
+            });
+            
+          } catch (e) {
+            print('Share PDF error: $e');
+            _showFlutterToast('Paylaşım başarısız: $e');
+          }
+        }
+        return {'success': true};
+      },
+    );
+
+    // 🖨️ PDF yazdırma handler'ı
+    _webViewController.addJavaScriptHandler(
+      handlerName: 'printPDF',
+      callback: (args) async {
+        if (args.isNotEmpty && mounted) {
+          try {
+            final data = args[0] as Map<String, dynamic>;
+            final base64 = data['base64'] as String;
+            final fileName = data['fileName'] as String;
+            
+            print('Printing PDF: $fileName');
+            
+            // Base64 verisini decode et
+            final dataPart = base64.contains(',') 
+                ? base64.split(',').last 
+                : base64;
+            final bytes = base64.decode(dataPart);
+            
+            // Yazdırma işlemi
+            await Printing.layoutPdf(
+              onLayout: (format) => bytes,
+              name: fileName,
+            );
+            
+            _showFlutterToast('PDF yazdırılıyor...');
+            
+          } catch (e) {
+            print('Print PDF error: $e');
+            _showFlutterToast('Yazdırma başarısız: $e');
+          }
+        }
+        return {'success': true};
+      },
+    );
+
+    // 💾 PDF kaydetme handler'ı
+    _webViewController.addJavaScriptHandler(
+      handlerName: 'savePDF',
+      callback: (args) async {
+        if (args.isNotEmpty && mounted) {
+          try {
+            final data = args[0] as Map<String, dynamic>;
+            final base64 = data['base64'] as String;
+            final fileName = data['fileName'] as String;
+            
+            print('Saving PDF: $fileName');
+            
+            // Base64 verisini decode et
+            final dataPart = base64.contains(',') 
+                ? base64.split(',').last 
+                : base64;
+            final bytes = base64.decode(dataPart);
+            
+            // Dosya yolu
+            final dir = await getExternalStorageDirectory();
+            final downloadsDir = Directory('${dir?.path}/Download');
+            if (!downloadsDir.existsSync()) {
+              downloadsDir.createSync(recursive: true);
+            }
+            
+            final filePath = '${downloadsDir.path}/$fileName';
+            final file = File(filePath);
+            await file.writeAsBytes(bytes);
+            
+            _showFlutterToast('PDF kaydedildi: $fileName');
+            
+            // Kullanıcıya bildir
+            if (await file.exists()) {
+              await OpenFile.open(filePath);
+            }
+            
+          } catch (e) {
+            print('Save PDF error: $e');
+            _showFlutterToast('Kaydetme başarısız: $e');
+          }
+        }
+        return {'success': true};
+      },
+    );
+
+    // 📱 Genel mesaj handler'ı
+    _webViewController.addJavaScriptHandler(
+      handlerName: 'webMessage',
+      callback: (args) async {
+        if (args.isNotEmpty && mounted) {
+          try {
+            final data = args[0] as Map<String, dynamic>;
+            final messageType = data['type'] as String;
+            final messageData = data['data'] as Map<String, dynamic>?;
+            
+            print('Received message from web: $messageType');
+            
+            switch (messageType) {
+              case 'APP_READY':
+                print('Web app is ready! PDF count: ${messageData?['pdfCount']}');
+                _showFlutterToast('PDF Reader hazır');
+                break;
+                
+              case 'PAGE_CHANGED':
+                print('Page changed to: ${messageData?['pageId']}');
+                break;
+                
+              case 'TAB_CHANGED':
+                print('Tab changed to: ${messageData?['tabIndex']}');
+                break;
+                
+              case 'PDF_ADDED':
+                final fileName = messageData?['fileName'];
+                final fileSize = messageData?['fileSize'];
+                print('PDF added: $fileName ($fileSize)');
+                _showFlutterToast('$fileName eklendi');
+                break;
+                
+              case 'THEME_CHANGED':
+                print('Theme changed to: ${messageData?['theme']}');
+                break;
+                
+              case 'MENU_ITEM_CLICKED':
+                print('Menu item clicked: ${messageData?['itemId']}');
+                break;
+            }
+            
+          } catch (e) {
+            print('Web message error: $e');
+          }
+        }
+        return {'success': true};
+      },
+    );
+
+    // 📄 Dosya seçici handler'ı
+    _webViewController.addJavaScriptHandler(
+      handlerName: 'openFilePicker',
+      callback: (args) async {
+        await _openFilePicker();
+        return {'success': true};
+      },
+    );
+
+    // 🌐 Harici URL açma handler'ı
+    _webViewController.addJavaScriptHandler(
+      handlerName: 'openExternalUrl',
+      callback: (args) async {
+        if (args.isNotEmpty) {
+          final url = args[0] as String;
+          if (await canLaunchUrl(Uri.parse(url))) {
+            await launchUrl(Uri.parse(url));
+          }
+        }
+        return {'success': true};
+      },
+    );
+
+    // 📍 Storage yolu handler'ı
+    _webViewController.addJavaScriptHandler(
+      handlerName: 'getStoragePath',
+      callback: (args) async {
+        final dir = await getApplicationDocumentsDirectory();
+        return dir.path;
+      },
+    );
+
+    // 👁️ PDF görüntüleme handler'ı
+    _webViewController.addJavaScriptHandler(
+      handlerName: 'viewPDF',
       callback: (args) async {
         if (args.length >= 2 && mounted) {
-          final pdfBase64 = args[0];
-          final pdfName = args[1];
+          final pdfBase64 = args[0] as String;
+          final pdfName = args[1] as String;
           
-          print('Opening PDF: $pdfName, base64 length: ${pdfBase64.length}');
+          print('Opening PDF in viewer: $pdfName');
           
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -128,83 +342,39 @@ class _MainScreenState extends State<MainScreen> {
             ),
           );
         }
-        return null;
+        return {'success': true};
       },
     );
 
-    _webViewController.addJavaScriptHandler(
-      handlerName: 'openFilePicker',
-      callback: (args) async {
-        await _openFilePicker();
-        return null;
-      },
-    );
-
-    _webViewController.addJavaScriptHandler(
-      handlerName: 'openExternalUrl',
-      callback: (args) async {
-        if (args.isNotEmpty) {
-          final url = args[0];
-          if (await canLaunchUrl(Uri.parse(url))) {
-            await launchUrl(Uri.parse(url));
-          }
-        }
-        return null;
-      },
-    );
-
-    _webViewController.addJavaScriptHandler(
-      handlerName: 'getStoragePath',
-      callback: (args) async {
-        final dir = await getApplicationDocumentsDirectory();
-        return dir.path;
-      },
-    );
-
-    _webViewController.addJavaScriptHandler(
-      handlerName: 'saveFile',
-      callback: (args) async {
-        if (args.length >= 2) {
-          final fileName = args[0];
-          final base64Data = args[1];
-          await _saveFile(fileName, base64Data);
-        }
-        return null;
-      },
-    );
-
-    _webViewController.addJavaScriptHandler(
-      handlerName: 'shareFile',
-      callback: (args) async {
-        if (args.length >= 2) {
-          final fileName = args[0];
-          final base64Data = args[1];
-          await _shareFile(fileName, base64Data);
-        }
-        return null;
-      },
-    );
-
-    // Geri butonu için handler
+    // ⬅️ Geri butonu handler'ı
     _webViewController.addJavaScriptHandler(
       handlerName: 'goBack',
       callback: (args) async {
         if (await _webViewController.canGoBack()) {
           await _webViewController.goBack();
         }
-        return null;
+        return {'success': true};
       },
     );
 
-    // Toast gösterimi için handler
+    // 💬 Toast mesajı handler'ı
     _webViewController.addJavaScriptHandler(
       handlerName: 'showToast',
       callback: (args) async {
         if (args.isNotEmpty) {
-          final message = args[0];
+          final message = args[0] as String;
           _showFlutterToast(message);
         }
-        return null;
+        return {'success': true};
+      },
+    );
+
+    // 🧹 Temizlik için ek handler'lar
+    _webViewController.addJavaScriptHandler(
+      handlerName: 'clearCache',
+      callback: (args) async {
+        await _webViewController.clearCache();
+        return {'success': true};
       },
     );
   }
@@ -220,91 +390,44 @@ class _MainScreenState extends State<MainScreen> {
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
         final bytes = await File(file.path!).readAsBytes();
-        final base64 = UriData.fromBytes(bytes).toString();
+        final base64 = base64Encode(bytes);
         
+        print('File picked: ${file.name}, size: ${file.size} bytes');
+        
+        // JavaScript'e dosya verisini gönder
         await _webViewController.evaluateJavascript(source: '''
-          if (window.handleFileSelect) {
+          // Web sayfasına dosya verisini gönder
+          if (window.postMessage) {
             const fileData = {
-              name: '${file.name.replaceAll("'", "\\'")}',
-              size: ${file.size},
-              data: '${base64.replaceAll("'", "\\'")}'
+              type: 'FROM_FLUTTER',
+              action: 'ADD_PDF',
+              data: {
+                fileName: '${file.name.replaceAll("'", "\\'")}',
+                base64: '$base64',
+                fileSize: ${file.size}
+              }
             };
-            window.handleFileSelect(fileData);
+            window.postMessage(fileData, '*');
           }
         ''');
+        
+        _showFlutterToast('${file.name} yüklendi');
       }
     } catch (e) {
       print('File picker error: $e');
-      await _webViewController.evaluateJavascript(source: '''
-        if (window.showToast) {
-          window.showToast('Dosya seçilemedi: $e');
-        }
-      ''');
-    }
-  }
-
-  Future<void> _saveFile(String fileName, String base64Data) async {
-    try {
-      final dir = await getExternalStorageDirectory();
-      if (dir != null) {
-        final downloadsDir = Directory('${dir.path}/Download');
-        if (!downloadsDir.existsSync()) {
-          downloadsDir.createSync(recursive: true);
-        }
-
-        final filePath = '${downloadsDir.path}/$fileName';
-        
-        final dataPart = base64Data.contains(',') 
-            ? base64Data.split(',').last 
-            : base64Data;
-        final bytes = base64.decode(dataPart);
-        
-        await File(filePath).writeAsBytes(bytes);
-
-        _showFlutterToast('Dosya kaydedildi: $fileName');
-      }
-    } catch (e) {
-      print('Save file error: $e');
-      _showFlutterToast('Dosya kaydedilemedi');
-    }
-  }
-
-  Future<void> _shareFile(String fileName, String base64Data) async {
-    try {
-      final dir = await getTemporaryDirectory();
-      final tempPath = '${dir.path}/$fileName';
-      
-      final dataPart = base64Data.contains(',') 
-          ? base64Data.split(',').last 
-          : base64Data;
-      final bytes = base64.decode(dataPart);
-      
-      final file = await File(tempPath).writeAsBytes(bytes);
-
-      await _launchFileShareIntent(file.path);
-      
-      _showFlutterToast('Dosya paylaşılıyor...');
-    } catch (e) {
-      print('Share file error: $e');
-      _showFlutterToast('Dosya paylaşılamadı');
-    }
-  }
-
-  Future<void> _launchFileShareIntent(String filePath) async {
-    final uri = Uri.parse('file://$filePath');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else {
-      _showFlutterToast('Paylaşım uygulaması bulunamadı');
+      _showFlutterToast('Dosya seçilemedi: $e');
     }
   }
 
   void _showFlutterToast(String message) {
+    if (!mounted) return;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         duration: const Duration(seconds: 2),
         backgroundColor: Colors.grey[800],
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -362,7 +485,30 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> _loadWebView() async {
     try {
       final assetPath = 'assets/web/index.html';
+      print('Loading web view from: $assetPath');
+      
       await _webViewController.loadFile(assetFilePath: assetPath);
+      
+      // JavaScript ortamını başlat
+      await Future.delayed(const Duration(seconds: 1));
+      
+      await _webViewController.evaluateJavascript(source: '''
+        // Flutter bridge'ı tanıt
+        window.flutter_inappwebview = {
+          callHandler: function(handlerName, ...args) {
+            console.log('Calling Flutter handler:', handlerName, args);
+            window.flutter_inappwebview.callHandler(handlerName, ...args);
+          }
+        };
+        
+        // Web sayfasına Flutter'ın hazır olduğunu bildir
+        window.postMessage({
+          type: 'FROM_FLUTTER',
+          action: 'APP_READY',
+          data: { platform: 'flutter' }
+        }, '*');
+      ''');
+      
     } catch (e) {
       print('Load webview error: $e');
       setState(() {
@@ -386,7 +532,27 @@ class _MainScreenState extends State<MainScreen> {
             await _webViewController.goBack();
             return false;
           }
-          return true;
+          
+          // WebView'da geri gidilemiyorsa çıkış sorma
+          final shouldExit = await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Çıkış'),
+              content: const Text('Uygulamadan çıkmak istediğinize emin misiniz?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('HAYIR'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('EVET'),
+                ),
+              ],
+            ),
+          );
+          
+          return shouldExit ?? false;
         },
         child: AnnotatedRegion<SystemUiOverlayStyle>(
           value: const SystemUiOverlayStyle(
@@ -413,21 +579,32 @@ class _MainScreenState extends State<MainScreen> {
                     ),
                     onWebViewCreated: (controller) async {
                       _webViewController = controller;
+                      print('WebView created');
+                      
+                      // Handler'ları kur
+                      await Future.delayed(const Duration(milliseconds: 500));
                       await _setupJavaScriptHandlers();
+                      
+                      // Web sayfasını yükle
                       await _loadWebView();
                     },
                     onLoadStart: (controller, url) {
                       setState(() {
                         _isLoading = true;
                       });
+                      print('Load started: $url');
                     },
                     onLoadStop: (controller, url) async {
                       setState(() {
                         _isLoading = false;
                       });
+                      print('Load stopped: $url');
+                      
+                      // JavaScript ortamını hazırla
+                      await Future.delayed(const Duration(milliseconds: 100));
                       
                       await controller.evaluateJavascript(source: '''
-                        // Status bar ve navigation bar için CSS ayarları
+                        // Safe area için CSS ayarları
                         const style = document.createElement('style');
                         style.textContent = \`
                           :root {
@@ -448,78 +625,54 @@ class _MainScreenState extends State<MainScreen> {
                           .fab-container {
                             bottom: calc(80px + env(safe-area-inset-bottom, var(--safe-area-bottom)));
                           }
+                          .pdf-viewer-modal {
+                            padding-top: env(safe-area-inset-top, var(--safe-area-top));
+                          }
                         \`;
                         document.head.appendChild(style);
                         
-                        // Flutter ile iletişim için global fonksiyonlar
-                        window.flutterHandler = {
-                          openPDF: function(pdfBase64, pdfName) {
-                            console.log('Opening PDF via Flutter:', pdfName);
-                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                              window.flutter_inappwebview.callHandler('openPDF', pdfBase64, pdfName);
-                            } else {
-                              console.error('Flutter handler not available');
-                            }
-                          },
-                          openFilePicker: function() {
-                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                              window.flutter_inappwebview.callHandler('openFilePicker');
-                            }
-                          },
-                          saveFile: function(fileName, base64Data) {
-                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                              window.flutter_inappwebview.callHandler('saveFile', fileName, base64Data);
-                            }
-                          },
-                          shareFile: function(fileName, base64Data) {
-                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                              window.flutter_inappwebview.callHandler('shareFile', fileName, base64Data);
-                            }
-                          },
-                          goBack: function() {
-                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                              window.flutter_inappwebview.callHandler('goBack');
-                            }
-                          },
-                          showToast: function(message) {
-                            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                              window.flutter_inappwebview.callHandler('showToast', message);
-                            }
-                          }
-                        };
-                        
-                        // PDF açma fonksiyonunu güncelle
-                        window.openPDF = function(pdfBase64, pdfName) {
-                          window.flutterHandler.openPDF(pdfBase64, pdfName);
-                        };
-                        
-                        // localStorage desteği için
-                        if (typeof window.localStorage === 'undefined') {
-                          window.localStorage = {
-                            _data: {},
-                            setItem: function(key, value) {
-                              this._data[key] = value;
-                            },
-                            getItem: function(key) {
-                              return this._data[key] || null;
-                            },
-                            removeItem: function(key) {
-                              delete this._data[key];
-                            },
-                            clear: function() {
-                              this._data = {};
+                        // Flutter handler'larını globalleştir
+                        if (!window.flutter_inappwebview) {
+                          window.flutter_inappwebview = {
+                            callHandler: function(handlerName, ...args) {
+                              console.log('Flutter handler called:', handlerName, args);
+                              
+                              // Gerçek Flutter handler'ını çağır
+                              if (window.flutter_inappwebview && 
+                                  window.flutter_inappwebview.callHandler) {
+                                return window.flutter_inappwebview.callHandler(handlerName, ...args);
+                              }
+                              
+                              return Promise.resolve({success: false});
                             }
                           };
                         }
+                        
+                        // Flutter'dan mesajları dinle
+                        window.addEventListener('message', function(event) {
+                          if (event.data && event.data.type === 'FROM_FLUTTER') {
+                            console.log('Message from Flutter:', event.data);
+                            
+                            // Web sayfasının kendi mesaj handler'ını çağır
+                            if (window.handleFlutterMessage) {
+                              window.handleFlutterMessage(event.data);
+                            }
+                          }
+                        });
+                        
+                        console.log('Flutter environment ready');
                       ''');
                     },
                     onProgressChanged: (controller, progress) {
                       setState(() {
                         _progress = progress / 100;
                       });
+                      if (progress == 100) {
+                        print('WebView loaded completely');
+                      }
                     },
                     onLoadError: (controller, url, code, message) {
-                      print('Load error: $code - $message');
+                      print('Load error: $code - $message for URL: $url');
                       setState(() {
                         _hasError = true;
                         _isLoading = false;
@@ -530,13 +683,23 @@ class _MainScreenState extends State<MainScreen> {
                       
                       if (uri == null) return NavigationActionPolicy.ALLOW;
                       
+                      print('URL loading: ${uri.toString()}');
+                      
                       // PDF dosyalarını handle et
-                      if (uri.toString().endsWith('.pdf')) {
+                      if (uri.toString().toLowerCase().endsWith('.pdf')) {
+                        // PDF dosyasını aç
+                        try {
+                          await controller.loadUrl(urlRequest: URLRequest(url: uri));
+                          return NavigationActionPolicy.ALLOW;
+                        } catch (e) {
+                          print('Error loading PDF: $e');
+                        }
                         return NavigationActionPolicy.CANCEL;
                       }
                       
                       // Harici URL'leri varsayılan tarayıcıda aç
-                      if (uri.toString().startsWith('http')) {
+                      if (uri.toString().startsWith('http') || 
+                          uri.toString().startsWith('https')) {
                         if (await canLaunchUrl(uri)) {
                           await launchUrl(uri);
                           return NavigationActionPolicy.CANCEL;
@@ -546,7 +709,7 @@ class _MainScreenState extends State<MainScreen> {
                       return NavigationActionPolicy.ALLOW;
                     },
                     onConsoleMessage: (controller, consoleMessage) {
-                      print('Console: ${consoleMessage.message}');
+                      print('Web Console [${consoleMessage.messageLevel}]: ${consoleMessage.message}');
                     },
                   ),
                 ),
