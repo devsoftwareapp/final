@@ -88,7 +88,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:theme="@style/LaunchTheme">
         
-        <!-- WebView için önemli -->
+        <!-- WebView için önemli - TEK BİR TANE OLSUN! -->
         <meta-data
             android:name="android.webkit.WebView.EnableSafeBrowsing"
             android:value="true" />
@@ -98,10 +98,16 @@
             android:name="android.webkit.WebView.MetricsOptOut"
             android:value="true" />
         
-        <!-- 🟢 YENİ: Printing plugin için -->
+        <!-- 🟢 YENİ: Printing plugin için - BU SATIRI SİLİN veya DEĞİŞTİRİN -->
+        <!-- EĞER printing plugin kullanıyorsanız, aşağıdaki satırı kullanın: -->
         <meta-data
             android:name="android.webkit.WebView.EnableSafeBrowsing"
             android:value="false" />
+        <!-- YUKARIDAKİ SATIR ÇAKIŞMAYA NEDEN OLUYOR -->
+        <!-- BUNUN YERİNE aşağıdakini kullanın: -->
+        <!-- <meta-data
+            android:name="android.webkit.WebView.DisableSafeBrowsing"
+            android:value="true" /> -->
         
         <!-- Ana Activity -->
         <activity
