@@ -1295,3 +1295,37 @@ document.addEventListener('DOMContentLoaded', function() {
   // Uygulamayı başlat
   initializeApp();
 });
+
+
+function openPDFInIframe(base64Data, pdfName) {
+    const iframe = document.getElementById('pdfViewerIframe');
+    if (!iframe) return;
+    
+    console.log('Opening PDF for Flutter:', pdfName);
+    
+    // Flutter WebView için URL + mesaj kombinasyonu
+    const encodedBase64 = encodeURIComponent(base64Data);
+    const viewerUrl = `viewer.html?base64=${encodedBase64}&name=${encodeURIComponent(pdfName)}`;
+    
+    // Iframe'i yükle
+    iframe.src = viewerUrl;
+    
+    // Iframe yüklendiğinde
+    iframe.onload = function() {
+        console.log('PDF iframe loaded in Flutter');
+        
+        // 1. URL parametresi (yukarıdaki viewerUrl ile)
+        // 2. Ek olarak postMessage gönder
+        setTimeout(() => {
+            iframe.contentWindow.postMessage(
+                { 
+                    type: "pdfData", 
+                    base64: base64Data, 
+                    name: pdfName 
+                },
+                "*"
+            );
+            console.log('PDF data sent via postMessage');
+        }, 1000);
+    };
+}
