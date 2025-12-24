@@ -1130,77 +1130,134 @@
   <!-- Bu viewer.html icine gomme --> 
 
 
-
 <script>
-async function openPdfFromBase64(base64, name = "PDF") {
-  if (!base64) return;
+// viewer.html - WORKING VERSION WITH MESSAGE SUPPORT
 
-  if (base64.startsWith("data:application/pdf;base64,")) {
-    base64 = base64.substring("data:application/pdf;base64,".length);
-  }
+let currentBlobUrl = null;
 
-  const raw = atob(base64);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) {
-    bytes[i] = raw.charCodeAt(i);
-  }
-
-  const blob = new Blob([bytes], { type: "application/pdf" });
-  const blobUrl = URL.createObjectURL(blob);
-
-  const wait = setInterval(() => {
-    if (
-      window.PDFViewerApplication &&
-      PDFViewerApplication.initialized &&
-      PDFViewerApplication.eventBus
-    ) {
-      clearInterval(wait);
-
-      PDFViewerApplication.open({ url: blobUrl });
-      document.title = name;
-
-      // 🔔 PDF tamamen yüklendiğinde index.html'e haber ver
-      PDFViewerApplication.eventBus.on("pagesloaded", () => {
-        window.parent.postMessage(
-          { type: "pdf-ready" },
-          "*"
-        );
-        console.log("pdf-ready sent");
-      });
-
-      // temizlik
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+// PDF yükleme fonksiyonu
+function loadPDFFromBase64(base64String, fileName = "PDF") {
+    console.log('Loading PDF:', fileName.substring(0, 30) + '...');
+    
+    try {
+        // Base64 formatını düzelt
+        let cleanBase64 = base64String;
+        if (base64String.startsWith("data:application/pdf;base64,")) {
+            cleanBase64 = base64String.split(',')[1];
+        }
+        
+        // Base64 → Uint8Array
+        const raw = atob(cleanBase64);
+        const len = raw.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = raw.charCodeAt(i);
+        
+        // Uint8Array → Blob → Blob URL
+        const blob = new Blob([bytes], { type: "application/pdf" });
+        const blobUrl = URL.createObjectURL(blob);
+        
+        // Önceki blob'u temizle
+        if (currentBlobUrl) {
+            URL.revokeObjectURL(currentBlobUrl);
+        }
+        currentBlobUrl = blobUrl;
+        
+        console.log('Blob URL created');
+        
+        // Viewer initialize olana kadar bekle
+        const waiter = setInterval(() => {
+            if (!window.PDFViewerApplication || !PDFViewerApplication.initialized) return;
+            
+            clearInterval(waiter);
+            
+            // PDF.js v5.x için doğru kullanım: { url: blobUrl }
+            PDFViewerApplication.open({ url: blobUrl }).then(() => {
+                console.log('PDF successfully opened');
+                document.title = fileName;
+                
+                // Parent'a PDF'in hazır olduğunu bildir
+                if (window.parent) {
+                    window.parent.postMessage({
+                        type: 'PDF_VIEWER_READY',
+                        fileName: fileName,
+                        pageCount: PDFViewerApplication.pagesCount || 0
+                    }, '*');
+                }
+                
+                // 30 saniye sonra blob'u temizle
+                setTimeout(() => {
+                    if (currentBlobUrl === blobUrl) {
+                        URL.revokeObjectURL(blobUrl);
+                        currentBlobUrl = null;
+                        console.log('Blob URL cleaned up');
+                    }
+                }, 30000);
+                
+            }).catch(error => {
+                console.error('PDFViewerApplication.open error:', error);
+                
+                if (window.parent) {
+                    window.parent.postMessage({
+                        type: 'PDF_ERROR',
+                        fileName: fileName,
+                        error: error.message
+                    }, '*');
+                }
+            });
+            
+        }, 50);
+        
+    } catch (error) {
+        console.error('PDF loading error:', error);
+        
+        if (window.parent) {
+            window.parent.postMessage({
+                type: 'PDF_ERROR',
+                fileName: fileName,
+                error: error.message
+            }, '*');
+        }
     }
-  }, 100);
 }
 
-// index.html → viewer.html
-window.addEventListener("message", (e) => {
-  if (e.data?.type === "pdfData") {
-    openPdfFromBase64(e.data.base64, e.data.name);
-  }
+// Ana event listener - webviewerloaded
+document.addEventListener("webviewerloaded", () => {
+    console.log('PDF Viewer loaded, ready to receive PDF data');
+    
+    // Parent'a hazır olduğumuzu bildir
+    if (window.parent) {
+        window.parent.postMessage({
+            type: 'VIEWER_READY'
+        }, '*');
+    }
+    
+    // URL'den base64 al (backup yöntemi)
+    const params = new URLSearchParams(window.location.search);
+    const base64FromUrl = params.get("base64");
+    
+    if (base64FromUrl) {
+        loadPDFFromBase64(base64FromUrl, "PDF");
+    }
 });
 
-// viewer.html doğrudan açılırsa
-window.addEventListener("load", () => {
-  const ss = sessionStorage.getItem("pdfData");
-  if (ss) {
-    openPdfFromBase64(ss, sessionStorage.getItem("pdfName"));
-    sessionStorage.removeItem("pdfData");
-    return;
-  }
+// Mesaj listener'ı - index.html'den gelen PDF verilerini al
+window.addEventListener("message", function(event) {
+    console.log('viewer.html message received:', event.data?.type);
+    
+    if (event.data?.type === "pdfData") {
+        console.log('PDF data received from message');
+        loadPDFFromBase64(event.data.base64, event.data.name || "PDF");
+    }
+});
 
-  const p = new URLSearchParams(location.search);
-  if (p.has("base64")) {
-    openPdfFromBase64(p.get("base64"));
-    return;
-  }
-
-  if (window.name && window.name.startsWith("data:application/pdf")) {
-    openPdfFromBase64(window.name);
-  }
+// Temizlik
+window.addEventListener('beforeunload', function() {
+    if (currentBlobUrl) {
+        URL.revokeObjectURL(currentBlobUrl);
+    }
 });
 </script>
+
 
   <!-- Bu viewer.html icine gomme --> 
   <!-- Bu viewer.html icine gomme --> 
