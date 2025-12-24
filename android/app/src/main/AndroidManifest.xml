@@ -19,6 +19,9 @@
     <!-- Kamera izni (belge tarama için) -->
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- 🔴 YENİ: Yazdırma için POST_NOTIFICATIONS izni (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Package visibility queries (Android 11+ için) -->
     <queries>
         <!-- Tüm dosya erişim izni için -->
@@ -54,6 +57,23 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
+        
+        <!-- 🟢 YENİ: Yazdırma uygulamaları -->
+        <intent>
+            <action android:name="android.printservice.PrintService" />
+        </intent>
+        
+        <!-- 🟢 YENİ: Paylaşım uygulamaları -->
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="*/*" />
+        </intent>
+        
+        <!-- 🟢 YENİ: Diğer PDF okuyucular -->
+        <package android:name="com.adobe.reader" />
+        <package android:name="com.google.android.apps.pdfviewer" />
+        <package android:name="com.foxit.mobile.pdf.lite" />
+        <package android:name="com.sec.android.app.sbrowser" />
     </queries>
 
     <application
@@ -64,6 +84,8 @@
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
         android:allowBackup="true"
+        android:fullBackupContent="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:theme="@style/LaunchTheme">
         
         <!-- WebView için önemli -->
@@ -75,6 +97,11 @@
         <meta-data
             android:name="android.webkit.WebView.MetricsOptOut"
             android:value="true" />
+        
+        <!-- 🟢 YENİ: Printing plugin için -->
+        <meta-data
+            android:name="android.webkit.WebView.EnableSafeBrowsing"
+            android:value="false" />
         
         <!-- Ana Activity -->
         <activity
@@ -145,6 +172,13 @@
                 <data android:mimeType="application/pdf" />
             </intent-filter>
 
+            <!-- 🟢 YENİ: Yazdırma intent'leri -->
+            <intent-filter>
+                <action android:name="android.intent.action.PRINT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/pdf" />
+            </intent-filter>
+
         </activity>
 
         <!-- Flutter embedding -->
@@ -163,6 +197,17 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- 🟢 YENİ: Printing plugin için provider -->
+        <provider
+            android:name="es.antonborri.printing.PrintFileProvider"
+            android:authorities="${applicationId}.printfileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/printing_paths" />
+        </provider>
+
         <!-- PDF Viewer Activity (Opsiyonel - sadece PDF açmak için) -->
         <activity
             android:name=".PDFViewerActivity"
@@ -172,6 +217,25 @@
             android:screenOrientation="portrait"
             android:exported="false">
         </activity>
+
+        <!-- 🟢 YENİ: InAppWebView için gerekli activity -->
+        <activity
+            android:name="com.pichillilorenzo.flutter_inappwebview.InAppBrowserActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:hardwareAccelerated="true"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
+            android:exported="false" />
+
+        <activity
+            android:name="com.pichillilorenzo.flutter_inappwebview.ChromeCustomTabsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name="com.pichillilorenzo.flutter_inappwebview.ChromeSafariBrowserActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:hardwareAccelerated="true"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
+            android:exported="false" />
 
     </application>
 
