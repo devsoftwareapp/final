@@ -1,8 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<paths>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- İndirilenler klasörü -->
+    <external-path name="downloads" path="Download" />
+    
+    <!-- Dış depolama -->
     <external-path name="external_files" path="." />
-    <external-cache-path name="external_cache" path="." />
+    
+    <!-- Dahili cache -->
     <cache-path name="cache" path="." />
-    <external-files-path name="external_files_path" path="." />
+    
+    <!-- Dış cache -->
+    <external-cache-path name="external_cache" path="." />
+    
+    <!-- Dahili files -->
     <files-path name="files" path="." />
+    
+    <!-- Dış files -->
+    <external-files-path name="external_files_path" path="." />
+    
+    <!-- Root erişimi (gerekirse) -->
+    <root-path name="root" path="." />
+    
+    <!-- PDF dosyaları için özel path'ler -->
+    <external-path name="pdf_downloads" path="Download/PDF" />
+    <external-path name="pdf_documents" path="Documents/PDF" />
 </paths>
