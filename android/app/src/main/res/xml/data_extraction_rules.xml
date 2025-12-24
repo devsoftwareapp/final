@@ -3,16 +3,16 @@
     <cloud-backup>
         <!-- Exclude shared_prefs which may contain sensitive info -->
         <exclude domain="sharedpref" path="."/>
-        <!-- Exclude files in the cache directory -->
-        <exclude domain="cache" path="."/>
+        <!-- Exclude files in the cache directory - DOMAIN DEĞİŞTİRİLDİ -->
+        <exclude domain="file" path="cache"/>
         <!-- Exclude files in external cache directory -->
         <exclude domain="external" path="Android/data/com.example.pdfreader/cache"/>
     </cloud-backup>
     <device-transfer>
         <!-- Exclude shared_prefs which may contain sensitive info -->
         <exclude domain="sharedpref" path="."/>
-        <!-- Exclude files in the cache directory -->
-        <exclude domain="cache" path="."/>
+        <!-- Exclude files in the cache directory - DOMAIN DEĞİŞTİRİLDİ -->
+        <exclude domain="file" path="cache"/>
         <!-- Exclude files in external cache directory -->
         <exclude domain="external" path="Android/data/com.example.pdfreader/cache"/>
     </device-transfer>
