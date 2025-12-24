@@ -21,7 +21,7 @@ dependencies:
   open_file: ^3.5.10
   # PDF işlemleri için ZORUNLU
   printing: ^5.12.3      # Yazdırma için
-  share_plus: ^10.4.0    # Paylaşım için
+  share_plus: ^12.0.1    # Paylaşım için
 
 dev_dependencies:
   flutter_test:
