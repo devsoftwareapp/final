@@ -1,5 +1,5 @@
 name: pdfreader
-description: "Advanced PDF Reader with PDF.js and InAppWebView"
+description: "PDF Reader"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -11,40 +11,45 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   flutter_inappwebview: ^6.1.5
-  url_launcher: ^6.3.1
+  url_launcher: ^6.3.2
   permission_handler: ^12.0.1
   path_provider: ^2.1.5
   file_picker: ^10.3.8
   shared_preferences: ^2.2.2
   dio: ^5.3.0
   connectivity_plus: ^5.0.0
-  open_file_plus: ^10.1.0 # open_file yerine güncel sürüm
-  printing: ^5.13.2
-  share_plus: ^10.1.2
+  open_file: ^3.5.10
+  # PDF işlemleri için ZORUNLU
+  printing: ^5.12.3      # Yazdırma için
+  share_plus: ^10.4.0    # Paylaşım için
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true
   
+  # Tüm asset'ler
   assets:
+    # assets/build klasörü
     - assets/build/
-    # Web Ana Dosyalar
+    
+    # Tüm web klasörünü ekle
     - assets/web/
+    
+    # Web ana dosyaları (ek güvenlik için)
+    - assets/web/index.html
     - assets/web/viewer.html
     - assets/web/viewer.css
     - assets/web/viewer.mjs
-    - assets/web/index.html
     - assets/web/index_viewer_bridge.js
     
-    # Fontlar ve Görseller
+    # Images klasörü
     - assets/web/images/
     
-    # Locale Klasörleri
-    - assets/web/locale/
+    # Tüm locale klasörleri - tam liste
     - assets/web/locale/af/
     - assets/web/locale/ar/
     - assets/web/locale/ast/
