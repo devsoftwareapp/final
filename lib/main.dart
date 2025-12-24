@@ -3,14 +3,13 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
-import 'dart:convert';
+import 'dart:convert'; // Bu satır eklenmeli
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';  // Yeni: Paylaşım için
-import 'package:printing/printing.dart';      // Yeni: Yazdırma için
-import 'package:open_file/open_file.dart';    // Yeni: Dosya açma için
-import 'pdfviewer.dart'; // PDF viewer sayfanız
+import 'package:share_plus/share_plus.dart';  // PDF paylaşım için
+import 'package:printing/printing.dart';      // PDF yazdırma için
+import 'package:open_file/open_file.dart';    // Dosya açma için
 
 void main() {
   runApp(const MyApp());
@@ -119,7 +118,7 @@ class _MainScreenState extends State<MainScreen> {
     _webViewController.addJavaScriptHandler(
       handlerName: 'sharePDF',
       callback: (args) async {
-        if (args.isNotEmpty && mounted) {
+        if (args.isNotEmpty) {
           try {
             final data = args[0] as Map<String, dynamic>;
             final base64 = data['base64'] as String;
@@ -165,7 +164,7 @@ class _MainScreenState extends State<MainScreen> {
     _webViewController.addJavaScriptHandler(
       handlerName: 'printPDF',
       callback: (args) async {
-        if (args.isNotEmpty && mounted) {
+        if (args.isNotEmpty) {
           try {
             final data = args[0] as Map<String, dynamic>;
             final base64 = data['base64'] as String;
@@ -200,7 +199,7 @@ class _MainScreenState extends State<MainScreen> {
     _webViewController.addJavaScriptHandler(
       handlerName: 'savePDF',
       callback: (args) async {
-        if (args.isNotEmpty && mounted) {
+        if (args.isNotEmpty) {
           try {
             final data = args[0] as Map<String, dynamic>;
             final base64 = data['base64'] as String;
@@ -216,20 +215,24 @@ class _MainScreenState extends State<MainScreen> {
             
             // Dosya yolu
             final dir = await getExternalStorageDirectory();
-            final downloadsDir = Directory('${dir?.path}/Download');
-            if (!downloadsDir.existsSync()) {
-              downloadsDir.createSync(recursive: true);
-            }
-            
-            final filePath = '${downloadsDir.path}/$fileName';
-            final file = File(filePath);
-            await file.writeAsBytes(bytes);
-            
-            _showFlutterToast('PDF kaydedildi: $fileName');
-            
-            // Kullanıcıya bildir
-            if (await file.exists()) {
-              await OpenFile.open(filePath);
+            if (dir != null) {
+              final downloadsDir = Directory('${dir.path}/Download');
+              if (!downloadsDir.existsSync()) {
+                downloadsDir.createSync(recursive: true);
+              }
+              
+              final filePath = '${downloadsDir.path}/$fileName';
+              final file = File(filePath);
+              await file.writeAsBytes(bytes);
+              
+              _showFlutterToast('PDF kaydedildi: $fileName');
+              
+              // Kullanıcıya bildir
+              if (await file.exists()) {
+                await OpenFile.open(filePath);
+              }
+            } else {
+              _showFlutterToast('Dosya kaydedilemedi: Depolama bulunamadı');
             }
             
           } catch (e) {
@@ -245,7 +248,7 @@ class _MainScreenState extends State<MainScreen> {
     _webViewController.addJavaScriptHandler(
       handlerName: 'webMessage',
       callback: (args) async {
-        if (args.isNotEmpty && mounted) {
+        if (args.isNotEmpty) {
           try {
             final data = args[0] as Map<String, dynamic>;
             final messageType = data['type'] as String;
@@ -320,29 +323,6 @@ class _MainScreenState extends State<MainScreen> {
       callback: (args) async {
         final dir = await getApplicationDocumentsDirectory();
         return dir.path;
-      },
-    );
-
-    // 👁️ PDF görüntüleme handler'ı
-    _webViewController.addJavaScriptHandler(
-      handlerName: 'viewPDF',
-      callback: (args) async {
-        if (args.length >= 2 && mounted) {
-          final pdfBase64 = args[0] as String;
-          final pdfName = args[1] as String;
-          
-          print('Opening PDF in viewer: $pdfName');
-          
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => PDFViewerScreen(
-                pdfBase64: pdfBase64,
-                pdfName: pdfName,
-              ),
-            ),
-          );
-        }
-        return {'success': true};
       },
     );
 
@@ -494,12 +474,17 @@ class _MainScreenState extends State<MainScreen> {
       
       await _webViewController.evaluateJavascript(source: '''
         // Flutter bridge'ı tanıt
-        window.flutter_inappwebview = {
-          callHandler: function(handlerName, ...args) {
-            console.log('Calling Flutter handler:', handlerName, args);
-            window.flutter_inappwebview.callHandler(handlerName, ...args);
-          }
-        };
+        if (!window.flutter_inappwebview) {
+          window.flutter_inappwebview = {
+            callHandler: function(handlerName, ...args) {
+              console.log('Calling Flutter handler:', handlerName, args);
+              // Flutter handler çağrılacak
+              return new Promise((resolve) => {
+                resolve({success: true});
+              });
+            }
+          };
+        }
         
         // Web sayfasına Flutter'ın hazır olduğunu bildir
         window.postMessage({
