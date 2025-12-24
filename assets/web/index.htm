@@ -1,0 +1,1920 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Reader</title>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+<!-- viewer.html için gerekli CSS -->
+<link rel="stylesheet" href="viewer.css">
+
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+/* Bottom Bar */
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: #ffffff;
+  color: #333;
+  display: flex;
+  z-index: 1000;
+  border-top: 1px solid #e0e0e0;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+}
+
+.bottom-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: #ffffff;
+  transition: all 0.2s;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+}
+
+.bottom-tab.active {
+  color: #2196f3;
+  font-weight: 600;
+}
+
+.bottom-tab:not(.active):hover {
+  background: #f5f5f5;
+}
+
+/* Sayfalar */
+.page {
+  position: absolute;
+  top: 0;
+  bottom: 60px;
+  left: 0;
+  right: 0;
+  display: none;
+}
+
+.page.active {
+  display: block;
+}
+
+.scroll-container {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #f8f9fa;
+}
+
+/* Top Bar */
+.top-bar {
+  height: 56px;
+  background: #ffffff;
+  color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid #e0e0e0;
+  position: sticky;
+  top: 0;
+  z-index: 500;
+}
+
+.top-bar-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.top-bar-icons {
+  display: flex;
+  gap: 20px;
+}
+
+.top-bar-icons .material-icons {
+  cursor: pointer;
+  font-size: 24px;
+  color: #666;
+}
+
+/* --- Drawer Styles --- */
+.drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1100;
+  display: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.drawer-overlay.active {
+  display: block;
+  opacity: 1;
+}
+
+.drawer-sidebar {
+  position: fixed;
+  top: 0;
+  left: -280px;
+  width: 280px;
+  height: 100%;
+  background: #ffffff;
+  z-index: 1200;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
+  transition: left 0.3s ease;
+}
+
+.drawer-sidebar.active {
+  left: 0;
+}
+
+.drawer-header {
+  padding: 24px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.drawer-logo {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.drawer-logo img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.drawer-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.drawer-menu {
+  padding: 20px 0;
+}
+
+.drawer-item {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  color: #333;
+  text-decoration: none;
+  transition: all 0.2s;
+  cursor: pointer;
+  border-left: 4px solid transparent;
+}
+
+.drawer-item:hover {
+  background: #f5f5f5;
+}
+
+.drawer-item.active {
+  background: #f0f0f8;
+  border-left-color: #667eea;
+  color: #667eea;
+  font-weight: 600;
+}
+
+.drawer-icon {
+  margin-right: 15px;
+  color: #666;
+  font-size: 22px;
+  width: 24px;
+  text-align: center;
+}
+
+.drawer-item.active .drawer-icon {
+  color: #667eea;
+}
+
+.drawer-text {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.drawer-arrow {
+  color: #999;
+  font-size: 20px;
+  transition: transform 0.3s ease;
+}
+
+.drawer-arrow.rotated {
+  transform: rotate(180deg);
+}
+
+/* Alt çekmece stili */
+.drawer-submenu {
+  max-height: 0;
+  overflow: hidden;
+  background: #f8f8f8;
+  transition: max-height 0.4s ease, opacity 0.3s ease;
+  opacity: 0;
+}
+
+.drawer-submenu.active {
+  max-height: 200px;
+  opacity: 1;
+}
+
+.drawer-subitem {
+  padding: 12px 20px 12px 60px;
+  color: #555;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.drawer-subitem:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+/* --- Dosyalar Sayfası --- */
+.files-container {
+  padding: 20px;
+}
+
+/* Başlık Stili - Resimdeki gibi */
+.main-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #000;
+  margin-bottom: 24px;
+  padding-top: 10px;
+}
+
+/* Bulut Servisleri Listesi */
+.cloud-service-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: #ffffff;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cloud-service-item:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+
+.service-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 16px;
+  flex-shrink: 0;
+  background: #f5f5f5;
+}
+
+.service-icon img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.service-icon .material-icons {
+  font-size: 24px;
+}
+
+.service-text {
+  flex: 1;
+  font-size: 16px;
+  color: #000;
+  font-weight: 500;
+}
+
+.service-arrow {
+  color: #999;
+}
+
+/* Alt Öğe (Gmail) - Resimdeki gibi içeriden başlayan */
+.sub-item {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px 14px 60px;
+  background: #ffffff;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  margin-left: 16px;
+  border: 1px solid #f0f0f0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sub-item:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.sub-item .service-icon {
+  width: 36px;
+  height: 36px;
+  margin-right: 12px;
+  background: #f9f9f9;
+}
+
+.sub-item .service-icon img {
+  width: 22px;
+  height: 22px;
+}
+
+/* Daha Fazla Butonu - Resimdeki gibi - smartphone ikonu eklendi */
+.more-files-section {
+  display: flex;
+  align-items: center;
+  padding: 20px;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e0e0e0;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 24px;
+}
+
+.more-files-section:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+
+.more-files-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 16px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.more-files-icon img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.more-files-content {
+  flex: 1;
+}
+
+.more-files-text {
+  font-size: 17px;
+  color: #000;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.more-files-subtext {
+  font-size: 14px;
+  color: #666;
+}
+
+.more-files-arrow {
+  color: #999;
+}
+
+/* --- Anasayfa Kartları --- */
+.cards {
+  display: flex;
+  gap: 16px;
+  padding: 24px;
+  background: transparent;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.cards::-webkit-scrollbar {
+  display: none;
+}
+
+.card-border-wrap {
+  min-width: 84px;
+  height: 100px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 2px;
+  border-radius: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.card-border-wrap:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.25);
+}
+
+.card {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  text-align: center;
+}
+
+.icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+.icon-box .material-icons {
+  font-size: 20px;
+}
+
+.card-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #212529;
+  line-height: 1.3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 2.6em;
+  width: 100%;
+  word-break: break-word;
+}
+
+.card-label span {
+  display: block;
+}
+
+/* Renk Paleti */
+.bg-resim1 { background: #ffe9e9; color: #d32f2f; }
+.bg-resim2 { background: #f1f3e8; color: #4caf50; }
+.bg-resim3 { background: #eef1f9; color: #2196f3; }
+.bg-purple { background: #f4eef9; color: #9c27b0; }
+
+/* TAB BAR */
+.tab-bar {
+  position: sticky;
+  top: 0;
+  height: 52px;
+  background: #ffffff;
+  display: flex;
+  border-bottom: 1px solid #e0e0e0;
+  z-index: 500;
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  font-weight: 600;
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+  position: relative;
+  color: #666;
+  background: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.tab.active {
+  color: #000;
+}
+
+.tab.active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 25%;
+  right: 25%;
+  height: 3px;
+  background: #667eea;
+  border-radius: 2px;
+}
+
+/* İçerik Alanı */
+.content {
+  padding: 20px;
+  min-height: 100%;
+  background: #ffffff;
+  padding-bottom: 80px;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* Sayfa İçerik Stilleri */
+.page-content {
+  background: #ffffff;
+  padding: 24px 20px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #000;
+  margin-bottom: 20px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin-top: 28px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 16px;
+  background: #ffffff;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.setting-item:hover {
+  background: #f8f9fa;
+}
+
+.setting-label {
+  font-size: 16px;
+  color: #333;
+  font-weight: 500;
+}
+
+.setting-value {
+  font-size: 15px;
+  color: #666;
+}
+
+.setting-arrow {
+  color: #999;
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: #ffffff;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #e0e0e0;
+  cursor: pointer;
+}
+
+.theme-option.active {
+  border-color: #667eea;
+  background: #f8f9ff;
+}
+
+.theme-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  margin-right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-icon.device { background: #f0f0f0; color: #666; }
+.theme-icon.light { background: #ffffff; color: #ffb300; border: 2px solid #f0f0f0; }
+.theme-icon.dark { background: #333333; color: #fff; }
+
+.theme-text {
+  flex: 1;
+}
+
+.theme-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.theme-desc {
+  font-size: 14px;
+  color: #666;
+}
+
+.theme-check {
+  color: #667eea;
+  font-size: 22px;
+}
+
+.help-form {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  margin-top: 20px;
+  border: 1px solid #e0e0e0;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.form-input, .form-textarea {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 16px;
+  font-family: inherit;
+  background: #f9f9f9;
+}
+
+.form-input:focus, .form-textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  background: #ffffff;
+}
+
+.form-textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.submit-button {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.submit-button:hover {
+  opacity: 0.9;
+}
+
+.form-note {
+  margin-top: 16px;
+  font-size: 13px;
+  color: #666;
+  text-align: center;
+}
+
+.privacy-text {
+  font-size: 16px;
+  line-height: 1.6;
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.privacy-link {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+  display: inline-block;
+  margin-top: 16px;
+}
+
+.privacy-link:hover {
+  text-decoration: underline;
+}
+
+.hr-line {
+  height: 1px;
+  background: #eee;
+  margin: 24px 0;
+}
+
+/* Ayarlar için dil seçim kutusu */
+.select-box {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 16px;
+  background: #f9f9f9;
+  color: #333;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.select-box:focus {
+  outline: none;
+  border-color: #667eea;
+  background: #ffffff;
+}
+
+.setting-desc {
+  font-size: 14px;
+  color: #666;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+/* PDF Listesi Öğeleri */
+.pdf-item {
+  height: 70px;
+  background: #fff;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  border: 1px solid #e0e0e0;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.pdf-item:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.pdf-icon {
+  width: 40px;
+  height: 40px;
+  background: #f0f7ff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 15px;
+  color: #2196f3;
+  flex-shrink: 0;
+}
+
+.pdf-info {
+  flex: 1;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.pdf-name {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+
+.pdf-meta {
+  font-size: 12px;
+  color: #666;
+}
+
+.pdf-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 10px;
+}
+
+.favorite-star {
+  color: #ccc;
+  font-size: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.favorite-star:hover {
+  color: #ffc107;
+}
+
+.favorite-star.favorited {
+  color: #ffc107;
+}
+
+.more-options {
+  color: #999;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.more-options:hover {
+  background: #f5f5f5;
+  color: #666;
+}
+
+/* Context Menu */
+.context-menu {
+  position: absolute;
+  right: 10px;
+  top: 50px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  min-width: 180px;
+  z-index: 1000;
+  display: none;
+  overflow: hidden;
+  border: 1px solid #e0e0e0;
+}
+
+.context-menu.active {
+  display: block;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.context-menu-item:last-child {
+  border-bottom: none;
+}
+
+.context-menu-item:hover {
+  background: #f8f9fa;
+}
+
+.context-menu-icon {
+  margin-right: 12px;
+  color: #666;
+  font-size: 20px;
+  width: 24px;
+  text-align: center;
+}
+
+.context-menu-text {
+  font-size: 15px;
+  color: #333;
+  font-weight: 500;
+  flex: 1;
+}
+
+.context-menu-item.delete .context-menu-icon {
+  color: #f44336;
+}
+
+.context-menu-item.delete .context-menu-text {
+  color: #f44336;
+}
+
+.context-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: transparent;
+  z-index: 999;
+  display: none;
+}
+
+.context-menu-overlay.active {
+  display: block;
+}
+
+/* FAB (Floating Action Button) */
+.fab-container {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  z-index: 1000;
+  display: none;
+}
+
+.fab-container.active {
+  display: block;
+}
+
+.fab-main {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 1002;
+}
+
+.fab-main:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+}
+
+.fab-main .material-icons {
+  color: white;
+  font-size: 24px;
+  transition: transform 0.3s ease;
+}
+
+.fab-main.rotated .material-icons {
+  transform: rotate(45deg);
+}
+
+.fab-menu {
+  position: absolute;
+  bottom: 70px;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.3s ease;
+  pointer-events: none;
+  z-index: 1001;
+}
+
+.fab-menu.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: all;
+}
+
+.fab-item {
+  width: 140px;
+  height: 48px;
+  background: white;
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+  cursor: pointer;
+  transition: all 0.2s;
+  transform: translateX(20px);
+  opacity: 0;
+}
+
+.fab-menu.active .fab-item:nth-child(1) {
+  transform: translateX(0);
+  opacity: 1;
+  transition-delay: 0.05s;
+}
+
+.fab-menu.active .fab-item:nth-child(2) {
+  transform: translateX(0);
+  opacity: 1;
+  transition-delay: 0.1s;
+}
+
+.fab-item:hover {
+  transform: translateX(-5px) !important;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.fab-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  color: white;
+}
+
+.fab-icon.scan {
+  background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+}
+
+.fab-icon.upload {
+  background: linear-gradient(135deg, #2196F3 0%, #0D47A1 100%);
+}
+
+.fab-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.fab-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 999;
+  display: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.fab-overlay.active {
+  display: block;
+  opacity: 1;
+}
+
+/* File Picker */
+.file-picker-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1300;
+  display: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.file-picker-overlay.active {
+  display: block;
+  opacity: 1;
+}
+
+.file-picker-modal {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-radius: 20px 20px 0 0;
+  padding: 24px;
+  z-index: 1400;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.file-picker-modal.active {
+  transform: translateY(0);
+}
+
+.file-picker-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.file-option {
+  display: flex;
+  align-items: center;
+  padding: 18px 16px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+
+.file-option:hover {
+  background: #e9ecef;
+  border-color: #667eea;
+}
+
+.file-option-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 15px;
+  color: white;
+}
+
+.file-option-icon.device {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.file-option-text {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+.cancel-button {
+  width: 100%;
+  padding: 16px;
+  background: #f8f9fa;
+  color: #666;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 20px;
+  transition: all 0.2s;
+}
+
+.cancel-button:hover {
+  background: #e9ecef;
+}
+
+/* Gizli dosya input */
+.hidden-file-input {
+  display: none;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.empty-icon {
+  font-size: 48px;
+  color: #ccc;
+  margin-bottom: 16px;
+}
+
+.empty-text {
+  font-size: 16px;
+  color: #666;
+}
+
+/* PDF Viewer Modal Stilleri */
+.pdf-viewer-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #000;
+  z-index: 2000;
+  display: none;
+  flex-direction: column;
+}
+
+.pdf-viewer-header {
+  height: 56px;
+  background: #1e1e1e;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.pdf-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+  cursor: pointer;
+}
+
+.pdf-back-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.pdf-back-btn .material-icons {
+  color: #ffffff;
+  font-size: 24px;
+}
+
+.pdf-title {
+  flex: 1;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 500;
+  padding: 0 8px;
+}
+
+.pdf-toolbar-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.pdf-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+  cursor: pointer;
+  position: relative;
+}
+
+.pdf-action-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.pdf-action-btn .material-icons {
+  color: #ffffff;
+  font-size: 22px;
+}
+
+/* PDF Viewer Iframe */
+.pdf-viewer-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: #525659;
+}
+
+/* Loading State */
+.pdf-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  color: white;
+  font-size: 16px;
+}
+
+.pdf-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #ffffff;
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Toast Notification */
+.pdf-toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #323232;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0;
+  transition: all 0.3s ease;
+  z-index: 1001;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.pdf-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ESC tuşu için body scroll durumu */
+body.pdf-viewer-open {
+  overflow: hidden;
+}
+</style>
+</head>
+
+<body>
+
+<!-- PDF Viewer Modal (Gizli) -->
+<div id="pdfViewerModal" class="pdf-viewer-modal">
+  <div class="pdf-viewer-header">
+    <div class="pdf-back-btn" onclick="closePDFViewer()">
+      <span class="material-icons">arrow_back</span>
+    </div>
+    
+    <div class="pdf-title" id="pdfViewerTitle">PDF Görüntüleyici</div>
+    
+    <div class="pdf-toolbar-actions">
+      <div class="pdf-action-btn" id="pdfShareBtn" title="Paylaş">
+        <span class="material-icons">share</span>
+      </div>
+      <div class="pdf-action-btn" id="pdfPrintBtn" title="Yazdır">
+        <span class="material-icons">print</span>
+      </div>
+      <div class="pdf-action-btn" id="pdfSaveBtn" title="Kaydet">
+        <span class="material-icons">save</span>
+      </div>
+    </div>
+  </div>
+  
+  <div class="pdf-loading-overlay" id="pdfLoadingOverlay">
+    <div class="pdf-loading-spinner"></div>
+    <div>PDF yükleniyor...</div>
+  </div>
+  
+  <iframe id="pdfViewerIframe" class="pdf-viewer-iframe"></iframe>
+  
+  <div class="pdf-toast" id="pdfToast"></div>
+</div>
+
+<!-- Drawer Sidebar -->
+<div class="drawer-overlay" id="drawerOverlay"></div>
+<div class="drawer-sidebar" id="drawerSidebar">
+  <div class="drawer-header">
+    <div class="drawer-logo">
+      <img src="images/logo.png" alt="PDF Reader Logo">
+    </div>
+    <div class="drawer-title">PDF Reader</div>
+  </div>
+  
+  <div class="drawer-menu">
+    <div class="drawer-item" onclick="openDrawerItem('about')">
+      <div class="drawer-icon"><span class="material-icons">info</span></div>
+      <div class="drawer-text">Hakkında</div>
+      <div class="drawer-arrow"><span class="material-icons">chevron_right</span></div>
+    </div>
+    
+    <div class="drawer-item" onclick="toggleSubMenu('settings')">
+      <div class="drawer-icon"><span class="material-icons">settings</span></div>
+      <div class="drawer-text">Ayarlar & Tercihler</div>
+      <div class="drawer-arrow"><span class="material-icons" id="settingsArrow">expand_more</span></div>
+    </div>
+    
+    <div class="drawer-submenu" id="settingsSubmenu">
+      <div class="drawer-subitem" onclick="openDrawerItem('app-language')">Uygulama Dili</div>
+      <div class="drawer-subitem" onclick="openDrawerItem('pdf-language')">PDF Dili</div>
+      <div class="drawer-subitem" onclick="openDrawerItem('theme')">Tema</div>
+    </div>
+    
+    <div class="drawer-item" onclick="openDrawerItem('privacy')">
+      <div class="drawer-icon"><span class="material-icons">privacy_tip</span></div>
+      <div class="drawer-text">Gizlilik</div>
+      <div class="drawer-arrow"><span class="material-icons">chevron_right</span></div>
+    </div>
+    
+    <div class="drawer-item" onclick="openDrawerItem('help')">
+      <div class="drawer-icon"><span class="material-icons">help</span></div>
+      <div class="drawer-text">Yardım</div>
+      <div class="drawer-arrow"><span class="material-icons">chevron_right</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- File Picker Modal -->
+<div class="file-picker-overlay" id="filePickerOverlay"></div>
+<div class="file-picker-modal" id="filePickerModal">
+  <div class="file-picker-title">PDF Dosyası Seçin</div>
+  
+  <div class="file-option" onclick="openFilePicker()">
+    <div class="file-option-icon device">
+      <span class="material-icons">folder</span>
+    </div>
+    <div class="file-option-text">Cihazdan Dosya Seç</div>
+  </div>
+  
+  <div class="file-option" onclick="openFilePicker()">
+    <div class="file-option-icon device">
+      <span class="material-icons">description</span>
+    </div>
+    <div class="file-option-text">PDF Dosyası Yükle</div>
+  </div>
+  
+  <button class="cancel-button" onclick="closeFilePicker()">İptal</button>
+  
+  <!-- Gizli dosya input -->
+  <input type="file" id="fileInput" class="hidden-file-input" accept=".pdf" onchange="handleFileSelect(event)">
+</div>
+
+<!-- Context Menu Overlay -->
+<div class="context-menu-overlay" id="contextMenuOverlay" onclick="closeContextMenu()"></div>
+
+<!-- Context Menu -->
+<div class="context-menu" id="contextMenu">
+  <div class="context-menu-item" onclick="renamePDF()">
+    <div class="context-menu-icon"><span class="material-icons">drive_file_rename_outline</span></div>
+    <div class="context-menu-text">Yeniden Adlandır</div>
+  </div>
+  <div class="context-menu-item" onclick="sharePDF()">
+    <div class="context-menu-icon"><span class="material-icons">share</span></div>
+    <div class="context-menu-text">Paylaş</div>
+  </div>
+  <div class="context-menu-item" onclick="printPDF()">
+    <div class="context-menu-icon"><span class="material-icons">print</span></div>
+    <div class="context-menu-text">Yazdır</div>
+  </div>
+  <div class="context-menu-item delete" onclick="deletePDF()">
+    <div class="context-menu-icon"><span class="material-icons">delete</span></div>
+    <div class="context-menu-text">Sil</div>
+  </div>
+</div>
+
+<!-- FAB Overlay -->
+<div class="fab-overlay" id="fabOverlay" onclick="toggleFAB()"></div>
+
+<!-- FAB Container (Sadece Anasayfa'da görünür) -->
+<div class="fab-container" id="fabContainer">
+  <div class="fab-menu" id="fabMenu">
+    <div class="fab-item" onclick="redirectToPage('scan.html')">
+      <div class="fab-icon scan">
+        <span class="material-icons">scanner</span>
+      </div>
+      <div class="fab-text">PDF Tarama</div>
+    </div>
+    
+    <div class="fab-item" onclick="openFilePickerModal()">
+      <div class="fab-icon upload">
+        <span class="material-icons">upload</span>
+      </div>
+      <div class="fab-text">PDF Yükle</div>
+    </div>
+  </div>
+  
+  <div class="fab-main" id="fabMain" onclick="toggleFAB()">
+    <span class="material-icons">add</span>
+  </div>
+</div>
+
+<!-- Ana Sayfa -->
+<div class="page active" id="home">
+  <div class="scroll-container">
+
+    <div class="top-bar">
+      <div class="top-bar-title">ANASAYFA</div>
+      <div class="top-bar-icons">
+        <span class="material-icons">search</span>
+        <span class="material-icons">notifications</span>
+        <span class="material-icons" onclick="toggleDrawer()">menu</span>
+      </div>
+    </div>
+
+    <div class="cards">
+      <!-- PDF Birleştir Kartı -->
+      <div class="card-border-wrap" onclick="redirectToPage('merge.html')">
+        <div class="card">
+          <div class="icon-box bg-resim1"><span class="material-icons">merge_type</span></div>
+          <div class="card-label">
+            <span>PDF</span>
+            <span>Birleştir</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sesli Okuma Kartı -->
+      <div class="card-border-wrap" onclick="redirectToPage('tts.html')">
+        <div class="card">
+          <div class="icon-box bg-resim2"><span class="material-icons">volume_up</span></div>
+          <div class="card-label">
+            <span>Sesli</span>
+            <span>Okuma</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- OCR Metin Çıkarma Kartı -->
+      <div class="card-border-wrap" onclick="redirectToPage('ocr.html')">
+        <div class="card">
+          <div class="icon-box bg-resim3"><span class="material-icons">text_fields</span></div>
+          <div class="card-label">
+            <span>OCR Metin</span>
+            <span>Çıkarma</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PDF İmzala Kartı -->
+      <div class="card-border-wrap" onclick="redirectToPage('sign.html')">
+        <div class="card">
+          <div class="icon-box bg-purple"><span class="material-icons">edit</span></div>
+          <div class="card-label">
+            <span>PDF</span>
+            <span>İmzala</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PDF Sıkıştır Kartı -->
+      <div class="card-border-wrap" onclick="redirectToPage('compress.html')">
+        <div class="card">
+          <div class="icon-box bg-resim1" style="background:#fff4e5; color:#ff9800"><span class="material-icons">compress</span></div>
+          <div class="card-label">
+            <span>PDF</span>
+            <span>Sıkıştır</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resimden PDF Kartı -->
+      <div class="card-border-wrap" onclick="redirectToPage('photo2pdf.html')">
+        <div class="card">
+          <div class="icon-box bg-resim3" style="background:#e0f2f1; color:#009688"><span class="material-icons">image</span></div>
+          <div class="card-label">
+            <span>Resimden</span>
+            <span>PDF</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="tab active" onclick="setTab(0)">Son<br>Kullanılanlar</div>
+      <div class="tab" onclick="setTab(1)">Favoriler</div>
+      <div class="tab" onclick="setTab(2)">Cihazda</div>
+    </div>
+
+    <div class="content" id="swipe-area">
+      <!-- Son Kullanılanlar Tab -->
+      <div class="tab-content active" id="tab-0">
+        <div id="recent-pdfs-list">
+          <!-- PDF öğeleri buraya eklenecek -->
+        </div>
+      </div>
+      
+      <!-- Favoriler Tab -->
+      <div class="tab-content" id="tab-1">
+        <div id="favorite-pdfs-list">
+          <!-- Favori PDF öğeleri buraya eklenecek -->
+        </div>
+      </div>
+      
+      <!-- Cihazda Tab -->
+      <div class="tab-content" id="tab-2">
+        <div id="device-pdfs-list">
+          <!-- Cihaz PDF öğeleri buraya eklenecek -->
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Dosyalar Sayfası -->
+<div class="page" id="files">
+  <div class="scroll-container">
+    <div class="top-bar">
+      <div class="top-bar-title">DOSYALAR</div>
+      <div class="top-bar-icons">
+        <span class="material-icons">search</span>
+        <span class="material-icons" onclick="toggleDrawer()">menu</span>
+      </div>
+    </div>
+    
+    <div class="files-container">
+      <div class="main-title">Bu aygıtta</div>
+      
+      <div class="cloud-service-item">
+        <div class="service-icon">
+          <img src="images/google-drive.svg" alt="Google Drive">
+        </div>
+        <div class="service-text">Google Drive</div>
+        <div class="service-arrow">
+          <span class="material-icons">chevron_right</span>
+        </div>
+      </div>
+      
+      <div class="cloud-service-item">
+        <div class="service-icon">
+          <img src="images/onedrive.svg" alt="OneDrive">
+        </div>
+        <div class="service-text">OneDrive</div>
+        <div class="service-arrow">
+          <span class="material-icons">chevron_right</span>
+        </div>
+      </div>
+      
+      <div class="cloud-service-item">
+        <div class="service-icon">
+          <img src="images/dropbox.svg" alt="Dropbox">
+        </div>
+        <div class="service-text">Dropbox</div>
+        <div class="service-arrow">
+          <span class="material-icons">chevron_right</span>
+        </div>
+      </div>
+      
+      <div class="cloud-service-item">
+        <div class="service-icon">
+          <img src="images/gmail.svg" alt="E-postalardaki PDF'ler">
+        </div>
+        <div class="service-text">E-postalardaki PDF'ler</div>
+        <div class="service-arrow">
+          <span class="material-icons">chevron_right</span>
+        </div>
+      </div>
+      
+      <div class="more-files-section">
+        <div class="more-files-icon">
+          <img src="images/smartphone.svg" alt="Daha fazla dosyaya göz atın">
+        </div>
+        <div class="more-files-content">
+          <div class="more-files-text">Daha fazla dosyaya göz atın</div>
+          <div class="more-files-subtext">Tüm dosyalarınıza erişin</div>
+        </div>
+        <div class="more-files-arrow">
+          <span class="material-icons">chevron_right</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hakkında Sayfası -->
+<div class="page" id="about-page">
+  <div class="scroll-container">
+    <div class="top-bar">
+      <div class="top-bar-title">HAKKINDA</div>
+      <div class="top-bar-icons">
+        <span class="material-icons" onclick="toggleDrawer()">menu</span>
+      </div>
+    </div>
+    
+    <div class="page-content">
+      <div class="page-title">PDF Reader</div>
+      
+      <div class="section-title">PDF Reader by Dev Software</div>
+      <p class="privacy-text">
+        Bu uygulama, PDF dosyalarını hızlı, güvenli ve verimli bir şekilde görüntülemek, yönetmek ve temel düzeyde düzenlemek için tasarlanmıştır.<br><br>
+        Amacımız, en iyi mobil PDF deneyimini sunmaktır. Devam eden güncellemeler ve iyileştirmeler için bizi takipte kalın!
+      </p>
+      
+      <div class="hr-line"></div>
+      
+      <p class="privacy-text" style="text-align: center; font-weight: 600;">
+        Tüm Hakları Saklıdır © 2025 Dev Software.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Uygulama Dili Sayfası -->
+<div class="page" id="app-language-page">
+  <div class="scroll-container">
+    <div class="top-bar">
+      <div class="top-bar-title">UYGULAMA DİLİ</div>
+      <div class="top-bar-icons">
+        <span class="material-icons" onclick="toggleDrawer()">menu</span>
+      </div>
+    </div>
+    
+    <div class="page-content">
+      <div class="page-title">Uygulama Dili</div>
+      <p class="setting-desc">Uygulama arayüzünün dilini seçin.</p>
+      
+      <select class="select-box">
+        <option value="tr">Türkçe</option>
+        <option value="en">English</option>
+        <option value="de">Deutsch</option>
+        <option value="fr">Français</option>
+        <option value="es">Español</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- PDF Dili Sayfası -->
+<div class="page" id="pdf-language-page">
+  <div class="scroll-container">
+    <div class="top-bar">
+      <div class="top-bar-title">PDF DİLİ</div>
+      <div class="top-bar-icons">
+        <span class="material-icons" onclick="toggleDrawer()">menu</span>
+      </div>
+    </div>
+    
+    <div class="page-content">
+      <div class="page-title">PDF Dili</div>
+      <p class="setting-desc">PDF belgeleriniz için varsayılan dil seçin.</p>
+      
+      <select class="select-box">
+        <option value="tr">Türkçe</option>
+        <option value="en">English</option>
+        <option value="auto">Otomatik Algıla</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- Tema Sayfası -->
+<div class="page" id="theme-page">
+  <div class="scroll-container">
+    <div class="top-bar">
+      <div class="top-bar-title">TEMA</div>
+      <div class="top-bar-icons">
+        <span class="material-icons" onclick="toggleDrawer()">menu</span>
+      </div>
+    </div>
+    
+    <div class="page-content">
+      <div class="page-title">Tema</div>
+      <p class="setting-desc">Uygulamanın görünümünü seçin.</p>
+      
+      <div class="theme-option active" onclick="selectTheme('device')">
+        <div class="theme-icon device"><span class="material-icons">devices</span></div>
+        <div class="theme-text">
+          <div class="theme-title">Cihaz</div>
+          <div class="theme-desc">Varsayılan olarak cihaz ayarları kullanılır.</div>
+        </div>
+        <div class="theme-check"><span class="material-icons">check_circle</span></div>
+      </div>
+      
+      <div class="theme-option" onclick="selectTheme('light')">
+        <div class="theme-icon light"><span class="material-icons">light_mode</span></div>
+        <div class="theme-text">
+          <div class="theme-title">Light</div>
+          <div class="theme-desc">Açık tema, parlak görünüm.</div>
+        </div>
+        <div class="theme-check"><span class="material-icons">check_circle</span></div>
+      </div>
+      
+      <div class="theme-option" onclick="selectTheme('dark')">
+        <div class="theme-icon dark"><span class="material-icons">dark_mode</span></div>
+        <div class="theme-text">
+          <div class="theme-title">Dark</div>
+          <div class="theme-desc">Koyu tema, gece modu.</div>
+        </div>
+        <div class="theme-check"><span class="material-icons">check_circle</span></div>
+      </div>
+      
+      <p class="setting-desc" style="margin-top: 20px; font-size: 13px;">
+        Seçiminiz tarayıcınızda saklanacaktır.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Gizlilik Sayfası -->
+<div class="page" id="privacy-page">
+  <div class="scroll-container">
+    <div class="top-bar">
+      <div class="top-bar-title">GİZLİLİK</div>
+      <div class="top-bar-icons">
+        <span class="material-icons" onclick="toggleDrawer()">menu</span>
+      </div>
+    </div>
+    
+    <div class="page-content">
+      <div class="page-title">Gizlilik</div>
+      
+      <p class="privacy-text">
+        Kişisel verilerinizin ve belge gizliliğinizin bizim için en önemli öncelik olduğunu garanti ederiz. Uygulama, dosyalarınızı sunucularımıza yüklemeden cihazınızda yerel olarak işleyecek şekilde tasarlanmıştır.
+      </p>
+      
+      <p class="privacy-text">
+        <strong>Dev Software</strong> olarak, kullanıcılarımızın hiçbir kişisel verisini üçüncü taraflarla paylaşmayız.
+      </p>
+      
+      <div class="hr-line"></div>
+      
+      <div class="section-title">Daha fazla bilgi için:</div>
+      <a href="#" class="privacy-link">Gizlilik Politikası için Tıklayınız</a>
+    </div>
+  </div>
+</div>
+
+<!-- Yardım Sayfası -->
+<div class="page" id="help-page">
+  <div class="scroll-container">
+    <div class="top-bar">
+      <div class="top-bar-title">YARDIM</div>
+      <div class="top-bar-icons">
+        <span class="material-icons" onclick="toggleDrawer()">menu</span>
+      </div>
+    </div>
+    
+    <div class="page-content">
+      <div class="page-title">Yardım</div>
+      <p class="privacy-text">Sorununuzu bize iletin. Ekibimiz en kısa sürede dönüş yapacaktır.</p>
+      
+      <div class="help-form">
+        <div class="form-group">
+          <label class="form-label">E-posta Adresiniz</label>
+          <input type="email" class="form-input" placeholder="ornek@email.com">
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">Konu Başlığı</label>
+          <input type="text" class="form-input" placeholder="Konu">
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">Sorununuzu detaylıca açıklayınız...</label>
+          <textarea class="form-textarea" placeholder="Sorununuzu detaylı bir şekilde açıklayın..."></textarea>
+        </div>
+        
+        <button class="submit-button">Gönder</button>
+        
+        <div class="form-note">
+          Bu e-posta devsoftawaremail@gmail.com adresine yönlendirilecektir.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Navigation -->
+<div class="bottom-bar">
+  <div class="bottom-tab active" onclick="showPage('home', this)">Anasayfa</div>
+  <div class="bottom-tab" onclick="showPage('files', this)">Dosyalar</div>
+</div>
+<!-- PDF.js script'leri (index.html'den hemen önce) -->
+<!-- PDF.js script'leri (index.html'den hemen önce) -->
+<!-- PDF.js script'leri (index.html'den hemen önce) -->
+<!-- PDF.js script'leri (index.html'den hemen önce) -->
+
+
+
+<!-- index.html içinde -->
+<!-- Diğer script'lerden sonra -->
+<script src="index_viewer_bridge.js"></script>
+
+
+
+
+
+<!-- PDF.js script'leri (index.html'den hemen önce) -->
+
+<!-- PDF.js script'leri (index.html'den hemen önce) -->
+<!-- PDF.js script'leri (index.html'den hemen önce) -->
+<!-- PDF.js script'leri (index.html'den hemen önce) -->
+<script src="../build/pdf.mjs" type="module"></script>
+
+</body>
+</html>

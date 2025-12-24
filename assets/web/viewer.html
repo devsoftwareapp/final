@@ -1132,117 +1132,76 @@
 
 
 <script>
-// viewer.html için basitleştirilmiş script
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('viewer.html yüklendi');
-    
-    // Flutter WebView içinde miyiz kontrol et
-    const isFlutterWebView = !!window.flutter_inappwebview;
-    console.log('Flutter WebView içinde mi?', isFlutterWebView);
-    
-    // Flutter WebView içindeysek onViewerReady sinyali gönder
-    if (isFlutterWebView) {
-        console.log('Flutter WebView için onViewerReady gönderiliyor...');
-        
-        // PDF.js'nin yüklendiğini dinle
-        document.addEventListener('webviewerloaded', () => {
-            console.log('PDF.js webviewerloaded event');
-            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                try {
-                    window.flutter_inappwebview.callHandler('onViewerReady');
-                    console.log('onViewerReady gönderildi');
-                } catch(e) {
-                    console.log('onViewerReady gönderilemedi:', e);
-                }
-            }
-        });
-        
-        // Alternatif: PDFViewerApplication hazır olunca
-        const checkPDFJS = setInterval(() => {
-            if (window.PDFViewerApplication && typeof PDFViewerApplication.open === 'function') {
-                clearInterval(checkPDFJS);
-                console.log('PDFViewerApplication hazır, onViewerReady gönderiliyor');
-                
-                if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                    try {
-                        window.flutter_inappwebview.callHandler('onViewerReady');
-                    } catch(e) {
-                        console.log('onViewerReady gönderilemedi:', e);
-                    }
-                }
-            }
-        }, 100);
-        
-        // Timeout
-        setTimeout(() => {
-            clearInterval(checkPDFJS);
-            console.log('PDFViewerApplication kontrolü timeout');
-            
-            // Yine de onViewerReady gönder
-            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                try {
-                    window.flutter_inappwebview.callHandler('onViewerReady');
-                } catch(e) {
-                    console.log('Timeout sonrası onViewerReady gönderilemedi:', e);
-                }
-            }
-        }, 5000);
-        
-    } else {
-        // Tarayıcı modu - open.html'den gelen veriyi kontrol et
-        console.log('Tarayıcı modu, open.html verisi kontrol ediliyor...');
-        
-        const pdfData = sessionStorage.getItem('simplePdfData');
-        const pdfName = sessionStorage.getItem('simplePdfName');
-        
-        if (pdfData && pdfName) {
-            console.log('Tarayıcı modu PDF verisi bulundu:', pdfName);
-            
-            // PDF.js hazır olunca aç
-            const checkAndOpen = () => {
-                if (window.PDFViewerApplication && typeof PDFViewerApplication.open === 'function') {
-                    console.log('Tarayıcı modu: PDF.js hazır, PDF açılıyor');
-                    
-                    // Base64'i temizle
-                    let cleanBase64 = pdfData;
-                    if (pdfData.startsWith("data:application/pdf;base64,")) {
-                        cleanBase64 = pdfData.substring("data:application/pdf;base64,".length);
-                    }
-                    
-                    // Blob oluştur
-                    const raw = atob(cleanBase64);
-                    const bytes = new Uint8Array(raw.length);
-                    for (let i = 0; i < raw.length; i++) {
-                        bytes[i] = raw.charCodeAt(i);
-                    }
-                    
-                    const blob = new Blob([bytes], { type: "application/pdf" });
-                    const blobUrl = URL.createObjectURL(blob);
-                    
-                    // PDF'i aç
-                    PDFViewerApplication.open({ url: blobUrl });
-                    document.title = pdfName;
-                    
-                    console.log('Tarayıcı modu: PDF açıldı');
-                    
-                    // Temizlik
-                    setTimeout(() => {
-                        URL.revokeObjectURL(blobUrl);
-                        sessionStorage.removeItem('simplePdfData');
-                        sessionStorage.removeItem('simplePdfName');
-                    }, 10000);
-                } else {
-                    setTimeout(checkAndOpen, 100);
-                }
-            };
-            
-            checkAndOpen();
-        } else {
-            console.log('Tarayıcı modu: PDF verisi yok');
-        }
+async function openPdfFromBase64(base64, name = "PDF") {
+  if (!base64) return;
+
+  if (base64.startsWith("data:application/pdf;base64,")) {
+    base64 = base64.substring("data:application/pdf;base64,".length);
+  }
+
+  const raw = atob(base64);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) {
+    bytes[i] = raw.charCodeAt(i);
+  }
+
+  const blob = new Blob([bytes], { type: "application/pdf" });
+  const blobUrl = URL.createObjectURL(blob);
+
+  const wait = setInterval(() => {
+    if (
+      window.PDFViewerApplication &&
+      PDFViewerApplication.initialized &&
+      PDFViewerApplication.eventBus
+    ) {
+      clearInterval(wait);
+
+      PDFViewerApplication.open({ url: blobUrl });
+      document.title = name;
+
+      // 🔔 PDF tamamen yüklendiğinde index.html'e haber ver
+      PDFViewerApplication.eventBus.on("pagesloaded", () => {
+        window.parent.postMessage(
+          { type: "pdf-ready" },
+          "*"
+        );
+        console.log("pdf-ready sent");
+      });
+
+      // temizlik
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
     }
+  }, 100);
+}
+
+// index.html → viewer.html
+window.addEventListener("message", (e) => {
+  if (e.data?.type === "pdfData") {
+    openPdfFromBase64(e.data.base64, e.data.name);
+  }
+});
+
+// viewer.html doğrudan açılırsa
+window.addEventListener("load", () => {
+  const ss = sessionStorage.getItem("pdfData");
+  if (ss) {
+    openPdfFromBase64(ss, sessionStorage.getItem("pdfName"));
+    sessionStorage.removeItem("pdfData");
+    return;
+  }
+
+  const p = new URLSearchParams(location.search);
+  if (p.has("base64")) {
+    openPdfFromBase64(p.get("base64"));
+    return;
+  }
+
+  if (window.name && window.name.startsWith("data:application/pdf")) {
+    openPdfFromBase64(window.name);
+  }
 });
 </script>
+
   <!-- Bu viewer.html icine gomme --> 
   <!-- Bu viewer.html icine gomme --> 
   <!-- Bu viewer.html icine gomme --> 
