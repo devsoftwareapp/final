@@ -3,7 +3,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
-import 'dart:convert'; // Bu satır eklenmeli
+import 'dart:convert'; // ✅ BU SATIR EKLENDİ - Base64 için gerekli
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
@@ -121,16 +121,16 @@ class _MainScreenState extends State<MainScreen> {
         if (args.isNotEmpty) {
           try {
             final data = args[0] as Map<String, dynamic>;
-            final base64 = data['base64'] as String;
+            final base64String = data['base64'] as String; // ✅ Değişken adı düzeltildi
             final fileName = data['fileName'] as String;
             
-            print('Sharing PDF: $fileName, base64 length: ${base64.length}');
+            print('Sharing PDF: $fileName, base64 length: ${base64String.length}');
             
             // Base64 verisini decode et
-            final dataPart = base64.contains(',') 
-                ? base64.split(',').last 
-                : base64;
-            final bytes = base64.decode(dataPart);
+            final dataPart = base64String.contains(',') 
+                ? base64String.split(',').last 
+                : base64String;
+            final bytes = base64.decode(dataPart); // ✅ Dart'ın base64 fonksiyonu kullanılıyor
             
             // Geçici dosya oluştur
             final tempDir = await getTemporaryDirectory();
@@ -167,16 +167,16 @@ class _MainScreenState extends State<MainScreen> {
         if (args.isNotEmpty) {
           try {
             final data = args[0] as Map<String, dynamic>;
-            final base64 = data['base64'] as String;
+            final base64String = data['base64'] as String; // ✅ Değişken adı düzeltildi
             final fileName = data['fileName'] as String;
             
             print('Printing PDF: $fileName');
             
             // Base64 verisini decode et
-            final dataPart = base64.contains(',') 
-                ? base64.split(',').last 
-                : base64;
-            final bytes = base64.decode(dataPart);
+            final dataPart = base64String.contains(',') 
+                ? base64String.split(',').last 
+                : base64String;
+            final bytes = base64.decode(dataPart); // ✅ Dart'ın base64 fonksiyonu kullanılıyor
             
             // Yazdırma işlemi
             await Printing.layoutPdf(
@@ -202,16 +202,16 @@ class _MainScreenState extends State<MainScreen> {
         if (args.isNotEmpty) {
           try {
             final data = args[0] as Map<String, dynamic>;
-            final base64 = data['base64'] as String;
+            final base64String = data['base64'] as String; // ✅ Değişken adı düzeltildi
             final fileName = data['fileName'] as String;
             
             print('Saving PDF: $fileName');
             
             // Base64 verisini decode et
-            final dataPart = base64.contains(',') 
-                ? base64.split(',').last 
-                : base64;
-            final bytes = base64.decode(dataPart);
+            final dataPart = base64String.contains(',') 
+                ? base64String.split(',').last 
+                : base64String;
+            final bytes = base64.decode(dataPart); // ✅ Dart'ın base64 fonksiyonu kullanılıyor
             
             // Dosya yolu
             final dir = await getExternalStorageDirectory();
@@ -370,7 +370,7 @@ class _MainScreenState extends State<MainScreen> {
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
         final bytes = await File(file.path!).readAsBytes();
-        final base64 = base64Encode(bytes);
+        final base64String = base64Encode(bytes);
         
         print('File picked: ${file.name}, size: ${file.size} bytes');
         
@@ -383,7 +383,7 @@ class _MainScreenState extends State<MainScreen> {
               action: 'ADD_PDF',
               data: {
                 fileName: '${file.name.replaceAll("'", "\\'")}',
-                base64: '$base64',
+                base64: '$base64String',
                 fileSize: ${file.size}
               }
             };
