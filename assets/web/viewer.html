@@ -1131,16 +1131,16 @@
 
 
 <script>
-// viewer.html - WORKING VERSION WITH MESSAGE SUPPORT
+// viewer.html - FLUTTER COMPATIBLE VERSION
 
-let currentBlobUrl = null;
+let pdfLoaded = false;
 
 // PDF yükleme fonksiyonu
 function loadPDFFromBase64(base64String, fileName = "PDF") {
-    console.log('Loading PDF:', fileName.substring(0, 30) + '...');
+    console.log('Loading PDF in Flutter WebView:', fileName);
     
     try {
-        // Base64 formatını düzelt
+        // Base64 formatını temizle
         let cleanBase64 = base64String;
         if (base64String.startsWith("data:application/pdf;base64,")) {
             cleanBase64 = base64String.split(',')[1];
@@ -1156,108 +1156,132 @@ function loadPDFFromBase64(base64String, fileName = "PDF") {
         const blob = new Blob([bytes], { type: "application/pdf" });
         const blobUrl = URL.createObjectURL(blob);
         
-        // Önceki blob'u temizle
-        if (currentBlobUrl) {
-            URL.revokeObjectURL(currentBlobUrl);
-        }
-        currentBlobUrl = blobUrl;
+        console.log('Blob URL created:', blobUrl.substring(0, 50) + '...');
         
-        console.log('Blob URL created');
+        // 1. YÖNTEM: webviewerloaded event'i için
+        document.addEventListener("webviewerloaded", function onViewerLoaded() {
+            console.log('webviewerloaded event received');
+            document.removeEventListener("webviewerloaded", onViewerLoaded);
+            openPDFWithBlobUrl(blobUrl, fileName);
+        });
         
-        // Viewer initialize olana kadar bekle
-        const waiter = setInterval(() => {
-            if (!window.PDFViewerApplication || !PDFViewerApplication.initialized) return;
-            
-            clearInterval(waiter);
-            
-            // PDF.js v5.x için doğru kullanım: { url: blobUrl }
-            PDFViewerApplication.open({ url: blobUrl }).then(() => {
-                console.log('PDF successfully opened');
-                document.title = fileName;
-                
-                // Parent'a PDF'in hazır olduğunu bildir
-                if (window.parent) {
-                    window.parent.postMessage({
-                        type: 'PDF_VIEWER_READY',
-                        fileName: fileName,
-                        pageCount: PDFViewerApplication.pagesCount || 0
-                    }, '*');
+        // 2. YÖNTEM: PDFViewerApplication hazır olana kadar bekle
+        const checkViewer = setInterval(() => {
+            if (window.PDFViewerApplication && PDFViewerApplication.initialized) {
+                clearInterval(checkViewer);
+                console.log('PDFViewerApplication ready');
+                openPDFWithBlobUrl(blobUrl, fileName);
+            }
+        }, 100);
+        
+        // 3. YÖNTEM: Sayfa yüklendiğinde
+        window.addEventListener('load', function onPageLoad() {
+            console.log('window.load event');
+            setTimeout(() => {
+                if (!pdfLoaded && window.PDFViewerApplication) {
+                    openPDFWithBlobUrl(blobUrl, fileName);
                 }
-                
-                // 30 saniye sonra blob'u temizle
-                setTimeout(() => {
-                    if (currentBlobUrl === blobUrl) {
-                        URL.revokeObjectURL(blobUrl);
-                        currentBlobUrl = null;
-                        console.log('Blob URL cleaned up');
-                    }
-                }, 30000);
-                
-            }).catch(error => {
-                console.error('PDFViewerApplication.open error:', error);
-                
-                if (window.parent) {
-                    window.parent.postMessage({
-                        type: 'PDF_ERROR',
-                        fileName: fileName,
-                        error: error.message
-                    }, '*');
-                }
-            });
-            
-        }, 50);
+            }, 1000);
+        });
+        
+        // 4. YÖNTEM: Manuel tetikleme (Flutter için)
+        setTimeout(() => {
+            if (!pdfLoaded) {
+                console.log('Fallback: manually opening PDF');
+                openPDFWithBlobUrl(blobUrl, fileName);
+            }
+        }, 2000);
         
     } catch (error) {
         console.error('PDF loading error:', error);
-        
-        if (window.parent) {
-            window.parent.postMessage({
-                type: 'PDF_ERROR',
-                fileName: fileName,
-                error: error.message
-            }, '*');
-        }
     }
 }
 
-// Ana event listener - webviewerloaded
-document.addEventListener("webviewerloaded", () => {
-    console.log('PDF Viewer loaded, ready to receive PDF data');
+// Blob URL ile PDF aç
+function openPDFWithBlobUrl(blobUrl, fileName) {
+    if (pdfLoaded) return;
     
-    // Parent'a hazır olduğumuzu bildir
+    console.log('Opening PDF with blob URL...');
+    
+    if (!window.PDFViewerApplication) {
+        console.error('PDFViewerApplication not available');
+        return;
+    }
+    
+    try {
+        // PDF.js v5.x için doğru kullanım
+        PDFViewerApplication.open({ url: blobUrl }).then(() => {
+            console.log('PDF successfully opened in Flutter WebView');
+            pdfLoaded = true;
+            document.title = fileName;
+            
+            // Parent'a bildir
+            if (window.parent) {
+                window.parent.postMessage({
+                    type: 'PDF_VIEWER_READY',
+                    fileName: fileName
+                }, '*');
+            }
+            
+        }).catch(error => {
+            console.error('PDFViewerApplication.open error:', error);
+            // Alternatif yöntem
+            try {
+                // Direkt open metodunu dene
+                PDFViewerApplication.open(blobUrl);
+                pdfLoaded = true;
+                document.title = fileName;
+            } catch (e) {
+                console.error('Alternative method also failed:', e);
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error in openPDFWithBlobUrl:', error);
+    }
+}
+
+// Ana mesaj listener'ı
+window.addEventListener("message", function(event) {
+    console.log('viewer.html message received:', event.data?.type);
+    
+    if (event.data?.type === "pdfData") {
+        console.log('PDF data received from Flutter');
+        loadPDFFromBase64(event.data.base64, event.data.name || "PDF");
+    }
+});
+
+// Sayfa yüklendiğinde URL'den kontrol et (backup)
+window.addEventListener('load', function() {
+    console.log('viewer.html loaded in Flutter WebView');
+    
+    // URL parametrelerinden base64 al
+    const params = new URLSearchParams(window.location.search);
+    const base64FromUrl = params.get("base64");
+    const nameFromUrl = params.get("name") || "PDF";
+    
+    if (base64FromUrl) {
+        console.log('Loading PDF from URL parameters');
+        loadPDFFromBase64(base64FromUrl, nameFromUrl);
+    }
+    
+    // Parent'a hazır olduğunu bildir
     if (window.parent) {
         window.parent.postMessage({
             type: 'VIEWER_READY'
         }, '*');
     }
-    
-    // URL'den base64 al (backup yöntemi)
-    const params = new URLSearchParams(window.location.search);
-    const base64FromUrl = params.get("base64");
-    
-    if (base64FromUrl) {
-        loadPDFFromBase64(base64FromUrl, "PDF");
-    }
 });
 
-// Mesaj listener'ı - index.html'den gelen PDF verilerini al
-window.addEventListener("message", function(event) {
-    console.log('viewer.html message received:', event.data?.type);
-    
-    if (event.data?.type === "pdfData") {
-        console.log('PDF data received from message');
-        loadPDFFromBase64(event.data.base64, event.data.name || "PDF");
+// webviewerloaded event'ini manuel tetikle (PDF.js'den gelmezse)
+setTimeout(() => {
+    if (!pdfLoaded) {
+        console.log('Manually triggering webviewerloaded');
+        const event = new Event('webviewerloaded');
+        document.dispatchEvent(event);
     }
-});
-
-// Temizlik
-window.addEventListener('beforeunload', function() {
-    if (currentBlobUrl) {
-        URL.revokeObjectURL(currentBlobUrl);
-    }
-});
+}, 3000);
 </script>
-
 
   <!-- Bu viewer.html icine gomme --> 
   <!-- Bu viewer.html icine gomme --> 
