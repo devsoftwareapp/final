@@ -1132,53 +1132,115 @@
 
 
 <script>
-// PDF yüklendiğinde Flutter'a bildir
+// viewer.html için basitleştirilmiş script
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('PDF viewer loaded');
-  
-  // PDF.js'nin hazır olduğunu dinle
-  document.addEventListener('webviewerloaded', () => {
-    console.log('PDF.js initialized');
+    console.log('viewer.html yüklendi');
     
-    // Flutter'dan PDF yükleme için hazır olduğumuzu bildir
-    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-      try {
-        window.flutter_inappwebview.callHandler('onViewerReady');
-        console.log('Viewer ready message sent');
-      } catch (e) {
-        console.log('Error sending ready message:', e);
-      }
-    }
-  });
-  
-  // PDF yüklendiğinde
-  window.addEventListener('pagesloaded', () => {
-    console.log('PDF pages loaded');
+    // Flutter WebView içinde miyiz kontrol et
+    const isFlutterWebView = !!window.flutter_inappwebview;
+    console.log('Flutter WebView içinde mi?', isFlutterWebView);
     
-    // Flutter'a PDF'in hazır olduğunu bildir
-    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-      try {
-        const title = document.title || 'PDF';
-        window.flutter_inappwebview.callHandler('onPDFReady', title);
-        console.log('PDF ready message sent:', title);
-      } catch (e) {
-        console.log('Error sending PDF ready message:', e);
-      }
+    // Flutter WebView içindeysek onViewerReady sinyali gönder
+    if (isFlutterWebView) {
+        console.log('Flutter WebView için onViewerReady gönderiliyor...');
+        
+        // PDF.js'nin yüklendiğini dinle
+        document.addEventListener('webviewerloaded', () => {
+            console.log('PDF.js webviewerloaded event');
+            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                try {
+                    window.flutter_inappwebview.callHandler('onViewerReady');
+                    console.log('onViewerReady gönderildi');
+                } catch(e) {
+                    console.log('onViewerReady gönderilemedi:', e);
+                }
+            }
+        });
+        
+        // Alternatif: PDFViewerApplication hazır olunca
+        const checkPDFJS = setInterval(() => {
+            if (window.PDFViewerApplication && typeof PDFViewerApplication.open === 'function') {
+                clearInterval(checkPDFJS);
+                console.log('PDFViewerApplication hazır, onViewerReady gönderiliyor');
+                
+                if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                    try {
+                        window.flutter_inappwebview.callHandler('onViewerReady');
+                    } catch(e) {
+                        console.log('onViewerReady gönderilemedi:', e);
+                    }
+                }
+            }
+        }, 100);
+        
+        // Timeout
+        setTimeout(() => {
+            clearInterval(checkPDFJS);
+            console.log('PDFViewerApplication kontrolü timeout');
+            
+            // Yine de onViewerReady gönder
+            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                try {
+                    window.flutter_inappwebview.callHandler('onViewerReady');
+                } catch(e) {
+                    console.log('Timeout sonrası onViewerReady gönderilemedi:', e);
+                }
+            }
+        }, 5000);
+        
+    } else {
+        // Tarayıcı modu - open.html'den gelen veriyi kontrol et
+        console.log('Tarayıcı modu, open.html verisi kontrol ediliyor...');
+        
+        const pdfData = sessionStorage.getItem('simplePdfData');
+        const pdfName = sessionStorage.getItem('simplePdfName');
+        
+        if (pdfData && pdfName) {
+            console.log('Tarayıcı modu PDF verisi bulundu:', pdfName);
+            
+            // PDF.js hazır olunca aç
+            const checkAndOpen = () => {
+                if (window.PDFViewerApplication && typeof PDFViewerApplication.open === 'function') {
+                    console.log('Tarayıcı modu: PDF.js hazır, PDF açılıyor');
+                    
+                    // Base64'i temizle
+                    let cleanBase64 = pdfData;
+                    if (pdfData.startsWith("data:application/pdf;base64,")) {
+                        cleanBase64 = pdfData.substring("data:application/pdf;base64,".length);
+                    }
+                    
+                    // Blob oluştur
+                    const raw = atob(cleanBase64);
+                    const bytes = new Uint8Array(raw.length);
+                    for (let i = 0; i < raw.length; i++) {
+                        bytes[i] = raw.charCodeAt(i);
+                    }
+                    
+                    const blob = new Blob([bytes], { type: "application/pdf" });
+                    const blobUrl = URL.createObjectURL(blob);
+                    
+                    // PDF'i aç
+                    PDFViewerApplication.open({ url: blobUrl });
+                    document.title = pdfName;
+                    
+                    console.log('Tarayıcı modu: PDF açıldı');
+                    
+                    // Temizlik
+                    setTimeout(() => {
+                        URL.revokeObjectURL(blobUrl);
+                        sessionStorage.removeItem('simplePdfData');
+                        sessionStorage.removeItem('simplePdfName');
+                    }, 10000);
+                } else {
+                    setTimeout(checkAndOpen, 100);
+                }
+            };
+            
+            checkAndOpen();
+        } else {
+            console.log('Tarayıcı modu: PDF verisi yok');
+        }
     }
-  });
-  
-  // PDF yükleme hatasında
-  window.addEventListener('error', (e) => {
-    console.error('PDF error:', e);
-    
-    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-      try {
-        window.flutter_inappwebview.callHandler('onPDFError', e.toString());
-      } catch (err) {
-        console.log('Error sending error message:', err);
-      }
-    }
-  });
 });
 </script>
   <!-- Bu viewer.html icine gomme --> 
@@ -1186,4 +1248,3 @@ document.addEventListener('DOMContentLoaded', () => {
   <!-- Bu viewer.html icine gomme --> 
   </body>
 </html>
-
