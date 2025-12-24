@@ -1131,77 +1131,123 @@
 
 
 <script>
-// viewer.html - FLUTTER COMPATIBLE VERSION
+// viewer.html - WORKING VERSION FOR FLUTTER
 
-let pdfLoaded = false;
+console.log('=== VIEWER.HML LOADED ===');
 
-// PDF yükleme fonksiyonu
-function loadPDFFromBase64(base64String, fileName = "PDF") {
-    console.log('Loading PDF in Flutter WebView:', fileName);
+let pdfOpened = false;
+
+// Ana PDF yükleme fonksiyonu
+function loadAndOpenPDF() {
+    console.log('loadAndOpenPDF called');
+    
+    // 1. URL parametrelerinden al
+    const params = new URLSearchParams(window.location.search);
+    let base64 = params.get('base64');
+    const fileName = params.get('name') || 'PDF';
+    
+    console.log('URL params - base64 exists:', !!base64, 'fileName:', fileName);
+    
+    // 2. window.name'den al (backup)
+    if (!base64 && window.name && window.name.startsWith('data:application/pdf')) {
+        console.log('Getting PDF from window.name');
+        base64 = window.name;
+    }
+    
+    // 3. sessionStorage'dan al (backup 2)
+    if (!base64) {
+        const ssData = sessionStorage.getItem('pdfData');
+        if (ssData) {
+            console.log('Getting PDF from sessionStorage');
+            base64 = ssData;
+            sessionStorage.removeItem('pdfData');
+        }
+    }
+    
+    if (!base64) {
+        console.error('No PDF data found');
+        return;
+    }
+    
+    console.log('PDF data found, length:', base64.length);
     
     try {
-        // Base64 formatını temizle
-        let cleanBase64 = base64String;
-        if (base64String.startsWith("data:application/pdf;base64,")) {
-            cleanBase64 = base64String.split(',')[1];
+        // Base64'i temizle
+        let cleanBase64 = base64;
+        if (base64.startsWith('data:application/pdf;base64,')) {
+            cleanBase64 = base64.substring('data:application/pdf;base64,'.length);
         }
         
-        // Base64 → Uint8Array
-        const raw = atob(cleanBase64);
-        const len = raw.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) bytes[i] = raw.charCodeAt(i);
+        console.log('Clean base64 length:', cleanBase64.length);
         
-        // Uint8Array → Blob → Blob URL
-        const blob = new Blob([bytes], { type: "application/pdf" });
+        // Decode et
+        const binaryString = atob(cleanBase64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        // Blob oluştur
+        const blob = new Blob([bytes], { type: 'application/pdf' });
         const blobUrl = URL.createObjectURL(blob);
         
         console.log('Blob URL created:', blobUrl.substring(0, 50) + '...');
         
-        // 1. YÖNTEM: webviewerloaded event'i için
-        document.addEventListener("webviewerloaded", function onViewerLoaded() {
+        // 4 FARKLI YÖNTEMLE PDF AÇ:
+        
+        // YÖNTEM 1: webviewerloaded event'i dinle
+        document.addEventListener('webviewerloaded', function onWebViewerLoaded() {
             console.log('webviewerloaded event received');
-            document.removeEventListener("webviewerloaded", onViewerLoaded);
-            openPDFWithBlobUrl(blobUrl, fileName);
+            document.removeEventListener('webviewerloaded', onWebViewerLoaded);
+            openPDFWithURL(blobUrl, fileName);
         });
         
-        // 2. YÖNTEM: PDFViewerApplication hazır olana kadar bekle
-        const checkViewer = setInterval(() => {
+        // YÖNTEM 2: PDFViewerApplication'ı bekle
+        const checkInterval = setInterval(() => {
             if (window.PDFViewerApplication && PDFViewerApplication.initialized) {
-                clearInterval(checkViewer);
-                console.log('PDFViewerApplication ready');
-                openPDFWithBlobUrl(blobUrl, fileName);
+                console.log('PDFViewerApplication found and initialized');
+                clearInterval(checkInterval);
+                openPDFWithURL(blobUrl, fileName);
             }
         }, 100);
         
-        // 3. YÖNTEM: Sayfa yüklendiğinde
-        window.addEventListener('load', function onPageLoad() {
-            console.log('window.load event');
-            setTimeout(() => {
-                if (!pdfLoaded && window.PDFViewerApplication) {
-                    openPDFWithBlobUrl(blobUrl, fileName);
-                }
-            }, 1000);
-        });
-        
-        // 4. YÖNTEM: Manuel tetikleme (Flutter için)
+        // YÖNTEM 3: Timeout sonrası manuel aç
         setTimeout(() => {
-            if (!pdfLoaded) {
-                console.log('Fallback: manually opening PDF');
-                openPDFWithBlobUrl(blobUrl, fileName);
+            if (!pdfOpened && window.PDFViewerApplication) {
+                console.log('Timeout - manually opening PDF');
+                openPDFWithURL(blobUrl, fileName);
             }
         }, 2000);
         
+        // YÖNTEM 4: window.load event'i
+        window.addEventListener('load', function onWindowLoad() {
+            console.log('window.load event');
+            setTimeout(() => {
+                if (!pdfOpened) {
+                    console.log('window.load - opening PDF');
+                    openPDFWithURL(blobUrl, fileName);
+                }
+            }, 500);
+        });
+        
+        // Parent'a mesaj gönder
+        if (window.parent) {
+            window.parent.postMessage({
+                type: 'PDF_VIEWER_INITIALIZED',
+                fileName: fileName
+            }, '*');
+        }
+        
     } catch (error) {
-        console.error('PDF loading error:', error);
+        console.error('Error loading PDF:', error);
     }
 }
 
-// Blob URL ile PDF aç
-function openPDFWithBlobUrl(blobUrl, fileName) {
-    if (pdfLoaded) return;
+// URL ile PDF aç
+function openPDFWithURL(url, fileName) {
+    if (pdfOpened) return;
     
-    console.log('Opening PDF with blob URL...');
+    console.log('openPDFWithURL called:', fileName);
     
     if (!window.PDFViewerApplication) {
         console.error('PDFViewerApplication not available');
@@ -1209,80 +1255,94 @@ function openPDFWithBlobUrl(blobUrl, fileName) {
     }
     
     try {
-        // PDF.js v5.x için doğru kullanım
-        PDFViewerApplication.open({ url: blobUrl }).then(() => {
-            console.log('PDF successfully opened in Flutter WebView');
-            pdfLoaded = true;
+        console.log('Calling PDFViewerApplication.open()');
+        
+        // Yöntem 1: open({ url: ... })
+        PDFViewerApplication.open({ url: url }).then(() => {
+            console.log('✅ PDF opened successfully with promise');
+            pdfOpened = true;
             document.title = fileName;
             
-            // Parent'a bildir
+            // Parent'a başarı mesajı
             if (window.parent) {
                 window.parent.postMessage({
                     type: 'PDF_VIEWER_READY',
-                    fileName: fileName
+                    fileName: fileName,
+                    success: true
                 }, '*');
             }
             
         }).catch(error => {
-            console.error('PDFViewerApplication.open error:', error);
-            // Alternatif yöntem
+            console.log('Promise method failed, trying direct call:', error);
+            
+            // Yöntem 2: direkt open()
             try {
-                // Direkt open metodunu dene
-                PDFViewerApplication.open(blobUrl);
-                pdfLoaded = true;
+                PDFViewerApplication.open(url);
+                console.log('✅ PDF opened with direct call');
+                pdfOpened = true;
                 document.title = fileName;
+                
+                if (window.parent) {
+                    window.parent.postMessage({
+                        type: 'PDF_VIEWER_READY',
+                        fileName: fileName,
+                        success: true
+                    }, '*');
+                }
             } catch (e) {
-                console.error('Alternative method also failed:', e);
+                console.error('Direct call also failed:', e);
+                
+                if (window.parent) {
+                    window.parent.postMessage({
+                        type: 'PDF_ERROR',
+                        fileName: fileName,
+                        error: e.message
+                    }, '*');
+                }
             }
         });
         
     } catch (error) {
-        console.error('Error in openPDFWithBlobUrl:', error);
+        console.error('Error in openPDFWithURL:', error);
     }
 }
 
-// Ana mesaj listener'ı
-window.addEventListener("message", function(event) {
-    console.log('viewer.html message received:', event.data?.type);
+// Mesaj dinleyici
+window.addEventListener('message', function(event) {
+    console.log('Message received in viewer:', event.data?.type);
     
-    if (event.data?.type === "pdfData") {
-        console.log('PDF data received from Flutter');
-        loadPDFFromBase64(event.data.base64, event.data.name || "PDF");
+    if (event.data?.type === 'pdfData') {
+        console.log('PDF data received via message');
+        
+        // Mesajdan gelen datayı sessionStorage'a kaydet
+        if (event.data.base64) {
+            sessionStorage.setItem('pdfData', event.data.base64);
+            sessionStorage.setItem('pdfName', event.data.name || 'PDF');
+            
+            // Sayfayı yenile
+            location.reload();
+        }
     }
 });
 
-// Sayfa yüklendiğinde URL'den kontrol et (backup)
-window.addEventListener('load', function() {
-    console.log('viewer.html loaded in Flutter WebView');
+// Sayfa yüklendiğinde
+window.addEventListener('DOMContentLoaded', function() {
+    console.log('DOMContentLoaded in viewer.html');
     
-    // URL parametrelerinden base64 al
-    const params = new URLSearchParams(window.location.search);
-    const base64FromUrl = params.get("base64");
-    const nameFromUrl = params.get("name") || "PDF";
-    
-    if (base64FromUrl) {
-        console.log('Loading PDF from URL parameters');
-        loadPDFFromBase64(base64FromUrl, nameFromUrl);
-    }
-    
-    // Parent'a hazır olduğunu bildir
-    if (window.parent) {
-        window.parent.postMessage({
-            type: 'VIEWER_READY'
-        }, '*');
-    }
+    // Hemen PDF yüklemeye başla
+    setTimeout(loadAndOpenPDF, 100);
 });
 
-// webviewerloaded event'ini manuel tetikle (PDF.js'den gelmezse)
-setTimeout(() => {
-    if (!pdfLoaded) {
-        console.log('Manually triggering webviewerloaded');
-        const event = new Event('webviewerloaded');
-        document.dispatchEvent(event);
-    }
-}, 3000);
+// Hata yakalama
+window.addEventListener('error', function(event) {
+    console.error('Global error in viewer:', event.error);
+});
+
+// Unhandled promise rejection
+window.addEventListener('unhandledrejection', function(event) {
+    console.error('Unhandled promise rejection:', event.reason);
+});
 </script>
-
   <!-- Bu viewer.html icine gomme --> 
   <!-- Bu viewer.html icine gomme --> 
   <!-- Bu viewer.html icine gomme --> 
