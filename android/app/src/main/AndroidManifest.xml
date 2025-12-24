@@ -88,7 +88,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:theme="@style/LaunchTheme">
         
-        <!-- WebView için önemli - TEK BİR TANE! -->
+        <!-- WebView için önemli -->
         <meta-data
             android:name="android.webkit.WebView.EnableSafeBrowsing"
             android:value="true" />
@@ -192,16 +192,7 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Printing plugin için provider -->
-        <provider
-            android:name="es.antonborri.printing.PrintFileProvider"
-            android:authorities="${applicationId}.printfileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/printing_paths" />
-        </provider>
+        <!-- 🎯 BURASI BOŞ KALDI - PrintFileProvider KALDIRILDI -->
 
         <!-- InAppWebView için gerekli activity -->
         <activity
