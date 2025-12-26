@@ -26,67 +26,42 @@ class PdfWebView extends StatefulWidget {
 }
 
 class _PdfWebViewState extends State<PdfWebView> {
-  InAppWebViewController? webViewController;
+  InAppWebViewController? controller;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: InAppWebView(
-          /// 🚀 SADECE asset üzerinden aç
-          initialFile: 'assets/index.html',
+          initialFile: "assets/index.html",
 
-          /// 🔥 TÜM ERİŞİMLER AÇIK
           initialSettings: InAppWebViewSettings(
+            // 🔥 ZORUNLU
             javaScriptEnabled: true,
             domStorageEnabled: true,
 
+            // 🔥 FILE:// + PDF.JS
             allowFileAccess: true,
             allowContentAccess: true,
-
-            /// 🔑 ES MODULE + PDF.js için ZORUNLU
             allowFileAccessFromFileURLs: true,
             allowUniversalAccessFromFileURLs: true,
 
-            /// 🌐 TÜM HTTP/HTTPS İÇERİKLER
+            // 🔥 iframe + ES module
+            supportMultipleWindows: true,
+            useShouldOverrideUrlLoading: true,
+
+            // 🔥 Google Fonts / Material Icons
             mixedContentMode:
                 MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
 
-            /// 🌍 iframe + dış kaynaklar
-            useShouldOverrideUrlLoading: true,
-            allowsInlineMediaPlayback: true,
             mediaPlaybackRequiresUserGesture: false,
-
-            /// 🔓 Google Fonts / Material Icons
-            loadsImagesAutomatically: true,
-            blockNetworkImage: false,
-            blockNetworkLoads: false,
-
-            /// 🔍 UX & stabilite
-            supportZoom: true,
-            transparentBackground: false,
-
-            /// ⚠️ Debug için (istersen kapatılır)
-            clearCache: false,
-            cacheEnabled: true,
+            allowsInlineMediaPlayback: true,
           ),
 
-          onWebViewCreated: (controller) {
-            webViewController = controller;
-          },
+          onWebViewCreated: (c) => controller = c,
 
-          /// 🔍 JS console → Flutter log
-          onConsoleMessage: (controller, consoleMessage) {
-            debugPrint('WEB: ${consoleMessage.message}');
-          },
-
-          /// 🔍 Yükleme hataları
-          onLoadError: (controller, url, code, message) {
-            debugPrint('LOAD ERROR: $code $message');
-          },
-
-          onLoadHttpError: (controller, url, statusCode, description) {
-            debugPrint('HTTP ERROR: $statusCode $description');
+          onConsoleMessage: (controller, msg) {
+            debugPrint("WEB >> ${msg.message}");
           },
         ),
       ),
