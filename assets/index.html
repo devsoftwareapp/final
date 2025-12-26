@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ultimate PDF Dashboard</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <style>
+        /* --- TEMEL AYARLAR --- */
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: #fff;
+            color: #333;
+        }
+
+        .material-icons {
+            font-family: 'Material Icons Round';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            -webkit-font-feature-settings: 'liga';
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* --- TOP BAR --- */
+        header {
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #fff;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mini-logo {
+            width: 32px;
+            height: 32px;
+            background: #007bff;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .app-name {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #2c3e50;
+            letter-spacing: -0.5px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .icon-btn {
+            font-size: 24px;
+            cursor: pointer;
+            color: #555;
+            background: none;
+            border: none;
+            padding: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* --- HIZLI İŞLEM KARTLARI --- */
+        .card-container {
+            display: flex;
+            gap: 12px;
+            padding: 0 20px 20px 20px;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+
+        .card-container::-webkit-scrollbar {
+            display: none;
+        }
+
+        .card {
+            min-width: 100px;
+            height: 100px;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .card .material-icons {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .card p {
+            margin: 0;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        /* --- STICKY TABS --- */
+        #sticky-nav {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: #fff;
+            border-bottom: 1px solid #eee;
+            height: 60px;
+        }
+
+        .tab-bar {
+            display: flex;
+            position: relative;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px 5px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 11px;
+            color: #bbb;
+            cursor: pointer;
+            line-height: 1.2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .tab .material-icons {
+            font-size: 22px;
+            margin-bottom: 4px;
+        }
+
+        .tab.active {
+            color: #007bff;
+        }
+
+        .tab-indicator {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 33.33%;
+            height: 3px;
+            background: #007bff;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* --- VIEW PAGER --- */
+        main {
+            width: 100%;
+            padding-top: 10px;
+        }
+
+        .view-pager {
+            display: flex;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            scroll-behavior: smooth;
+            width: 100%;
+            scrollbar-width: none;
+        }
+
+        .view-pager::-webkit-scrollbar {
+            display: none;
+        }
+
+        .page {
+            min-width: 100vw;
+            padding: 20px;
+            background: #fff;
+            padding-bottom: 150px;
+            scroll-snap-align: start;
+            scroll-snap-stop: always;
+            min-height: calc(100vh - 70px);
+            padding-top: 0;
+        }
+
+        /* STANDART PDF LİSTE ÖĞESİ */
+        .pdf-item {
+            background: #f8f9fa;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+            border: 1px solid #eee;
+            gap: 12px;
+            cursor: pointer;
+        }
+
+        .pdf-item:active {
+            background: #f0f0f0;
+        }
+
+        /* --- THUMBNAIL VE IKON KONTEYNERI --- */
+        .pdf-thumb-wrapper {
+            width: 38px;
+            height: 38px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #eee;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+        }
+
+        .pdf-icon-img {
+            width: 30px;
+            height: 30px;
+            object-fit: contain;
+        }
+
+        .pdf-canvas-thumb {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Yeni metin grubu yapısı */
+        .pdf-text-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            justify-content: center;
+        }
+
+        .pdf-item-name {
+            font-size: 14px;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-bottom: 3px;
+        }
+
+        .pdf-item-meta {
+            font-size: 10px;
+            color: #888;
+            font-weight: 400;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .pdf-item-fav {
+            color: #ccc;
+            cursor: pointer;
+            font-size: 24px;
+            flex-shrink: 0;
+            transition: color 0.2s;
+        }
+
+        .pdf-item-fav.favorite {
+            color: #ffb300;
+        }
+
+        .pdf-item-more {
+            color: #888;
+            cursor: pointer;
+            font-size: 24px;
+            flex-shrink: 0;
+            padding: 4px;
+        }
+
+        /* --- BOTTOM SHEET --- */
+        .sheet-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.4);
+            z-index: 4000;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .bottom-sheet {
+            position: fixed;
+            bottom: -100%;
+            left: 0;
+            width: 100%;
+            background: #fff;
+            border-radius: 20px 20px 0 0;
+            z-index: 4001;
+            transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 20px;
+            padding-bottom: 40px;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+        }
+
+        .sheet-active .sheet-overlay {
+            display: block;
+            opacity: 1;
+        }
+
+        .sheet-active .bottom-sheet {
+            bottom: 0;
+        }
+
+        .sheet-handle {
+            width: 40px;
+            height: 4px;
+            background: #ddd;
+            border-radius: 2px;
+            margin: 0 auto 20px;
+        }
+
+        .sheet-title {
+            font-weight: 700;
+            font-size: 16px;
+            margin-bottom: 20px;
+            color: #2c3e50;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding-right: 10px;
+        }
+
+        .sheet-option {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 12px 10px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .sheet-option:active {
+            background: #f5f5f5;
+        }
+
+        .sheet-option .material-icons {
+            color: #555;
+        }
+
+        .sheet-option span:not(.material-icons) {
+            font-weight: 600;
+            font-size: 15px;
+            color: #333;
+        }
+
+        .sheet-option.delete .material-icons,
+        .sheet-option.delete span {
+            color: #ff4757;
+        }
+
+        /* --- FAB --- */
+        .fab-container {
+            position: fixed;
+            right: 20px;
+            bottom: 90px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 12px;
+            z-index: 3000;
+        }
+
+        .fab-options {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(20px);
+            transition: all 0.3s ease;
+        }
+
+        .fab-options.show {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+
+        .fab-sub-btn {
+            background: #fff;
+            color: #333;
+            padding: 12px 18px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #eee;
+            cursor: pointer;
+        }
+
+        .fab-main-btn {
+            width: 60px;
+            height: 60px;
+            background: #007bff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0,123,255,0.4);
+            cursor: pointer;
+            transition: transform 0.3s, background 0.3s;
+        }
+
+        .fab-main-btn.rotate {
+            transform: rotate(45deg);
+            background: #ff5e5e;
+        }
+
+        /* --- FOOTER --- */
+        footer {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: #fff;
+            display: flex;
+            justify-content: space-around;
+            padding: 12px 0 25px 0;
+            border-top: 1px solid #eee;
+            z-index: 2000;
+        }
+
+        .nav-btn {
+            flex: 1;
+            text-align: center;
+            color: #bbb;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .nav-btn.active {
+            color: #007bff;
+        }
+
+        .nav-btn .material-icons {
+            font-size: 24px;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .hidden-file-input {
+            display: none;
+        }
+
+        /* --- TAM SAYFA ARAMA MODU --- */
+        .search-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #fff;
+            z-index: 5000;
+            display: none;
+            flex-direction: column;
+        }
+
+        .search-overlay.active {
+            display: flex;
+        }
+
+        .search-header {
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background: #fff;
+            border-bottom: 1px solid #eee;
+        }
+
+        .search-input-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            background: #f5f5f5;
+            border-radius: 25px;
+            padding: 10px 20px;
+            gap: 10px;
+        }
+
+        .search-input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            font-size: 16px;
+            font-family: inherit;
+            outline: none;
+        }
+
+        .search-clear-btn {
+            background: none;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            font-size: 20px;
+        }
+
+        .search-close-btn {
+            background: none;
+            border: none;
+            color: #555;
+            cursor: pointer;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 5px;
+        }
+
+        .search-results {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .search-result-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+
+        .search-result-item:hover {
+            background: #f9f9f9;
+        }
+
+        .search-result-name {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .search-result-meta {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .search-empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 40px;
+            text-align: center;
+            color: #888;
+        }
+
+        .search-empty-state .material-icons {
+            font-size: 60px;
+            margin-bottom: 20px;
+            color: #ddd;
+        }
+
+        .search-empty-state h3 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: #555;
+        }
+
+        .search-empty-state p {
+            margin: 0;
+            font-size: 14px;
+        }
+
+        /* ARAMA MODUNDA GİZLENECEK ÖĞELER */
+        .search-mode #top-section,
+        .search-mode #sticky-nav,
+        .search-mode main,
+        .search-mode .fab-container,
+        .search-mode footer {
+            display: none;
+        }
+    </style>
+</head>
+<body id="app-body">
+    <div id="top-section"></div>
+    
+    <nav id="sticky-nav">
+        <div class="tab-bar">
+            <div class="tab active" data-index="0">
+                <span class="material-icons">schedule</span>Son Kullanılanlar
+            </div>
+            <div class="tab" data-index="1">
+                <span class="material-icons">star</span>Favoriler
+            </div>
+            <div class="tab" data-index="2">
+                <span class="material-icons">smartphone</span>Cihazda
+            </div>
+            <div id="indicator" class="tab-indicator"></div>
+        </div>
+    </nav>
+    
+    <main>
+        <div id="pager" class="view-pager">
+            <div class="page" id="recent-page"></div>
+            <div class="page" id="favorites-page"></div>
+            <div class="page" id="device-page">
+                <!-- Örnek PDF öğesi -->
+                <div class="pdf-item">
+                    <div class="pdf-thumb-wrapper">
+                        <img src="img/pdffront.svg" class="pdf-icon-img" alt="pdf">
+                    </div>
+                    <div class="pdf-text-group">
+                        <span class="pdf-item-name">Dahili/Download/Ders1.pdf</span>
+                        <span class="pdf-item-meta">1.4 MB • 26.12.2025 • 14:30:15</span>
+                    </div>
+                    <span class="material-icons pdf-item-fav">star_border</span>
+                    <span class="material-icons pdf-item-more">more_vert</span>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Arama Modu Overlay -->
+    <div class="search-overlay" id="search-overlay">
+        <div class="search-header">
+            <div class="search-input-container">
+                <span class="material-icons">search</span>
+                <input type="text" class="search-input" id="search-input" placeholder="PDF ara..." autocomplete="off">
+                <button class="search-clear-btn" id="search-clear-btn">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            <button class="search-close-btn" id="search-close-btn">
+                <span class="material-icons">close</span>
+            </button>
+        </div>
+        <div class="search-results" id="search-results">
+            <!-- Arama sonuçları buraya gelecek -->
+            <div class="search-empty-state">
+                <span class="material-icons">search</span>
+                <h3>PDF Ara</h3>
+                <p>Aramaya başlamak için yukarıya bir şeyler yazın</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="sheet-overlay" id="sheet-overlay" onclick="closeOptions()"></div>
+    <div class="bottom-sheet" id="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title" id="sheet-title">Dosya Adı</div>
+        <div class="sheet-option" onclick="optionAction('paylas')">
+            <span class="material-icons">share</span>
+            <span>Paylaş</span>
+        </div>
+        <div class="sheet-option" onclick="optionAction('yazdir')">
+            <span class="material-icons">print</span>
+            <span>Yazdır</span>
+        </div>
+        <div class="sheet-option" onclick="optionAction('rename')">
+            <span class="material-icons">edit</span>
+            <span>Yeniden Adlandır</span>
+        </div>
+        <div class="sheet-option delete" onclick="optionAction('delete')">
+            <span class="material-icons">delete_outline</span>
+            <span>Sil</span>
+        </div>
+    </div>
+    
+    <input type="file" id="file-input" class="hidden-file-input" accept=".pdf" multiple>
+    
+    <div class="fab-container">
+        <div id="fab-menu" class="fab-options">
+            <div class="fab-sub-btn" id="pdf-open-btn">
+                <span class="material-icons">folder_open</span>PDF Aç
+            </div>
+            <div class="fab-sub-btn" onclick="alert('Tara')">
+                <span class="material-icons">document_scanner</span>Belge Tara
+            </div>
+        </div>
+        <div class="fab-main-btn" onclick="toggleFab()">
+            <span class="material-icons">add</span>
+        </div>
+    </div>
+    
+    <footer>
+        <div id="btn-home" class="nav-btn active" onclick="switchNav('home')">
+            <span class="material-icons">home</span>Anasayfa
+        </div>
+        <div class="nav-btn" onclick="window.location.href='files.html'">
+            <span class="material-icons">folder</span>Dosyalar
+        </div>
+        <div class="nav-btn" onclick="window.location.href='menu.html'">
+            <span class="material-icons">menu</span>Menü
+        </div>
+    </footer>
+    
+    <script>
+        // Global değişkenler
+        let fileInput, recentPage, favoritesPage, currentPage = 0, isAnimating = false;
+        const STORAGE_KEY = 'pdf_dashboard_data';
+        const RECENT_OPEN_KEY = 'pdf_recent_open_times'; // Son açılma zamanları için yeni key
+        let activeFile = { name: '', data: '', size: 0, date: 0, lastOpened: 0 };
+        let appData = { recent: [], favorites: [] };
+        let pdfjsLib = null; // PDF.js kütüphanesini saklamak için
+        let recentOpenTimes = {}; // Son açılma zamanlarını saklamak için
+        
+        // Arama modu değişkenleri
+        let searchTimeout = null;
+        let allPdfs = []; // Tüm PDF'ler için cache
+        
+        // Tüm PDF'leri topla (arama için)
+        function collectAllPdfs() {
+            allPdfs = [
+                ...appData.recent.map(pdf => ({ ...pdf, type: 'recent' })),
+                ...appData.favorites.map(pdf => ({ ...pdf, type: 'favorites' }))
+            ];
+        }
+        
+        // PDF.js'i dinamik olarak yükle
+        async function loadPdfJS() {
+            try {
+                // ESM modülünü dinamik olarak import et
+                const module = await import('./build/pdf.mjs');
+                pdfjsLib = module;
+                
+                // Worker'ı ayarla
+                if (pdfjsLib.GlobalWorkerOptions) {
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = './build/pdf.worker.mjs';
+                }
+                
+                console.log('PDF.js başarıyla yüklendi');
+                
+                // PDF.js yüklendikten sonra thumbnail'leri yeniden çiz
+                renderLists();
+                
+            } catch (error) {
+                console.error('PDF.js yüklenemedi:', error);
+                // PDF.js yüklenemezse, thumbnail özelliğini devre dışı bırak
+                document.querySelectorAll('.pdf-thumb-wrapper').forEach(wrapper => {
+                    wrapper.innerHTML = `<img src="img/pdffront.svg" class="pdf-icon-img" alt="pdf">`;
+                });
+            }
+        }
+        
+        // İkon tercihi değişikliğini dinlemek için event listener
+        function setupIconPreferenceListener() {
+            // Storage event'ini dinle
+            window.addEventListener('storage', (e) => {
+                if (e.key === 'pdf_icon_style') {
+                    console.log('İkon tercihi değişti:', e.newValue);
+                    renderLists(); // Listeleri yeniden render et
+                }
+            });
+            
+            // Sayfa içinde değişiklik yapıldığında (aynı sekmede)
+            const checkIconPreference = () => {
+                const savedPref = localStorage.getItem('pdf_icon_style');
+                const currentPref = window.currentIconPreference || '';
+                
+                if (savedPref !== currentPref) {
+                    window.currentIconPreference = savedPref;
+                    renderLists();
+                }
+            };
+            
+            // Her 500ms'de bir kontrol et
+            setInterval(checkIconPreference, 500);
+        }
+        
+        // Son açılma zamanlarına göre sıralama yap
+        function sortRecentByLastOpened() {
+            if (appData.recent.length > 0) {
+                appData.recent.sort((a, b) => {
+                    const timeA = recentOpenTimes[a.name] || a.lastOpened || a.date || 0;
+                    const timeB = recentOpenTimes[b.name] || b.lastOpened || b.date || 0;
+                    return timeB - timeA; // En yeni en üstte
+                });
+            }
+        }
+        
+        fetch('top.html')
+            .then(r => r.text())
+            .then(html => {
+                document.getElementById('top-section').innerHTML = html;
+                initMainScript();
+            }).catch(() => initMainScript());
+        
+        function initMainScript() {
+            fileInput = document.getElementById('file-input');
+            recentPage = document.getElementById('recent-page');
+            favoritesPage = document.getElementById('favorites-page');
+            const pager = document.getElementById('pager');
+            const indicator = document.getElementById('indicator');
+            const tabs = document.querySelectorAll('.tab');
+            
+            loadSavedData();
+            loadRecentOpenTimes(); // Son açılma zamanlarını yükle
+            setupIconPreferenceListener(); // İkon tercihi listener'ını başlat
+            loadPdfJS(); // PDF.js'i yükle
+            
+            // Arama modu event listener'ları
+            setupSearchMode();
+            
+            document.getElementById('pdf-open-btn').addEventListener('click', () => {
+                fileInput.click();
+                toggleFab();
+            });
+            
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    const idx = parseInt(this.getAttribute('data-index'));
+                    isAnimating = true;
+                    pager.scrollTo({ left: window.innerWidth * idx, behavior: 'smooth' });
+                    updateTabs(idx);
+                    setTimeout(() => isAnimating = false, 300);
+                });
+            });
+            
+            pager.addEventListener('scroll', () => {
+                if (isAnimating) return;
+                indicator.style.transform = `translateX(${(pager.scrollLeft / window.innerWidth) * 100}%)`;
+            });
+            
+            pager.addEventListener('scrollend', () => {
+                const idx = Math.round(pager.scrollLeft / window.innerWidth);
+                if (idx !== currentPage) updateTabs(idx);
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                Array.from(e.target.files).forEach(file => {
+                    if (file.name.toLowerCase().endsWith('.pdf')) {
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            addPdfToData(file.name, event.target.result, file.size, Date.now());
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+                fileInput.value = '';
+            });
+        }
+        
+        // Arama modu fonksiyonları
+        function setupSearchMode() {
+            const searchInput = document.getElementById('search-input');
+            const searchClearBtn = document.getElementById('search-clear-btn');
+            const searchCloseBtn = document.getElementById('search-close-btn');
+            
+            searchInput.addEventListener('input', function() {
+                const query = this.value.trim();
+                searchClearBtn.style.display = query ? 'flex' : 'none';
+                
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    performSearch(query);
+                }, 300);
+            });
+            
+            searchClearBtn.addEventListener('click', function() {
+                searchInput.value = '';
+                searchInput.focus();
+                searchClearBtn.style.display = 'none';
+                performSearch('');
+            });
+            
+            searchCloseBtn.addEventListener('click', closeSearch);
+            
+            // Enter tuşu ile arama
+            searchInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    performSearch(this.value.trim());
+                }
+            });
+            
+            // Escape tuşu ile kapat
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && document.getElementById('search-overlay').classList.contains('active')) {
+                    closeSearch();
+                }
+            });
+        }
+        
+        function openSearch() {
+            // Tüm PDF'leri topla
+            collectAllPdfs();
+            
+            // Arama modunu aç
+            document.getElementById('search-overlay').classList.add('active');
+            document.getElementById('app-body').classList.add('search-mode');
+            
+            // Input'a odaklan
+            const searchInput = document.getElementById('search-input');
+            searchInput.value = '';
+            searchInput.focus();
+            
+            // Temizle butonunu gizle
+            document.getElementById('search-clear-btn').style.display = 'none';
+            
+            // Boş durumu göster
+            showEmptySearchState();
+        }
+        
+        function closeSearch() {
+            document.getElementById('search-overlay').classList.remove('active');
+            document.getElementById('app-body').classList.remove('search-mode');
+            document.getElementById('search-input').value = '';
+        }
+        
+        function performSearch(query) {
+            const resultsContainer = document.getElementById('search-results');
+            
+            if (!query || query.trim() === '') {
+                showEmptySearchState();
+                return;
+            }
+            
+            const lowerQuery = query.toLowerCase();
+            const filteredPdfs = allPdfs.filter(pdf => 
+                pdf.name.toLowerCase().includes(lowerQuery)
+            );
+            
+            if (filteredPdfs.length === 0) {
+                showNoResultsState(query);
+                return;
+            }
+            
+            displaySearchResults(filteredPdfs, query);
+        }
+        
+        function showEmptySearchState() {
+            const resultsContainer = document.getElementById('search-results');
+            resultsContainer.innerHTML = `
+                <div class="search-empty-state">
+                    <span class="material-icons">search</span>
+                    <h3>PDF Ara</h3>
+                    <p>Aramaya başlamak için yukarıya bir şeyler yazın</p>
+                </div>
+            `;
+        }
+        
+        function showNoResultsState(query) {
+            const resultsContainer = document.getElementById('search-results');
+            resultsContainer.innerHTML = `
+                <div class="search-empty-state">
+                    <span class="material-icons">search_off</span>
+                    <h3>"${query}" için sonuç bulunamadı</h3>
+                    <p>Farklı bir anahtar kelime deneyin</p>
+                </div>
+            `;
+        }
+        
+        function displaySearchResults(results, query) {
+            const resultsContainer = document.getElementById('search-results');
+            const lowerQuery = query.toLowerCase();
+            
+            let html = '';
+            
+            results.forEach(pdf => {
+                const name = pdf.name;
+                const sizeStr = formatBytes(pdf.size);
+                const dateStr = formatDateTime(pdf.date);
+                const typeText = pdf.type === 'recent' ? 'Son Kullanılanlar' : 'Favoriler';
+                
+                // Vurgulama için ismi işle
+                const nameLower = name.toLowerCase();
+                const queryIndex = nameLower.indexOf(lowerQuery);
+                let highlightedName = name;
+                
+                if (queryIndex !== -1) {
+                    const before = name.substring(0, queryIndex);
+                    const match = name.substring(queryIndex, queryIndex + query.length);
+                    const after = name.substring(queryIndex + query.length);
+                    highlightedName = `${before}<strong>${match}</strong>${after}`;
+                }
+                
+                html += `
+                    <div class="search-result-item" onclick="openSearchResult('${pdf.name}', '${pdf.data}')">
+                        <div class="search-result-name">${highlightedName}</div>
+                        <div class="search-result-meta">${sizeStr} • ${dateStr} • ${typeText}</div>
+                    </div>
+                `;
+            });
+            
+            resultsContainer.innerHTML = html;
+        }
+        
+        function openSearchResult(name, data) {
+            closeSearch();
+            openPdfViewer(name, data);
+        }
+        
+        // --- PDF THUMBNAIL ÇİZİCİ ---
+        async function renderThumbnail(pdfData, canvas) {
+            try {
+                // PDF.js yüklenmemişse bekleyelim
+                if (!pdfjsLib) {
+                    console.log('PDF.js henüz yüklenmedi, bekleniyor...');
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    if (!pdfjsLib) {
+                        throw new Error('PDF.js kütüphanesi yüklenemedi');
+                    }
+                }
+                
+                // PDF'i yükle
+                const loadingTask = pdfjsLib.getDocument(pdfData);
+                const pdf = await loadingTask.promise;
+                
+                // İlk sayfayı al
+                const page = await pdf.getPage(1);
+                const viewport = page.getViewport({ scale: 0.15 });
+                
+                // Canvas boyutlarını ayarla
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                // Context'i al ve render et
+                const ctx = canvas.getContext('2d');
+                await page.render({
+                    canvasContext: ctx,
+                    viewport: viewport
+                }).promise;
+                
+            } catch (e) {
+                console.error('Thumbnail oluşturulamadı:', e);
+                // Hata durumunda varsayılan ikonu göster
+                canvas.parentElement.innerHTML = `<img src="img/pdffront.svg" class="pdf-icon-img" alt="pdf">`;
+            }
+        }
+        
+        function formatBytes(bytes, decimals = 1) {
+            if (!bytes) return '0 B';
+            const k = 1024, dm = decimals < 0 ? 0 : decimals, sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+        
+        function formatDate(timestamp) {
+            if (!timestamp) return '';
+            const d = new Date(timestamp);
+            return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+        }
+        
+        function formatDateTime(timestamp) {
+            if (!timestamp) return '';
+            const d = new Date(timestamp);
+            return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()} • ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        }
+        
+        function formatTime(timestamp) {
+            if (!timestamp) return '';
+            const d = new Date(timestamp);
+            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+        }
+        
+        // Son açılma zamanlarını yükle
+        function loadRecentOpenTimes() {
+            const saved = localStorage.getItem(RECENT_OPEN_KEY);
+            if (saved) {
+                try {
+                    recentOpenTimes = JSON.parse(saved);
+                } catch (e) {
+                    recentOpenTimes = {};
+                }
+            } else {
+                recentOpenTimes = {};
+            }
+        }
+        
+        // Son açılma zamanını kaydet
+        function saveRecentOpenTime(pdfName) {
+            recentOpenTimes[pdfName] = Date.now();
+            localStorage.setItem(RECENT_OPEN_KEY, JSON.stringify(recentOpenTimes));
+        }
+        
+        // Son açılma zamanını getir
+        function getRecentOpenTime(pdfName) {
+            return recentOpenTimes[pdfName] || null;
+        }
+        
+        function loadSavedData() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    appData.recent = Array.isArray(parsed.recent) ? parsed.recent : [];
+                    appData.favorites = Array.isArray(parsed.favorites) ? parsed.favorites : [];
+                    
+                    // Son açılma zamanlarına göre sırala
+                    sortRecentByLastOpened();
+                } catch (e) {
+                    appData = { recent: [], favorites: [] };
+                }
+            }
+            renderLists();
+        }
+        
+        function saveData() {
+            // Kaydetmeden önce sırala
+            sortRecentByLastOpened();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+        }
+        
+        function renderLists() {
+            if (!recentPage || !favoritesPage) return;
+            
+            // Sıralamayı güncelle
+            sortRecentByLastOpened();
+            
+            recentPage.innerHTML = '';
+            favoritesPage.innerHTML = '';
+            
+            // Son kullanılanları render et (son açılma tarihine göre)
+            appData.recent.forEach(pdf => {
+                const isFav = appData.favorites.some(f => f.name === pdf.name);
+                recentPage.appendChild(createPdfElement(pdf, isFav, 'recent'));
+            });
+            
+            // Favorileri render et (eski sistem - dosya oluşturulma tarihi)
+            appData.favorites.forEach(pdf => {
+                favoritesPage.appendChild(createPdfElement(pdf, true, 'favorites'));
+            });
+        }
+        
+        function addPdfToData(name, data, size, date) {
+            // Aynı isimde PDF var mı kontrol et
+            const existingIndex = appData.recent.findIndex(p => p.name === name);
+            
+            if (existingIndex !== -1) {
+                // Var olanı kaldır
+                appData.recent.splice(existingIndex, 1);
+            }
+            
+            // En başa ekle
+            appData.recent.unshift({ 
+                name, 
+                data, 
+                size: size || 0, 
+                date: date || Date.now(),
+                lastOpened: Date.now()
+            });
+            
+            // Son açılma zamanını da kaydet
+            saveRecentOpenTime(name);
+            
+            // Sıralamayı güncelle
+            sortRecentByLastOpened();
+            
+            // 20'den fazla öğe varsa en eskiyi kaldır
+            if (appData.recent.length > 20) appData.recent.pop();
+            
+            saveData();
+            renderLists();
+        }
+        
+        function createPdfElement(pdfObj, isFav, listType) {
+            const iconPref = localStorage.getItem('pdf_icon_style') || 'Varsayılan';
+            const sizeStr = formatBytes(pdfObj.size);
+            
+            // Son açılma zamanını al
+            const lastOpenedTime = getRecentOpenTime(pdfObj.name) || pdfObj.lastOpened || pdfObj.date;
+            
+            // List tipine göre tarih formatını belirle
+            let dateStr;
+            if (listType === 'recent') {
+                // Son kullanılanlar: Son açılma tarihi ve saati
+                dateStr = formatDateTime(lastOpenedTime);
+            } else {
+                // Favoriler ve diğerleri: Dosya oluşturulma tarihi
+                dateStr = formatDateTime(pdfObj.date);
+            }
+            
+            const metaString = (pdfObj.size || pdfObj.date) ? `${sizeStr} • ${dateStr}` : 'Bilgi yok';
+            
+            const div = document.createElement('div');
+            div.className = 'pdf-item';
+            
+            // Thumbnail mı İkon mu kontrolü
+            let iconHtml = `<div class="pdf-thumb-wrapper">`;
+            if (iconPref === 'Thumbnail') {
+                // Thumbnail için canvas oluştur
+                iconHtml += `<canvas class="pdf-canvas-thumb"></canvas>`;
+            } else {
+                // Varsayılan ikon
+                iconHtml += `<img src="img/pdffront.svg" class="pdf-icon-img" alt="pdf">`;
+            }
+            iconHtml += `</div>`;
+            
+            div.innerHTML = `
+                ${iconHtml}
+                <div class="pdf-text-group">
+                    <span class="pdf-item-name">${pdfObj.name}</span>
+                    <span class="pdf-item-meta">${metaString}</span>
+                </div>
+                <span class="material-icons pdf-item-fav ${isFav ? 'favorite' : ''}">${isFav ? 'star' : 'star_border'}</span>
+                <span class="material-icons pdf-item-more">more_vert</span>
+            `;
+            
+            // Eğer Thumbnail seçiliyse çizimi başlat
+            if (iconPref === 'Thumbnail') {
+                const canvas = div.querySelector('.pdf-canvas-thumb');
+                if (canvas) {
+                    // Asenkron olarak thumbnail çiz
+                    setTimeout(() => {
+                        renderThumbnail(pdfObj.data, canvas);
+                    }, 100);
+                }
+            }
+            
+            div.onclick = () => {
+                // PDF açıldığında son açılma zamanını güncelle
+                saveRecentOpenTime(pdfObj.name);
+                
+                // Son açılma zamanını appData'ya da kaydet
+                const pdfIndex = appData.recent.findIndex(p => p.name === pdfObj.name);
+                if (pdfIndex !== -1) {
+                    appData.recent[pdfIndex].lastOpened = Date.now();
+                    // Sıralamayı güncelle
+                    sortRecentByLastOpened();
+                    saveData();
+                }
+                
+                openPdfViewer(pdfObj.name, pdfObj.data);
+            };
+            
+            div.querySelector('.pdf-item-fav').addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleFavorite(e.target, pdfObj.name, pdfObj.data, pdfObj.size, pdfObj.date);
+            });
+            
+            div.querySelector('.pdf-item-more').addEventListener('click', (e) => {
+                e.stopPropagation();
+                showOptions(pdfObj.name, pdfObj.data);
+            });
+            
+            return div;
+        }
+        
+        function toggleFavorite(btn, name, data, size, date) {
+            const isAdding = !btn.classList.contains('favorite');
+            if (isAdding) {
+                if (!appData.favorites.some(f => f.name === name)) {
+                    appData.favorites.unshift({ 
+                        name, 
+                        data, 
+                        size: size || 0, 
+                        date: date || Date.now(),
+                        lastOpened: getRecentOpenTime(name) || Date.now()
+                    });
+                }
+            } else {
+                appData.favorites = appData.favorites.filter(f => f.name !== name);
+            }
+            saveData();
+            renderLists();
+        }
+        
+        function showOptions(name, data) {
+            activeFile = { name, data };
+            document.getElementById('sheet-title').textContent = name;
+            document.getElementById('app-body').classList.add('sheet-active');
+        }
+        
+        function closeOptions() {
+            document.getElementById('app-body').classList.remove('sheet-active');
+        }
+        
+        function optionAction(action) {
+            closeOptions();
+            setTimeout(() => {
+                if(action === 'rename') {
+                    const newName = prompt("Yeni dosya adını giriniz:", activeFile.name);
+                    if(newName && newName !== activeFile.name) renameFile(activeFile.name, newName);
+                } else if(action === 'delete') {
+                    if(confirm("Silmek istediğinize emin misiniz?")) deleteFile(activeFile.name);
+                } else {
+                    alert(activeFile.name + " " + action);
+                }
+            }, 350);
+        }
+        
+        function renameFile(oldName, newName) {
+            // Eski isimle kayıtlı son açılma zamanını yeni isme taşı
+            if (recentOpenTimes[oldName]) {
+                recentOpenTimes[newName] = recentOpenTimes[oldName];
+                delete recentOpenTimes[oldName];
+                localStorage.setItem(RECENT_OPEN_KEY, JSON.stringify(recentOpenTimes));
+            }
+            
+            [appData.recent, appData.favorites].forEach(list => {
+                list.forEach(p => {
+                    if(p.name === oldName) p.name = newName;
+                });
+            });
+            saveData();
+            renderLists();
+        }
+        
+        function deleteFile(name) {
+            // Son açılma zamanını da sil
+            if (recentOpenTimes[name]) {
+                delete recentOpenTimes[name];
+                localStorage.setItem(RECENT_OPEN_KEY, JSON.stringify(recentOpenTimes));
+            }
+            
+            appData.recent = appData.recent.filter(p => p.name !== name);
+            appData.favorites = appData.favorites.filter(p => p.name !== name);
+            saveData();
+            renderLists();
+        }
+        
+        function openPdfViewer(name, data) {
+            if (!data || data === 'dummy_data') return alert("Hata");
+            
+            // Son açılma zamanını güncelle
+            saveRecentOpenTime(name);
+            
+            // Verileri session storage'a kaydet
+            sessionStorage.setItem("pdfData", data);
+            sessionStorage.setItem("pdfName", name);
+            
+            // İframe sayfasına yönlendir
+            window.location.href = "iframe.html";
+        }
+        
+        function updateTabs(idx) {
+            currentPage = idx;
+            document.getElementById('indicator').style.transform = `translateX(${idx * 100}%)`;
+            document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+        }
+        
+        function toggleFab() {
+            document.getElementById('fab-menu').classList.toggle('show');
+            document.querySelector('.fab-main-btn').classList.toggle('rotate');
+        }
+        
+        function switchNav(type) {
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', type === 'home' && b.id === 'btn-home'));
+        }
+        
+        // Sayfa yüklendiğinde mevcut tercihi kaydet
+        document.addEventListener('DOMContentLoaded', () => {
+            window.currentIconPreference = localStorage.getItem('pdf_icon_style') || 'Varsayılan';
+            
+            // Sayfa her göründüğünde sıralamayı güncelle
+            const handleVisibilityChange = () => {
+                if (!document.hidden) {
+                    loadRecentOpenTimes();
+                    sortRecentByLastOpened();
+                    renderLists();
+                }
+            };
+            
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            window.addEventListener('focus', handleVisibilityChange);
+        });
+    </script>
+</body>
+</html>

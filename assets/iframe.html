@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>PDF Görüntüle</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    font-family: system-ui, -apple-system, sans-serif;
+    background-color: #f5f5f5;
+  }
+
+  /* ÜST BAR */
+  #topBar {
+    height: 46px;
+    display: flex;
+    align-items: center;
+    background-color: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 0 8px;
+    z-index: 10;
+  }
+
+  #back {
+    background: none;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #5f6368;
+  }
+  #back:active { background: #f1f1f1; }
+
+  #title {
+    flex: 1;
+    margin-left: 12px;
+    font-size: 16px;
+    font-weight: 500;
+    color: #202124;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .action-btn {
+    background: none;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #5f6368;
+  }
+  .action-btn:active { background: #f1f1f1; }
+
+  /* VIEWER */
+  #viewerArea {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  /* PRINT */
+  @media print {
+    #topBar { display: none !important; }
+    body, html, #viewerArea, iframe {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- ÜST BAR -->
+<div id="topBar">
+  <button id="back" title="Geri">
+    <span class="material-icons">arrow_back</span>
+  </button>
+
+  <div id="title">Dosya Yükleniyor...</div>
+
+  <div id="actions">
+    <button id="share" class="action-btn" title="Paylaş">
+      <span class="material-icons">share</span>
+    </button>
+    <button id="print" class="action-btn" title="Yazdır">
+      <span class="material-icons">print</span>
+    </button>
+  </div>
+</div>
+
+<!-- PDF -->
+<div id="viewerArea">
+  <iframe id="pdfFrame"></iframe>
+</div>
+
+<script>
+const backBtn  = document.getElementById("back");
+const shareBtn = document.getElementById("share");
+const printBtn = document.getElementById("print");
+const titleEl  = document.getElementById("title");
+const frame    = document.getElementById("pdfFrame");
+
+// SESSION DATA
+const pdfData = sessionStorage.getItem("pdfData");
+const pdfName = sessionStorage.getItem("pdfName");
+
+// BASE64 → BLOB
+function base64ToBlob(dataUrl) {
+  const raw = atob(dataUrl.split(",")[1]);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) {
+    bytes[i] = raw.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: "application/pdf" });
+}
+
+// YÜKLEME
+if (!pdfData) {
+  location.href = "testindex.html";
+} else {
+  titleEl.textContent = pdfName || "PDF";
+
+  frame.src = "web/viewer.html";
+  frame.onload = () => {
+    frame.contentWindow.postMessage(pdfData, "*");
+  };
+}
+
+// GERİ
+backBtn.onclick = () => {
+  sessionStorage.removeItem("pdfData");
+  sessionStorage.removeItem("pdfName");
+  history.back();
+};
+
+// PAYLAŞ
+shareBtn.onclick = async () => {
+  if (!navigator.share) {
+    alert("Paylaşım desteklenmiyor");
+    return;
+  }
+  const file = new File(
+    [base64ToBlob(pdfData)],
+    pdfName || "dosya.pdf",
+    { type: "application/pdf" }
+  );
+
+  try {
+    await navigator.share({ files: [file], title: pdfName });
+  } catch {}
+};
+
+// YAZDIR
+printBtn.onclick = () => {
+  const blob = base64ToBlob(pdfData);
+  const url = URL.createObjectURL(blob);
+
+  const win = window.open(url, "_blank");
+  if (win) {
+    win.onload = () => {
+      win.print();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+  }
+};
+</script>
+
+</body>
+</html>
