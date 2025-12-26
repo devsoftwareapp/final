@@ -1,54 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Temel internet izni -->
+    <!-- 🔐 ZORUNLU -->
     <uses-permission android:name="android.permission.INTERNET" />
-    
-    <!-- Ağ durumu kontrolü -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    
-    <!-- TAM DOSYA ERİŞİM İZNİ (Android 11+ için) -->
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
-    
-    <!-- Android 10 ve altı için standart depolama izinleri -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" 
-                     android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
-                     android:maxSdkVersion="32" />
 
-    <!-- Kamera izni (belge tarama için) -->
+    <!-- 📂 Dosya seçimi için (SAF / File Picker) -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- 📷 İleride tarama için -->
     <uses-permission android:name="android.permission.CAMERA" />
 
-    <!-- Yazdırma için POST_NOTIFICATIONS izni (Android 13+) -->
+    <!-- 🔔 Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Package visibility queries (Android 11+ için) -->
+    <!-- 🔎 Android 11+ package visibility -->
     <queries>
-        <!-- Tüm dosya erişim izni için -->
-        <intent>
-            <action android:name="android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION" />
-            <data android:scheme="package" />
-        </intent>
-        
+
         <!-- PDF görüntüleyiciler -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="application/pdf" />
         </intent>
-        
+
         <!-- Dosya seçiciler -->
         <intent>
             <action android:name="android.intent.action.GET_CONTENT" />
             <data android:mimeType="*/*" />
         </intent>
-        
-        <!-- E-posta uygulamaları -->
+
+        <!-- Paylaşım -->
         <intent>
-            <action android:name="android.intent.action.SENDTO" />
-            <data android:scheme="mailto" />
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="*/*" />
         </intent>
-        
-        <!-- Web tarayıcılar -->
+
+        <!-- Tarayıcılar -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="http" />
@@ -57,131 +46,85 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
-        
-        <!-- Yazdırma uygulamaları -->
-        <intent>
-            <action android:name="android.printservice.PrintService" />
-        </intent>
-        
-        <!-- Paylaşım uygulamaları -->
-        <intent>
-            <action android:name="android.intent.action.SEND" />
-            <data android:mimeType="*/*" />
-        </intent>
-        
-        <!-- Diğer PDF okuyucular -->
-        <package android:name="com.adobe.reader" />
-        <package android:name="com.google.android.apps.pdfviewer" />
-        <package android:name="com.foxit.mobile.pdf.lite" />
-        <package android:name="com.sec.android.app.sbrowser" />
+
     </queries>
 
     <application
-        android:label="PDF Reader"
         android:name="${applicationName}"
+        android:label="PDF Reader"
         android:icon="@mipmap/ic_launcher"
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true"
-        android:requestLegacyExternalStorage="true"
         android:allowBackup="true"
-        android:fullBackupContent="true"
-        android:dataExtractionRules="@xml/data_extraction_rules"
         android:theme="@style/LaunchTheme">
-        
-        <!-- WebView için önemli -->
+
+        <!-- 🔥 PDF.js + file:// için KRİTİK -->
         <meta-data
             android:name="android.webkit.WebView.EnableSafeBrowsing"
-            android:value="true" />
-            
-        <!-- InAppWebView için gerekli -->
+            android:value="false" />
+
+        <!-- InAppWebView -->
         <meta-data
             android:name="android.webkit.WebView.MetricsOptOut"
             android:value="true" />
-        
-        <!-- Ana Activity -->
+
+        <!-- 🚀 ANA ACTIVITY -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:theme="@style/LaunchTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize"
-            android:screenOrientation="portrait">
-            
-            <!-- Splash screen için -->
-            <meta-data
-                android:name="io.flutter.embedding.android.SplashScreenDrawable"
-                android:resource="@drawable/launch_background" />
-            
-            <!-- Normal tema -->
-            <meta-data
-                android:name="io.flutter.embedding.android.NormalTheme"
-                android:resource="@style/NormalTheme" />
-            
-            <!-- Uygulama başlatıcı -->
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            
-            <!-- Özel scheme: settings://all_files için -->
+
+            <!-- 📄 Harici PDF açma -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="settings" 
-                      android:host="all_files" />
-            </intent-filter>
-            
-            <!-- Harici PDF dosyalarını açmak için -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="file" />
                 <data android:mimeType="application/pdf" />
-                <data android:pathPattern=".*\\.pdf" />
-                <data android:host="*" />
-            </intent-filter>
-            
-            <!-- content:// URI'leri için -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content" />
-                <data android:mimeType="application/pdf" />
+                <data android:scheme="file" />
             </intent-filter>
 
-            <!-- Diğer uygulamalardan PDF almak için -->
+            <!-- 📤 PDF paylaşım -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/pdf" />
             </intent-filter>
 
-            <!-- Çoklu dosya paylaşımı -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/pdf" />
             </intent-filter>
 
-            <!-- Yazdırma intent'leri -->
-            <intent-filter>
-                <action android:name="android.intent.action.PRINT" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/pdf" />
-            </intent-filter>
-
         </activity>
 
-        <!-- Flutter embedding -->
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
+        <!-- 🌐 InAppWebView Activities -->
+        <activity
+            android:name="com.pichillilorenzo.flutter_inappwebview.InAppBrowserActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
+            android:hardwareAccelerated="true" />
 
-        <!-- FileProvider (PDF paylaşımı için) -->
+        <activity
+            android:name="com.pichillilorenzo.flutter_inappwebview.ChromeCustomTabsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name="com.pichillilorenzo.flutter_inappwebview.ChromeSafariBrowserActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
+            android:hardwareAccelerated="true" />
+
+        <!-- 📁 FileProvider (PDF paylaşım için) -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -192,26 +135,10 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- 🎯 BURASI BOŞ KALDI - PrintFileProvider KALDIRILDI -->
-
-        <!-- InAppWebView için gerekli activity -->
-        <activity
-            android:name="com.pichillilorenzo.flutter_inappwebview.InAppBrowserActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:hardwareAccelerated="true"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
-            android:exported="false" />
-
-        <activity
-            android:name="com.pichillilorenzo.flutter_inappwebview.ChromeCustomTabsActivity"
-            android:exported="false" />
-
-        <activity
-            android:name="com.pichillilorenzo.flutter_inappwebview.ChromeSafariBrowserActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:hardwareAccelerated="true"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
-            android:exported="false" />
+        <!-- Flutter embedding -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
 
     </application>
 
