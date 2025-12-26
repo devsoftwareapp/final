@@ -35,23 +35,24 @@ flutter:
   assets:
     # assets/build klasörü
     - assets/build/
-    - assets/index.html
-    - assets/iframe.html
-    - assets/menu.html
-    - assets/top.html
-    - assets/files.html
-    - assets/img/
+    
     
     
     # Tüm web klasörünü ekle
     - assets/web/
     
     # Web ana dosyaları (ek güvenlik için)
-    - assets/web/index.html
+
+    - assets/index.html
+    - assets/iframe.html
+    - assets/menu.html
+    - assets/top.html
+    - assets/files.html
+    - assets/img/
     - assets/web/viewer.html
     - assets/web/viewer.css
     - assets/web/viewer.mjs
-    - assets/web/index_viewer_bridge.js
+  
     
     # Images klasörü
     - assets/web/images/
