@@ -26,42 +26,47 @@ class PdfWebView extends StatefulWidget {
 }
 
 class _PdfWebViewState extends State<PdfWebView> {
-  InAppWebViewController? controller;
+  late InAppWebViewController controller;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
+        bottom: false,
         child: InAppWebView(
-          initialFile: "assets/index.html",
-
-          initialSettings: InAppWebViewSettings(
-            // 🔥 ZORUNLU
-            javaScriptEnabled: true,
-            domStorageEnabled: true,
-
-            // 🔥 FILE:// + PDF.JS
-            allowFileAccess: true,
-            allowContentAccess: true,
-            allowFileAccessFromFileURLs: true,
-            allowUniversalAccessFromFileURLs: true,
-
-            // 🔥 iframe + ES module
-            supportMultipleWindows: true,
-            useShouldOverrideUrlLoading: true,
-
-            // 🔥 Google Fonts / Material Icons
-            mixedContentMode:
-                MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-
-            mediaPlaybackRequiresUserGesture: false,
-            allowsInlineMediaPlayback: true,
+          initialUrlRequest: URLRequest(
+            url: WebUri("http://localhost/index.html"),
           ),
 
-          onWebViewCreated: (c) => controller = c,
+          initialSettings: InAppWebViewSettings(
+            javaScriptEnabled: true,
+            domStorageEnabled: true,
+            allowFileAccess: true,
+            allowContentAccess: true,
+            allowUniversalAccessFromFileURLs: true,
+            allowFileAccessFromFileURLs: true,
+            mediaPlaybackRequiresUserGesture: false,
+            useWideViewPort: true,
+            loadWithOverviewMode: true,
+            supportZoom: true,
+          ),
 
-          onConsoleMessage: (controller, msg) {
-            debugPrint("WEB >> ${msg.message}");
+          initialAssetLoader: InAppWebViewAssetLoader(
+            domain: "localhost",
+            pathHandlers: [
+              InAppWebViewAssetLoaderAssetsPathHandler(
+                path: "/",
+              ),
+            ],
+          ),
+
+          onWebViewCreated: (c) {
+            controller = c;
+          },
+
+          onConsoleMessage: (c, msg) {
+            debugPrint("WEB: ${msg.message}");
           },
         ),
       ),
