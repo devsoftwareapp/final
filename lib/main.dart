@@ -33,26 +33,60 @@ class _PdfWebViewState extends State<PdfWebView> {
     return Scaffold(
       body: SafeArea(
         child: InAppWebView(
+          /// 🚀 SADECE asset üzerinden aç
           initialFile: 'assets/index.html',
 
+          /// 🔥 TÜM ERİŞİMLER AÇIK
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             domStorageEnabled: true,
+
             allowFileAccess: true,
             allowContentAccess: true,
+
+            /// 🔑 ES MODULE + PDF.js için ZORUNLU
+            allowFileAccessFromFileURLs: true,
+            allowUniversalAccessFromFileURLs: true,
+
+            /// 🌐 TÜM HTTP/HTTPS İÇERİKLER
+            mixedContentMode:
+                MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+
+            /// 🌍 iframe + dış kaynaklar
             useShouldOverrideUrlLoading: true,
-            mediaPlaybackRequiresUserGesture: false,
             allowsInlineMediaPlayback: true,
+            mediaPlaybackRequiresUserGesture: false,
+
+            /// 🔓 Google Fonts / Material Icons
+            loadsImagesAutomatically: true,
+            blockNetworkImage: false,
+            blockNetworkLoads: false,
+
+            /// 🔍 UX & stabilite
+            supportZoom: true,
+            transparentBackground: false,
+
+            /// ⚠️ Debug için (istersen kapatılır)
+            clearCache: false,
+            cacheEnabled: true,
           ),
 
           onWebViewCreated: (controller) {
             webViewController = controller;
           },
 
+          /// 🔍 JS console → Flutter log
           onConsoleMessage: (controller, consoleMessage) {
-            debugPrint(
-              'WEB: ${consoleMessage.message}',
-            );
+            debugPrint('WEB: ${consoleMessage.message}');
+          },
+
+          /// 🔍 Yükleme hataları
+          onLoadError: (controller, url, code, message) {
+            debugPrint('LOAD ERROR: $code $message');
+          },
+
+          onLoadHttpError: (controller, url, statusCode, description) {
+            debugPrint('HTTP ERROR: $statusCode $description');
           },
         ),
       ),
