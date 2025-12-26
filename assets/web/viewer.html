@@ -1,33 +1,40 @@
 ﻿<!doctype html>
+<!--
+Copyright 2012 Mozilla Foundation
 
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Adobe CMap resources are covered by their own copyright but the same license:
+
+    Copyright 1990-2015 Adobe Systems Incorporated.
+
+See https://github.com/adobe-type-tools/cmap-resources
+-->
 <html dir="ltr" mozdisallowselectionprint>
   <head>
-
-
-    
     <meta charset="utf-8" />
-
-
-    
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-    
- <meta name="google" content="notranslate" />
-    
+    <meta name="google" content="notranslate" />
+    <title>PDF.js viewer</title>
 
-    <!-- This snippet is used in production (included from viewer.html) -->
-    <link rel="resource" type="application/l10n" href="locale/locale.json" />
-    <script src="../build/pdf.mjs" type="module"></script>
-    
- 
-    
-<link rel="stylesheet" href="viewer.css" />
+<!-- This snippet is used in production (included from viewer.html) -->
+<link rel="resource" type="application/l10n" href="locale/locale.json" />
+<script src="../build/pdf.mjs" type="module"></script>
 
-<script src="viewer.mjs" type="module"></script>
-    
-</head>
+    <link rel="stylesheet" href="viewer.css" />
 
-
-  
+  <script src="viewer.mjs" type="module"></script>
+  </head>
 
   <body tabindex="0">
     <div id="outerContainer">
@@ -1122,229 +1129,31 @@
           </button>
         </div>
       </div>
+      <!-- editorUndoBar -->
     </div>
+    <!-- outerContainer -->
     <div id="printContainer"></div>
+    
+    
+    
+    
+    
+    
+    <script>
+window.addEventListener("message", (e) => {
+  const url = e.data;
+  if (!url || typeof url !== "string") return;
 
-  <!-- Bu viewer.html icine gomme --> 
-  <!-- Bu viewer.html icine gomme --> 
-  <!-- Bu viewer.html icine gomme --> 
+  const wait = setInterval(() => {
+    if (!window.PDFViewerApplication) return;
+    if (!PDFViewerApplication.initialized) return;
 
-
-<script>
-// viewer.html - WORKING VERSION FOR FLUTTER
-
-console.log('=== VIEWER.HML LOADED ===');
-
-let pdfOpened = false;
-
-// Ana PDF yükleme fonksiyonu
-function loadAndOpenPDF() {
-    console.log('loadAndOpenPDF called');
-    
-    // 1. URL parametrelerinden al
-    const params = new URLSearchParams(window.location.search);
-    let base64 = params.get('base64');
-    const fileName = params.get('name') || 'PDF';
-    
-    console.log('URL params - base64 exists:', !!base64, 'fileName:', fileName);
-    
-    // 2. window.name'den al (backup)
-    if (!base64 && window.name && window.name.startsWith('data:application/pdf')) {
-        console.log('Getting PDF from window.name');
-        base64 = window.name;
-    }
-    
-    // 3. sessionStorage'dan al (backup 2)
-    if (!base64) {
-        const ssData = sessionStorage.getItem('pdfData');
-        if (ssData) {
-            console.log('Getting PDF from sessionStorage');
-            base64 = ssData;
-            sessionStorage.removeItem('pdfData');
-        }
-    }
-    
-    if (!base64) {
-        console.error('No PDF data found');
-        return;
-    }
-    
-    console.log('PDF data found, length:', base64.length);
-    
-    try {
-        // Base64'i temizle
-        let cleanBase64 = base64;
-        if (base64.startsWith('data:application/pdf;base64,')) {
-            cleanBase64 = base64.substring('data:application/pdf;base64,'.length);
-        }
-        
-        console.log('Clean base64 length:', cleanBase64.length);
-        
-        // Decode et
-        const binaryString = atob(cleanBase64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-        
-        // Blob oluştur
-        const blob = new Blob([bytes], { type: 'application/pdf' });
-        const blobUrl = URL.createObjectURL(blob);
-        
-        console.log('Blob URL created:', blobUrl.substring(0, 50) + '...');
-        
-        // 4 FARKLI YÖNTEMLE PDF AÇ:
-        
-        // YÖNTEM 1: webviewerloaded event'i dinle
-        document.addEventListener('webviewerloaded', function onWebViewerLoaded() {
-            console.log('webviewerloaded event received');
-            document.removeEventListener('webviewerloaded', onWebViewerLoaded);
-            openPDFWithURL(blobUrl, fileName);
-        });
-        
-        // YÖNTEM 2: PDFViewerApplication'ı bekle
-        const checkInterval = setInterval(() => {
-            if (window.PDFViewerApplication && PDFViewerApplication.initialized) {
-                console.log('PDFViewerApplication found and initialized');
-                clearInterval(checkInterval);
-                openPDFWithURL(blobUrl, fileName);
-            }
-        }, 100);
-        
-        // YÖNTEM 3: Timeout sonrası manuel aç
-        setTimeout(() => {
-            if (!pdfOpened && window.PDFViewerApplication) {
-                console.log('Timeout - manually opening PDF');
-                openPDFWithURL(blobUrl, fileName);
-            }
-        }, 2000);
-        
-        // YÖNTEM 4: window.load event'i
-        window.addEventListener('load', function onWindowLoad() {
-            console.log('window.load event');
-            setTimeout(() => {
-                if (!pdfOpened) {
-                    console.log('window.load - opening PDF');
-                    openPDFWithURL(blobUrl, fileName);
-                }
-            }, 500);
-        });
-        
-        // Parent'a mesaj gönder
-        if (window.parent) {
-            window.parent.postMessage({
-                type: 'PDF_VIEWER_INITIALIZED',
-                fileName: fileName
-            }, '*');
-        }
-        
-    } catch (error) {
-        console.error('Error loading PDF:', error);
-    }
-}
-
-// URL ile PDF aç
-function openPDFWithURL(url, fileName) {
-    if (pdfOpened) return;
-    
-    console.log('openPDFWithURL called:', fileName);
-    
-    if (!window.PDFViewerApplication) {
-        console.error('PDFViewerApplication not available');
-        return;
-    }
-    
-    try {
-        console.log('Calling PDFViewerApplication.open()');
-        
-        // Yöntem 1: open({ url: ... })
-        PDFViewerApplication.open({ url: url }).then(() => {
-            console.log('✅ PDF opened successfully with promise');
-            pdfOpened = true;
-            document.title = fileName;
-            
-            // Parent'a başarı mesajı
-            if (window.parent) {
-                window.parent.postMessage({
-                    type: 'PDF_VIEWER_READY',
-                    fileName: fileName,
-                    success: true
-                }, '*');
-            }
-            
-        }).catch(error => {
-            console.log('Promise method failed, trying direct call:', error);
-            
-            // Yöntem 2: direkt open()
-            try {
-                PDFViewerApplication.open(url);
-                console.log('✅ PDF opened with direct call');
-                pdfOpened = true;
-                document.title = fileName;
-                
-                if (window.parent) {
-                    window.parent.postMessage({
-                        type: 'PDF_VIEWER_READY',
-                        fileName: fileName,
-                        success: true
-                    }, '*');
-                }
-            } catch (e) {
-                console.error('Direct call also failed:', e);
-                
-                if (window.parent) {
-                    window.parent.postMessage({
-                        type: 'PDF_ERROR',
-                        fileName: fileName,
-                        error: e.message
-                    }, '*');
-                }
-            }
-        });
-        
-    } catch (error) {
-        console.error('Error in openPDFWithURL:', error);
-    }
-}
-
-// Mesaj dinleyici
-window.addEventListener('message', function(event) {
-    console.log('Message received in viewer:', event.data?.type);
-    
-    if (event.data?.type === 'pdfData') {
-        console.log('PDF data received via message');
-        
-        // Mesajdan gelen datayı sessionStorage'a kaydet
-        if (event.data.base64) {
-            sessionStorage.setItem('pdfData', event.data.base64);
-            sessionStorage.setItem('pdfName', event.data.name || 'PDF');
-            
-            // Sayfayı yenile
-            location.reload();
-        }
-    }
-});
-
-// Sayfa yüklendiğinde
-window.addEventListener('DOMContentLoaded', function() {
-    console.log('DOMContentLoaded in viewer.html');
-    
-    // Hemen PDF yüklemeye başla
-    setTimeout(loadAndOpenPDF, 100);
-});
-
-// Hata yakalama
-window.addEventListener('error', function(event) {
-    console.error('Global error in viewer:', event.error);
-});
-
-// Unhandled promise rejection
-window.addEventListener('unhandledrejection', function(event) {
-    console.error('Unhandled promise rejection:', event.reason);
+    clearInterval(wait);
+    PDFViewerApplication.open({ url });
+  }, 30);
 });
 </script>
-  <!-- Bu viewer.html icine gomme --> 
-  <!-- Bu viewer.html icine gomme --> 
-  <!-- Bu viewer.html icine gomme --> 
+    
+    
   </body>
 </html>

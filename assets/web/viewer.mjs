@@ -956,9 +956,8 @@ const defaultOptions = {
 };
 {
   defaultOptions.defaultUrl = {
-    value: "",
-    kind: OptionKind.VIEWER
-  };
+  value: "",
+};
   defaultOptions.sandboxBundleSrc = {
     value: "../build/pdf.sandbox.mjs",
     kind: OptionKind.VIEWER
