@@ -17,7 +17,7 @@
 </head>
 <body>
 <div id="topBar">
-    <button id="back" style="background:none; border:none;"><span class="material-icons">arrow_back</span></button>
+    <button id="back" style="background:none; border:none;" onclick="goBack()"><span class="material-icons">arrow_back</span></button>
     <div id="title">Yükleniyor...</div>
     <div id="actions">
         <button id="share" class="action-btn"><span class="material-icons">share</span></button>
@@ -29,45 +29,61 @@
 <script>
     const shareBtn = document.getElementById("share");
     const printBtn = document.getElementById("print");
-    const pdfData = sessionStorage.getItem("pdfData");
-    const pdfName = sessionStorage.getItem("pdfName") || "belge.pdf";
+    const frame = document.getElementById("pdfFrame");
+
+    // Flutter'dan veya bir önceki sayfadan gelen veriyi al
+    // Önce sessionStorage, yoksa URL parametresi (fallback)
+    let pdfData = sessionStorage.getItem("pdfData");
+    let pdfName = sessionStorage.getItem("pdfName") || "belge.pdf";
 
     document.getElementById("title").textContent = pdfName;
-    const frame = document.getElementById("pdfFrame");
+
+    // PDF.js Viewer'ı yükle
     frame.src = "web/viewer.html";
+
+    // Flutter IframePage içinden bu fonksiyonu tetikleyeceğiz
+    window.loadPdf = function() {
+        pdfData = sessionStorage.getItem("pdfData");
+        if(pdfData && frame.contentWindow) {
+            frame.contentWindow.postMessage(pdfData, "*");
+        }
+    };
 
     frame.onload = () => {
         if(pdfData) {
             frame.contentWindow.postMessage(pdfData, "*");
-        } else {
-            alert("Hata: PDF verisi boş!");
         }
     };
 
-    document.getElementById("back").onclick = () => history.back();
-
-    // Flutter'a veri gönderme fonksiyonu
-    function sendToFlutter(action) {
-        if (!window.flutter_inappwebview) {
-            alert("Uygulama köprüsü hazır değil!");
-            return;
+    function goBack() {
+        // Eğer Flutter içindeyse sayfayı kapat, tarayıcıdaysa geri git
+        if (window.flutter_inappwebview) {
+            // İstersen burada bir handler çağırabilirsin veya standart history kullanabilirsin
+            history.back();
+        } else {
+            history.back();
         }
-        if (!pdfData) {
-            alert("Gönderilecek PDF verisi yok!");
-            return;
-        }
-
-        window.flutter_inappwebview.callHandler(action, {
-            pdfData: pdfData,
-            pdfName: pdfName
-        }).catch(err => {
-            alert("Flutter'a gönderirken hata: " + err);
-        });
     }
+
+    function sendToFlutter(action) {
+        // Flutter içinde olup olmadığımızı kontrol et
+        if (window.flutter_inappwebview) {
+            window.flutter_inappwebview.callHandler(action, {
+                pdfData: pdfData,
+                pdfName: pdfName
+            });
+        } else {
+            console.log("Tarayıcı modunda: " + action + " tetiklendi.");
+            alert(action + " sadece uygulama içinde çalışır.");
+        }
+    }
+
+    // Flutter AppBar'dan gelen komutları dinlemek için (Opsiyonel)
+    window.requestShare = () => sendToFlutter('flutterShare');
+    window.requestPrint = () => sendToFlutter('flutterPrint');
 
     shareBtn.onclick = () => sendToFlutter('flutterShare');
     printBtn.onclick = () => sendToFlutter('flutterPrint');
 </script>
 </body>
 </html>
-
