@@ -42,7 +42,7 @@ flutter:
     - assets/web/
     
     # Web ana dosyaları (ek güvenlik için)
-
+    - assets/fonts/MaterialSymbolsRounded.woff2
     - assets/index.html
     - assets/iframe.html
     - assets/img/
