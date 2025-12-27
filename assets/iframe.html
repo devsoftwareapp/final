@@ -3,12 +3,25 @@
 <head>
 <meta charset="utf-8">
 <title>PDF Görüntüle</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<!-- ✅ Safe-area AKTİF -->
+<meta name="viewport"
+      content="width=device-width,
+               initial-scale=1,
+               maximum-scale=1,
+               user-scalable=no,
+               viewport-fit=cover">
 
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
 <style>
+  :root {
+    --safe-top: env(safe-area-inset-top);
+    --safe-bottom: env(safe-area-inset-bottom);
+  }
+
   * { box-sizing: border-box; }
+
   body {
     margin: 0;
     height: 100vh;
@@ -16,6 +29,10 @@
     flex-direction: column;
     font-family: system-ui, -apple-system, sans-serif;
     background-color: #f5f5f5;
+
+    /* ✅ status + navigation bar */
+    padding-top: max(0px, calc(var(--safe-top) - 8px));
+    padding-bottom: var(--safe-bottom);
   }
 
   /* ÜST BAR */
@@ -26,6 +43,11 @@
     background-color: #fff;
     border-bottom: 1px solid #e0e0e0;
     padding: 0 8px;
+
+    /* ✅ status bar altına it */
+    padding-top: max(0px, calc(var(--safe-top) - 12px));
+    box-sizing: content-box;
+
     z-index: 10;
   }
 
@@ -72,6 +94,10 @@
     color: #5f6368;
   }
   .action-btn:active { background: #f1f1f1; }
+  .action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
   /* VIEWER */
   #viewerArea {
@@ -83,6 +109,36 @@
     width: 100%;
     height: 100%;
     border: none;
+  }
+
+  /* LOADING */
+  #loading {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    display: none;
+  }
+
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
 
   /* PRINT */
@@ -98,6 +154,12 @@
 </style>
 </head>
 <body>
+
+<!-- LOADING OVERLAY -->
+<div id="loading">
+  <div class="spinner"></div>
+  <p style="margin-top: 16px; color: #555;">Yazdırılıyor...</p>
+</div>
 
 <!-- ÜST BAR -->
 <div id="topBar">
@@ -128,6 +190,7 @@ const shareBtn = document.getElementById("share");
 const printBtn = document.getElementById("print");
 const titleEl  = document.getElementById("title");
 const frame    = document.getElementById("pdfFrame");
+const loading  = document.getElementById("loading");
 
 // SESSION DATA
 const pdfData = sessionStorage.getItem("pdfData");
@@ -148,8 +211,8 @@ if (!pdfData) {
   location.href = "testindex.html";
 } else {
   titleEl.textContent = pdfName || "PDF";
-
   frame.src = "web/viewer.html";
+  
   frame.onload = () => {
     frame.contentWindow.postMessage(pdfData, "*");
   };
@@ -162,36 +225,134 @@ backBtn.onclick = () => {
   history.back();
 };
 
-// PAYLAŞ
+// WEB SHARE API İLE PAYLAŞ
 shareBtn.onclick = async () => {
   if (!navigator.share) {
-    alert("Paylaşım desteklenmiyor");
+    // Fallback: Eski tarayıcılar için
+    const blob = base64ToBlob(pdfData);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = pdfName || "dosya.pdf";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     return;
   }
+  
+  const blob = base64ToBlob(pdfData);
   const file = new File(
-    [base64ToBlob(pdfData)],
+    [blob],
     pdfName || "dosya.pdf",
     { type: "application/pdf" }
   );
 
   try {
-    await navigator.share({ files: [file], title: pdfName });
-  } catch {}
-};
-
-// YAZDIR
-printBtn.onclick = () => {
-  const blob = base64ToBlob(pdfData);
-  const url = URL.createObjectURL(blob);
-
-  const win = window.open(url, "_blank");
-  if (win) {
-    win.onload = () => {
-      win.print();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    };
+    await navigator.share({ 
+      files: [file], 
+      title: pdfName || "PDF Dosyası",
+      text: "PDF dosyasını paylaşıyorum"
+    });
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      console.error('Paylaşım hatası:', err);
+    }
   }
 };
+
+// CAPACITOR PRINT PLUGIN İLE YAZDIRMA
+printBtn.onclick = async () => {
+  // Capacitor Print plugin kontrolü
+  if (typeof Capacitor !== 'undefined' && Capacitor.Plugins && Capacitor.Plugins.Print) {
+    try {
+      loading.style.display = 'flex';
+      printBtn.disabled = true;
+      
+      const blob = base64ToBlob(pdfData);
+      
+      // Base64'e geri çevir (Capacitor Print için)
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      
+      reader.onloadend = async () => {
+        const base64Data = reader.result.split(',')[1];
+        
+        await Capacitor.Plugins.Print.print({
+          name: pdfName || 'document.pdf',
+          base64Data: base64Data,
+          printerId: ''
+        });
+        
+        loading.style.display = 'none';
+        printBtn.disabled = false;
+      };
+      
+    } catch (error) {
+      console.error('Capacitor yazdırma hatası:', error);
+      loading.style.display = 'none';
+      printBtn.disabled = false;
+      
+      // Fallback: tarayıcı yazdırma
+      fallbackPrint();
+    }
+  } else {
+    // Capacitor yoksa tarayıcı fallback
+    fallbackPrint();
+  }
+};
+
+// FALLBACK YAZDIRMA (Tarayıcı)
+function fallbackPrint() {
+  const blob = base64ToBlob(pdfData);
+  const url = URL.createObjectURL(blob);
+  
+  if (navigator.userAgent.toLowerCase().includes('android') || 
+      navigator.userAgent.toLowerCase().includes('iphone')) {
+    // Mobil cihazlarda yeni pencerede aç
+    const win = window.open(url, '_blank');
+    if (win) {
+      win.onload = () => {
+        win.print();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      };
+    }
+  } else {
+    // Masaüstünde iframe ile yazdır
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'absolute';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = 'none';
+    printFrame.src = url;
+    
+    document.body.appendChild(printFrame);
+    
+    printFrame.onload = () => {
+      printFrame.contentWindow.focus();
+      printFrame.contentWindow.print();
+      
+      setTimeout(() => {
+        document.body.removeChild(printFrame);
+        URL.revokeObjectURL(url);
+      }, 1000);
+    };
+  }
+}
+
+// PWA veya Capacitor için ek kontrol
+document.addEventListener('DOMContentLoaded', () => {
+  // Capacitor ortamında mıyız kontrolü
+  if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Print) {
+    console.log('Capacitor Print plugin hazır');
+  } else if ('share' in navigator) {
+    console.log('Web Share API destekleniyor');
+  }
+});
+
+// PDF viewer için mesaj dinleyici (gerekirse)
+window.addEventListener('message', (event) => {
+  // PDF.js viewer'dan gelen mesajları dinleyebilirsiniz
+  console.log('Message from viewer:', event.data);
+});
 </script>
 
 </body>
