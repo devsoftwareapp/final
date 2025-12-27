@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'iframe_page.dart'; // Yeni dosyayı import ediyoruz
+import 'iframe_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,8 +14,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'PDF Reader',
-      // Sayfa geçişleri için route tanımlayabilirsin
+      title: 'PDF Reader Pro',
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
       home: const WebViewPage(),
       routes: {
         '/iframe': (context) => const IframePage(),
@@ -37,28 +37,27 @@ class _WebViewPageState extends State<WebViewPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: InAppWebView(
-          initialUrlRequest: URLRequest(
-            url: WebUri("file:///android_asset/flutter_assets/assets/index.html"),
-          ),
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            allowFileAccess: true,
-            allowFileAccessFromFileURLs: true,
-            allowUniversalAccessFromFileURLs: true,
-            useHybridComposition: true,
-          ),
-          onWebViewCreated: (controller) {
-            webViewController = controller;
-
-            // ÖNEMLİ: index.html'den bir PDF tıklandığında 
-            // IframePage'e gitmesi için bir handler ekleyebilirsin:
-            controller.addJavaScriptHandler(handlerName: 'openIframe', callback: (args) {
-              Navigator.pushNamed(context, '/iframe');
-            });
-          },
+      appBar: AppBar(title: const Text("Kitaplık"), centerTitle: true),
+      body: InAppWebView(
+        initialUrlRequest: URLRequest(
+          url: WebUri("asset:///assets/index.html"),
         ),
+        initialSettings: InAppWebViewSettings(
+          javaScriptEnabled: true,
+          allowFileAccess: true,
+          allowFileAccessFromFileURLs: true,
+          allowUniversalAccessFromFileURLs: true,
+          useHybridComposition: true,
+        ),
+        onWebViewCreated: (controller) {
+          webViewController = controller;
+
+          // index.html'den gelen tıklama verisini yakalar
+          controller.addJavaScriptHandler(handlerName: 'openIframe', callback: (args) {
+            // args[0] -> Seçilen PDF'in Base64 verisi veya ID'si
+            Navigator.pushNamed(context, '/iframe', arguments: args[0]);
+          });
+        },
       ),
     );
   }
