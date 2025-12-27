@@ -20,45 +20,61 @@ class _IframePageState extends State<IframePage> {
     return Scaffold(
       body: SafeArea(
         child: InAppWebView(
-          initialUrlRequest: URLRequest(url: WebUri("file:///android_asset/flutter_assets/assets/iframe.html")),
+          initialUrlRequest: URLRequest(
+            url: WebUri("file:///android_asset/flutter_assets/assets/iframe.html")
+          ),
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             allowFileAccess: true,
             allowFileAccessFromFileURLs: true, 
             allowUniversalAccessFromFileURLs: true,
-            domStorageEnabled: true,
+            domStorageEnabled: true, // SessionStorage için ZORUNLU
+            useHybridComposition: true,
           ),
           onWebViewCreated: (controller) {
             webViewController = controller;
 
-            // Paylaşma İşlemi
+            // Paylaşma
             controller.addJavaScriptHandler(handlerName: 'flutterShare', callback: (args) async {
-              final String data = args[0]['pdfData'];
-              final String name = args[0]['pdfName'];
               try {
-                final bytes = base64Decode(data.split(',').last);
+                final String rawData = args[0]['pdfData'];
+                final String fileName = args[0]['pdfName'] ?? "belge.pdf";
+                
+                // Base64 temizleme
+                final String base64String = rawData.contains(',') ? rawData.split(',').last : rawData;
+                final bytes = base64Decode(base64String.trim());
+
                 final tempDir = await getTemporaryDirectory();
-                final file = File('${tempDir.path}/$name');
+                final file = File('${tempDir.path}/$fileName');
                 await file.writeAsBytes(bytes);
+
                 await Share.shareXFiles([XFile(file.path)]);
-              } catch (e) { debugPrint("Paylaşma Hatası: $e"); }
+              } catch (e) {
+                // Telefonunda hata olup olmadığını anlamak için bir Snackbar gösterelim
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Paylaşma Hatası: $e")));
+                }
+              }
             });
 
-            // Yazdırma İşlemi
+            // Yazdırma
             controller.addJavaScriptHandler(handlerName: 'flutterPrint', callback: (args) async {
-              final String data = args[0]['pdfData'];
               try {
-                final bytes = base64Decode(data.split(',').last);
+                final String rawData = args[0]['pdfData'];
+                final String base64String = rawData.contains(',') ? rawData.split(',').last : rawData;
+                final bytes = base64Decode(base64String.trim());
+
                 await Printing.layoutPdf(onLayout: (format) async => bytes);
-              } catch (e) { debugPrint("Yazdırma Hatası: $e"); }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Yazdırma Hatası: $e")));
+                }
+              }
             });
-          },
-          // JS loglarını Flutter terminaline düşürür
-          onConsoleMessage: (controller, consoleMessage) {
-            debugPrint("WEB LOG: ${consoleMessage.message}");
           },
         ),
       ),
     );
   }
 }
+
