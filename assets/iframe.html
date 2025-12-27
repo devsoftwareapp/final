@@ -6,75 +6,53 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <style>
-  :root { --safe-top: env(safe-area-inset-top); --safe-bottom: env(safe-area-inset-bottom); }
-  * { box-sizing: border-box; }
+  :root { --safe-top: env(safe-area-inset-top); }
   body { margin: 0; height: 100vh; display: flex; flex-direction: column; font-family: sans-serif; background-color: #f5f5f5; padding-top: var(--safe-top); }
-  #topBar { height: 56px; display: flex; align-items: center; background-color: #fff; border-bottom: 1px solid #e0e0e0; padding: 0 8px; z-index: 10; }
-  #back { background: none; border: none; width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #5f6368; }
-  #title { flex: 1; margin-left: 8px; font-size: 18px; font-weight: 500; color: #202124; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #actions { display: flex; gap: 4px; }
-  .action-btn { background: none; border: none; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #5f6368; }
-  #viewerArea { flex: 1; overflow: hidden; position: relative; }
+  #topBar { height: 56px; display: flex; align-items: center; background-color: #fff; border-bottom: 1px solid #e0e0e0; padding: 0 8px; }
+  #title { flex: 1; margin-left: 8px; font-size: 17px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .action-btn { background: none; border: none; width: 44px; height: 44px; border-radius: 50%; color: #5f6368; opacity: 0.3; pointer-events: none; transition: 0.3s; }
+  #viewerArea { flex: 1; }
   iframe { width: 100%; height: 100%; border: none; }
 </style>
 </head>
 <body>
-
 <div id="topBar">
-  <button id="back"><span class="material-icons">arrow_back</span></button>
+  <button id="back" style="background:none; border:none;"><span class="material-icons">arrow_back</span></button>
   <div id="title">Yükleniyor...</div>
   <div id="actions">
     <button id="share" class="action-btn"><span class="material-icons">share</span></button>
     <button id="print" class="action-btn"><span class="material-icons">print</span></button>
   </div>
 </div>
-
-<div id="viewerArea">
-  <iframe id="pdfFrame"></iframe>
-</div>
+<div id="viewerArea"><iframe id="pdfFrame"></iframe></div>
 
 <script>
   const shareBtn = document.getElementById("share");
   const printBtn = document.getElementById("print");
-  const titleEl = document.getElementById("title");
-  const frame = document.getElementById("pdfFrame");
-  const backBtn = document.getElementById("back");
-
   const pdfData = sessionStorage.getItem("pdfData");
   const pdfName = sessionStorage.getItem("pdfName") || "belge.pdf";
 
-  if (!pdfData) {
-    location.href = "index.html";
-  } else {
-    titleEl.textContent = pdfName;
-    frame.src = "web/viewer.html";
-    frame.onload = () => {
-      frame.contentWindow.postMessage(pdfData, "*");
-    };
-  }
+  document.getElementById("title").textContent = pdfName;
+  const frame = document.getElementById("pdfFrame");
+  frame.src = "web/viewer.html";
+  frame.onload = () => { if(pdfData) frame.contentWindow.postMessage(pdfData, "*"); };
 
-  backBtn.onclick = () => history.back();
+  document.getElementById("back").onclick = () => history.back();
 
-  // --- Flutter Bridge Fonksiyonları ---
+  // KRİTİK: Flutter köprüsü hazır olduğunda butonları aktif et
+  window.addEventListener("flutterInAppWebViewPlatformReady", function(event) {
+    shareBtn.style.opacity = "1";
+    shareBtn.style.pointerEvents = "auto";
+    printBtn.style.opacity = "1";
+    printBtn.style.pointerEvents = "auto";
+  });
 
   shareBtn.onclick = () => {
-    if (window.flutter_inappwebview) {
-      window.flutter_inappwebview.callHandler('flutterShare', {
-        pdfData: pdfData,
-        pdfName: pdfName
-      });
-    } else {
-      console.log("Flutter köprüsü hazır değil.");
-    }
+    window.flutter_inappwebview.callHandler('flutterShare', { pdfData: pdfData, pdfName: pdfName });
   };
 
   printBtn.onclick = () => {
-    if (window.flutter_inappwebview) {
-      window.flutter_inappwebview.callHandler('flutterPrint', {
-        pdfData: pdfData,
-        pdfName: pdfName
-      });
-    }
+    window.flutter_inappwebview.callHandler('flutterPrint', { pdfData: pdfData, pdfName: pdfName });
   };
 </script>
 </body>
