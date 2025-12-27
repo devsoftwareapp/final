@@ -1,145 +1,54 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-    <!-- 🔐 ZORUNLU -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MyApp());
+}
 
-    <!-- 📂 Dosya seçimi için (SAF / File Picker) -->
-    <uses-permission
-        android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
-    <!-- 📷 İleride tarama için -->
-    <uses-permission android:name="android.permission.CAMERA" />
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: WebViewPage(),
+    );
+  }
+}
 
-    <!-- 🔔 Android 13+ -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+class WebViewPage extends StatefulWidget {
+  const WebViewPage({super.key});
 
-    <!-- 🔎 Android 11+ package visibility -->
-    <queries>
+  @override
+  State<WebViewPage> createState() => _WebViewPageState();
+}
 
-        <!-- PDF görüntüleyiciler -->
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:mimeType="application/pdf" />
-        </intent>
+class _WebViewPageState extends State<WebViewPage> {
+  InAppWebViewController? webViewController;
 
-        <!-- Dosya seçiciler -->
-        <intent>
-            <action android:name="android.intent.action.GET_CONTENT" />
-            <data android:mimeType="*/*" />
-        </intent>
-
-        <!-- Paylaşım -->
-        <intent>
-            <action android:name="android.intent.action.SEND" />
-            <data android:mimeType="*/*" />
-        </intent>
-
-        <!-- Tarayıcılar -->
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="http" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="https" />
-        </intent>
-
-    </queries>
-
-    <application
-        android:name="${applicationName}"
-        android:label="PDF Reader"
-        android:icon="@mipmap/ic_launcher"
-        android:hardwareAccelerated="true"
-        android:usesCleartextTraffic="true"
-        android:allowBackup="true"
-        android:theme="@style/LaunchTheme">
-
-        <!-- 🔥 PDF.js + file:// için KRİTİK -->
-        <meta-data
-            android:name="android.webkit.WebView.EnableSafeBrowsing"
-            android:value="false" />
-
-        <!-- InAppWebView -->
-        <meta-data
-            android:name="android.webkit.WebView.MetricsOptOut"
-            android:value="true" />
-
-        <!-- 🚀 ANA ACTIVITY -->
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
-
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-            <!-- 📄 Harici PDF açma -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:mimeType="application/pdf" />
-                <data android:scheme="content" />
-                <data android:scheme="file" />
-            </intent-filter>
-
-            <!-- 📤 PDF paylaşım -->
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/pdf" />
-            </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/pdf" />
-            </intent-filter>
-
-        </activity>
-
-        <!-- 🌐 InAppWebView Activities -->
-        <activity
-            android:name="com.pichillilorenzo.flutter_inappwebview.InAppBrowserActivity"
-            android:exported="false"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
-            android:hardwareAccelerated="true" />
-
-        <activity
-            android:name="com.pichillilorenzo.flutter_inappwebview.ChromeCustomTabsActivity"
-            android:exported="false" />
-
-        <activity
-            android:name="com.pichillilorenzo.flutter_inappwebview.ChromeSafariBrowserActivity"
-            android:exported="false"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
-            android:hardwareAccelerated="true" />
-
-        <!-- 📁 FileProvider (PDF paylaşım için) -->
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-
-        <!-- Flutter embedding -->
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
-
-    </application>
-
-</manifest>
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: InAppWebView(
+          initialUrlRequest: URLRequest(
+            url: WebUri("file:///android_asset/flutter_assets/assets/index.html"),
+          ),
+          initialSettings: InAppWebViewSettings(
+            javaScriptEnabled: true,
+            allowFileAccess: true,
+            allowFileAccessFromFileURLs: true,
+            allowUniversalAccessFromFileURLs: true,
+            useHybridComposition: true,
+            mediaPlaybackRequiresUserGesture: false,
+          ),
+          onWebViewCreated: (controller) {
+            webViewController = controller;
+          },
+        ),
+      ),
+    );
+  }
+}
