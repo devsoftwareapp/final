@@ -1,54 +1,60 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MyApp());
-}
+    <!-- 🌐 WebView / InAppWebView için ZORUNLU -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+    <application
+        android:name="${applicationName}"
+        android:label="PDF Reader"
+        android:icon="@mipmap/ic_launcher"
+        android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/LaunchTheme">
 
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: WebViewPage(),
-    );
-  }
-}
+        <!-- WebView metrikleri (opsiyonel ama güvenli) -->
+        <meta-data
+            android:name="android.webkit.WebView.MetricsOptOut"
+            android:value="true" />
 
-class WebViewPage extends StatefulWidget {
-  const WebViewPage({super.key});
+        <!-- 🚀 Ana Activity -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
 
-  @override
-  State<WebViewPage> createState() => _WebViewPageState();
-}
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
 
-class _WebViewPageState extends State<WebViewPage> {
-  InAppWebViewController? webViewController;
+        </activity>
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: InAppWebView(
-          initialUrlRequest: URLRequest(
-            url: WebUri("file:///android_asset/flutter_assets/assets/index.html"),
-          ),
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            allowFileAccess: true,
-            allowFileAccessFromFileURLs: true,
-            allowUniversalAccessFromFileURLs: true,
-            useHybridComposition: true,
-            mediaPlaybackRequiresUserGesture: false,
-          ),
-          onWebViewCreated: (controller) {
-            webViewController = controller;
-          },
-        ),
-      ),
-    );
-  }
-}
+        <!-- InAppWebView internal activities -->
+        <activity
+            android:name="com.pichillilorenzo.flutter_inappwebview.InAppBrowserActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
+
+        <activity
+            android:name="com.pichillilorenzo.flutter_inappwebview.ChromeCustomTabsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name="com.pichillilorenzo.flutter_inappwebview.ChromeSafariBrowserActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
+
+        <!-- Flutter embedding -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+    </application>
+
+</manifest>
