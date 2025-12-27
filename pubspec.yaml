@@ -45,9 +45,6 @@ flutter:
 
     - assets/index.html
     - assets/iframe.html
-    - assets/menu.html
-    - assets/top.html
-    - assets/files.html
     - assets/img/
     - assets/web/viewer.html
     - assets/web/viewer.css
