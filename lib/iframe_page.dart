@@ -8,73 +8,104 @@ import 'package:printing/printing.dart';
 
 class IframePage extends StatefulWidget {
   const IframePage({super.key});
+
   @override
   State<IframePage> createState() => _IframePageState();
 }
 
 class _IframePageState extends State<IframePage> {
   InAppWebViewController? webViewController;
+  bool _isLoading = true;
 
   @override
   Widget build(BuildContext context) {
+    // main.dart'tan gönderilen veriyi alıyoruz
+    final String pdfBase64 = ModalRoute.of(context)!.settings.arguments as String;
+
     return Scaffold(
-      body: SafeArea(
-        child: InAppWebView(
-          initialUrlRequest: URLRequest(
-            url: WebUri("file:///android_asset/flutter_assets/assets/iframe.html")
+      appBar: AppBar(
+        title: const Text("PDF Görüntüle"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            onPressed: () => _triggerJSHandler("requestShare"),
           ),
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            allowFileAccess: true,
-            allowFileAccessFromFileURLs: true, 
-            allowUniversalAccessFromFileURLs: true,
-            domStorageEnabled: true, // SessionStorage için ZORUNLU
-            useHybridComposition: true,
+          IconButton(
+            icon: const Icon(Icons.print),
+            onPressed: () => _triggerJSHandler("requestPrint"),
           ),
-          onWebViewCreated: (controller) {
-            webViewController = controller;
+        ],
+      ),
+      body: Stack(
+        children: [
+          InAppWebView(
+            initialUrlRequest: URLRequest(
+              url: WebUri("asset:///assets/iframe.html"),
+            ),
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              domStorageEnabled: true,
+              allowFileAccess: true,
+              allowUniversalAccessFromFileURLs: true,
+              useHybridComposition: true,
+            ),
+            onWebViewCreated: (controller) {
+              webViewController = controller;
 
-            // Paylaşma
-            controller.addJavaScriptHandler(handlerName: 'flutterShare', callback: (args) async {
-              try {
-                final String rawData = args[0]['pdfData'];
-                final String fileName = args[0]['pdfName'] ?? "belge.pdf";
-                
-                // Base64 temizleme
-                final String base64String = rawData.contains(',') ? rawData.split(',').last : rawData;
-                final bytes = base64Decode(base64String.trim());
+              // Paylaşma İşlemi
+              controller.addJavaScriptHandler(handlerName: 'flutterShare', callback: (args) async {
+                await _handleShare(args[0]['pdfData'], args[0]['pdfName']);
+              });
 
-                final tempDir = await getTemporaryDirectory();
-                final file = File('${tempDir.path}/$fileName');
-                await file.writeAsBytes(bytes);
-
-                await Share.shareXFiles([XFile(file.path)]);
-              } catch (e) {
-                // Telefonunda hata olup olmadığını anlamak için bir Snackbar gösterelim
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Paylaşma Hatası: $e")));
-                }
-              }
-            });
-
-            // Yazdırma
-            controller.addJavaScriptHandler(handlerName: 'flutterPrint', callback: (args) async {
-              try {
-                final String rawData = args[0]['pdfData'];
-                final String base64String = rawData.contains(',') ? rawData.split(',').last : rawData;
-                final bytes = base64Decode(base64String.trim());
-
-                await Printing.layoutPdf(onLayout: (format) async => bytes);
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Yazdırma Hatası: $e")));
-                }
-              }
-            });
-          },
-        ),
+              // Yazdırma İşlemi
+              controller.addJavaScriptHandler(handlerName: 'flutterPrint', callback: (args) async {
+                await _handlePrint(args[0]['pdfData']);
+              });
+            },
+            onLoadStop: (controller, url) async {
+              // Sayfa yüklendiğinde veriyi HTML içindeki sessionStorage'a yazıyoruz
+              await controller.evaluateJavascript(source: """
+                sessionStorage.setItem('pdfData', '$pdfBase64');
+                if (typeof loadPdf === 'function') { loadPdf(); }
+              """);
+              setState(() => _isLoading = false);
+            },
+          ),
+          if (_isLoading) const Center(child: CircularProgressIndicator()),
+        ],
       ),
     );
   }
-}
 
+  // JS tarafındaki bir fonksiyonu tetiklemek için yardımcı
+  void _triggerJSHandler(String action) {
+    webViewController?.evaluateJavascript(source: "window.$action();");
+  }
+
+  // Paylaşma Mantığı
+  Future<void> _handleShare(String rawData, String? fileName) async {
+    try {
+      final bytes = base64Decode(rawData.split(',').last);
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/${fileName ?? "belge.pdf"}');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(file.path)]);
+    } catch (e) {
+      _showError("Paylaşma Hatası: $e");
+    }
+  }
+
+  // Yazdırma Mantığı
+  Future<void> _handlePrint(String rawData) async {
+    try {
+      final bytes = base64Decode(rawData.split(',').last);
+      await Printing.layoutPdf(onLayout: (format) async => bytes);
+    } catch (e) {
+      _showError("Yazdırma Hatası: $e");
+    }
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+}
