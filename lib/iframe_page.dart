@@ -8,7 +8,6 @@ import 'package:printing/printing.dart';
 
 class IframePage extends StatefulWidget {
   const IframePage({super.key});
-
   @override
   State<IframePage> createState() => _IframePageState();
 }
@@ -19,61 +18,44 @@ class _IframePageState extends State<IframePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
       body: SafeArea(
         child: InAppWebView(
-          initialUrlRequest: URLRequest(
-            url: WebUri("file:///android_asset/flutter_assets/assets/iframe.html"),
-          ),
+          initialUrlRequest: URLRequest(url: WebUri("file:///android_asset/flutter_assets/assets/iframe.html")),
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             allowFileAccess: true,
-            allowFileAccessFromFileURLs: true,
+            allowFileAccessFromFileURLs: true, 
             allowUniversalAccessFromFileURLs: true,
-            useHybridComposition: true,
-            domStorageEnabled: true, // SessionStorage için kritik
+            domStorageEnabled: true,
           ),
           onWebViewCreated: (controller) {
             webViewController = controller;
 
-            // --- PAYLAŞMA KÖPRÜSÜ ---
+            // Paylaşma İşlemi
             controller.addJavaScriptHandler(handlerName: 'flutterShare', callback: (args) async {
-              debugPrint("JS --> Flutter: Paylaşma tetiklendi");
-              final String rawData = args[0]['pdfData'];
-              final String fileName = args[0]['pdfName'] ?? "belge.pdf";
-              
+              final String data = args[0]['pdfData'];
+              final String name = args[0]['pdfName'];
               try {
-                final String base64String = rawData.contains(',') ? rawData.split(',').last : rawData;
-                final bytes = base64Decode(base64String);
-
+                final bytes = base64Decode(data.split(',').last);
                 final tempDir = await getTemporaryDirectory();
-                final file = File('${tempDir.path}/$fileName');
+                final file = File('${tempDir.path}/$name');
                 await file.writeAsBytes(bytes);
-
-                await Share.shareXFiles([XFile(file.path)], text: fileName);
-              } catch (e) {
-                debugPrint("Paylaşma Hatası: $e");
-              }
+                await Share.shareXFiles([XFile(file.path)]);
+              } catch (e) { debugPrint("Paylaşma Hatası: $e"); }
             });
 
-            // --- YAZDIRMA KÖPRÜSÜ ---
+            // Yazdırma İşlemi
             controller.addJavaScriptHandler(handlerName: 'flutterPrint', callback: (args) async {
-              debugPrint("JS --> Flutter: Yazdırma tetiklendi");
-              final String rawData = args[0]['pdfData'];
-              final String fileName = args[0]['pdfName'] ?? "yazdir.pdf";
-
+              final String data = args[0]['pdfData'];
               try {
-                final String base64String = rawData.contains(',') ? rawData.split(',').last : rawData;
-                final bytes = base64Decode(base64String);
-
-                await Printing.layoutPdf(
-                  onLayout: (format) async => bytes,
-                  name: fileName,
-                );
-              } catch (e) {
-                debugPrint("Yazdırma Hatası: $e");
-              }
+                final bytes = base64Decode(data.split(',').last);
+                await Printing.layoutPdf(onLayout: (format) async => bytes);
+              } catch (e) { debugPrint("Yazdırma Hatası: $e"); }
             });
+          },
+          // JS loglarını Flutter terminaline düşürür
+          onConsoleMessage: (controller, consoleMessage) {
+            debugPrint("WEB LOG: ${consoleMessage.message}");
           },
         ),
       ),
