@@ -13,60 +13,39 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: PdfWebView(),
+      home: WebViewPage(),
     );
   }
 }
 
-class PdfWebView extends StatefulWidget {
-  const PdfWebView({super.key});
+class WebViewPage extends StatefulWidget {
+  const WebViewPage({super.key});
 
   @override
-  State<PdfWebView> createState() => _PdfWebViewState();
+  State<WebViewPage> createState() => _WebViewPageState();
 }
 
-class _PdfWebViewState extends State<PdfWebView> {
-  late InAppWebViewController controller;
+class _WebViewPageState extends State<WebViewPage> {
+  InAppWebViewController? webViewController;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: false,
       body: SafeArea(
-        bottom: false,
         child: InAppWebView(
           initialUrlRequest: URLRequest(
-            url: WebUri("http://localhost/index.html"),
+            url: WebUri("file:///android_asset/flutter_assets/assets/index.html"),
           ),
-
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
-            domStorageEnabled: true,
             allowFileAccess: true,
-            allowContentAccess: true,
-            allowUniversalAccessFromFileURLs: true,
             allowFileAccessFromFileURLs: true,
+            allowUniversalAccessFromFileURLs: true,
+            useHybridComposition: true,
             mediaPlaybackRequiresUserGesture: false,
-            useWideViewPort: true,
-            loadWithOverviewMode: true,
-            supportZoom: true,
           ),
-
-          initialAssetLoader: InAppWebViewAssetLoader(
-            domain: "localhost",
-            pathHandlers: [
-              InAppWebViewAssetLoaderAssetsPathHandler(
-                path: "/",
-              ),
-            ],
-          ),
-
-          onWebViewCreated: (c) {
-            controller = c;
-          },
-
-          onConsoleMessage: (c, msg) {
-            debugPrint("WEB: ${msg.message}");
+          onWebViewCreated: (controller) {
+            webViewController = controller;
           },
         ),
       ),
