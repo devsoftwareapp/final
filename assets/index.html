@@ -2369,12 +2369,22 @@
                 // Son açılma tarihini güncelle
                 fileData.lastOpened = new Date().toISOString();
                 
+              
+              
+                                       
+              
+                            
                 // Son kullanılanlara ekle/güncelle
                 addToRecentFiles({
                     ...fileData,
                     openedDate: new Date().toISOString(),
                     lastOpened: new Date().toISOString()
                 });
+           
+           
+           
+           
+           
                 
                 // Base64 verisi varsa (importedFiles için)
                 if (fileData.base64) {
@@ -2413,6 +2423,10 @@
             }
         }
     }
+
+
+
+                                                                                    
 
     // --- CONTEXT MENU FONKSİYONLARI ---
     function openContextMenu(name, size, meta, cardId) {
@@ -2934,6 +2948,50 @@
     window.showPermissionModal = showPermissionModal;
     window.closePermissionModal = closePermissionModal;
     window.openSettingsForPermission = openSettingsForPermission;
+
+    // ✅ FLUTTER VE TARAYICI UYUMLU PDF AÇMA FONKSİYONU
+    window.handlePdfOpen = function(fileData, name) {
+        if (!fileData) {
+            console.error("Dosya verisi bulunamadı!");
+            return;
+        }
+        
+        const pdfName = name || fileData.name || "belge.pdf";
+
+        // 1. Durum: Base64 verisi varsa (Yüklenen dosyalar)
+        if (fileData.base64) {
+            if (window.flutter_inappwebview) {
+                // Flutter'a mesaj gönder
+                window.flutter_inappwebview.callHandler('openPdf', {
+                    pdfData: fileData.base64,
+                    pdfName: pdfName
+                });
+            } else {
+                // Normal tarayıcıda sessionStorage kullan
+                sessionStorage.setItem("pdfData", fileData.base64);
+                sessionStorage.setItem("pdfName", pdfName);
+                window.location.href = "iframe.html";
+            }
+        } 
+        // 2. Durum: Android cihaz yolu varsa (Taranan dosyalar)
+        else if (fileData.fullPath) {
+            if (typeof Android !== 'undefined' && Android.getFileAsBase64) {
+                const base64FromAndroid = Android.getFileAsBase64(fileData.fullPath);
+                if (base64FromAndroid) {
+                    if (window.flutter_inappwebview) {
+                        window.flutter_inappwebview.callHandler('openPdf', {
+                            pdfData: base64FromAndroid,
+                            pdfName: pdfName
+                        });
+                    } else {
+                        sessionStorage.setItem("pdfData", base64FromAndroid);
+                        sessionStorage.setItem("pdfName", pdfName);
+                        window.location.href = "iframe.html";
+                    }
+                }
+            }
+        }
+    };
 
   </script>
 </body>
