@@ -19,7 +19,7 @@ class _IframePageState extends State<IframePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Top bar'ı HTML içinde yaptığın için Scaffold'da AppBar kullanmıyoruz
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: InAppWebView(
           initialUrlRequest: URLRequest(
@@ -31,16 +31,16 @@ class _IframePageState extends State<IframePage> {
             allowFileAccessFromFileURLs: true,
             allowUniversalAccessFromFileURLs: true,
             useHybridComposition: true,
+            domStorageEnabled: true, // SessionStorage için kritik
           ),
           onWebViewCreated: (controller) {
             webViewController = controller;
 
-            // --- JAVASCRIPT HANDLERS ---
-
-            // 1. PAYLAŞMA
+            // --- PAYLAŞMA KÖPRÜSÜ ---
             controller.addJavaScriptHandler(handlerName: 'flutterShare', callback: (args) async {
+              debugPrint("JS --> Flutter: Paylaşma tetiklendi");
               final String rawData = args[0]['pdfData'];
-              final String fileName = args[0]['pdfName'];
+              final String fileName = args[0]['pdfName'] ?? "belge.pdf";
               
               try {
                 final String base64String = rawData.contains(',') ? rawData.split(',').last : rawData;
@@ -50,16 +50,17 @@ class _IframePageState extends State<IframePage> {
                 final file = File('${tempDir.path}/$fileName');
                 await file.writeAsBytes(bytes);
 
-                await Share.shareXFiles([XFile(file.path)], text: '$fileName Paylaşılıyor');
+                await Share.shareXFiles([XFile(file.path)], text: fileName);
               } catch (e) {
                 debugPrint("Paylaşma Hatası: $e");
               }
             });
 
-            // 2. YAZDIRMA
+            // --- YAZDIRMA KÖPRÜSÜ ---
             controller.addJavaScriptHandler(handlerName: 'flutterPrint', callback: (args) async {
+              debugPrint("JS --> Flutter: Yazdırma tetiklendi");
               final String rawData = args[0]['pdfData'];
-              final String fileName = args[0]['pdfName'];
+              final String fileName = args[0]['pdfName'] ?? "yazdir.pdf";
 
               try {
                 final String base64String = rawData.contains(',') ? rawData.split(',').last : rawData;
