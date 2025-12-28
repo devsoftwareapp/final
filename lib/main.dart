@@ -77,19 +77,6 @@ class _HomePageState extends State<HomePage> {
                 }
               },
             );
-            
-            // Android'den döndüğünde tarama mesajı
-            controller.addJavaScriptHandler(
-              handlerName: 'onAndroidResume',
-              callback: (args) {
-                // Android'den dönüşte tarama yap
-                controller.evaluateJavascript(source: '''
-                  if (typeof onAndroidResume === 'function') {
-                    onAndroidResume();
-                  }
-                ''');
-              },
-            );
           },
         ),
       ),
