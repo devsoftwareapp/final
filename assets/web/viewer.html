@@ -1137,12 +1137,12 @@ See https://github.com/adobe-type-tools/cmap-resources
     
     
     
-    
+<!-- ozel toolbar --> 
 <!-- ozel toolbar -->
 <!-- ozel toolbar -->
-<!-- ozel toolbar -->
-<!-- ozel toolbar -->
-<!-- ozel toolbar -->
+
+
+
 <style>
 /* ===== CUSTOM TOP TOOLBAR ===== */
 #customToolbar {
@@ -1250,9 +1250,11 @@ See https://github.com/adobe-type-tools/cmap-resources
     font-size: 22px;
 }
 
+/* DUZELTME: OuterContainer zaten 56px aşağıda başlar */
 #outerContainer {
-    margin-top: 56px;
-    height: calc(100vh - 56px);
+    margin-top: 56px !important;
+    height: calc(100vh - 56px) !important;
+    padding: 0 !important;
 }
 
 @font-face {
@@ -1280,8 +1282,10 @@ See https://github.com/adobe-type-tools/cmap-resources
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 48;
 }
 
+/* DUZELTME: Viewer alanı orijinal barın altından başlamalı */
 #viewerContainer {
-    height: calc(100vh - 56px) !important;
+    top: 32px !important;
+    height: calc(100% - 32px) !important;
 }
 
 /* Print Dialog Stili */
@@ -1412,7 +1416,6 @@ See https://github.com/adobe-type-tools/cmap-resources
     </div>
 </div>
 
-<!-- Print Dialog -->
 <div id="printDialogOverlay" style="display: none;">
     <div id="printDialog">
         <span class="print-icon-large">print</span>
@@ -1433,11 +1436,6 @@ See https://github.com/adobe-type-tools/cmap-resources
         </div>
     </div>
 </div>
-
-
-    
-<!-- ozel toolbar -->
-
 
 <script>
 // 1. Veriyi Güvenli Şekilde Depodan Al
@@ -1469,20 +1467,58 @@ function updateToolbarTitle() {
 }
 
 function loadPdfIntoViewer() {
+    if (typeof PDFViewerApplicationOptions !== 'undefined') {
+        PDFViewerApplicationOptions.set('disableLocalization', true);
+    }
+
     const pdfInfo = getPdfDataFromStorage();
     if (pdfInfo && window.PDFViewerApplication) {
-        // PDF.js motoruna veriyi enjekte et
         PDFViewerApplication.open({
             url: pdfInfo.data,
             originalUrl: pdfInfo.name
+        }).then(() => {
+            updateToolbarTitle();
+            applyTextFix();
         });
-        updateToolbarTitle();
     } else {
         setTimeout(loadPdfIntoViewer, 200);
     }
 }
 
-// 4. Navigasyon ve Fonksiyonlar
+// 4. Yazı Renklerini Zorlayan ve BOSLUGU SIFIRLAYAN Fonksiyon
+function applyTextFix() {
+    const style = document.createElement('style');
+    style.innerHTML = `
+        /* Yazıların renklerini ve görünürlüğünü sağla */
+        .toolbarLabel, #numPages, #pageNumber, .secondaryToolbarButton span, #sidebarContent span {
+            color: var(--text-color, #333) !important;
+            visibility: visible !important;
+            display: inline-block !important;
+            opacity: 1 !important;
+            font-size: 12px !important;
+        }
+
+        /* BOSLUGU SIFIRLA: Orijinal barı mavi barın altına tam yapıştır */
+        #toolbarContainer { 
+            top: 0 !important; 
+            box-shadow: none !important; 
+            border-top: none !important;
+            position: absolute !important;
+        }
+
+        /* PDF ICERIGI: Orijinal barın bittiği yerden başlat */
+        #viewerContainer { 
+            top: 32px !important; 
+        }
+
+        #sidebarContainer {
+            top: 0 !important;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// 5. Navigasyon ve Fonksiyonlar
 function goBackToIndex() {
     window.location.href = 'index.html';
 }
@@ -1508,7 +1544,7 @@ function savePDF() {
     }
 }
 
-// 5. Yazdırma
+// 6. Yazdırma
 function printWithWebShare() { document.getElementById('printDialogOverlay').style.display = 'flex'; }
 function hidePrintDialog() { document.getElementById('printDialogOverlay').style.display = 'none'; }
 
@@ -1542,7 +1578,8 @@ window.onkeydown = function(e) {
 
 
 
-      
+
+<!-- ozel toolbar -->
 <!-- ozel toolbar -->
 <!-- ozel toolbar -->
 
