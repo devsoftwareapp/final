@@ -3010,7 +3010,7 @@ function openPdfViewer(fileData, name) {
             sessionStorage.setItem('currentPdfName', pdfName);
 
             // Viewer'ı temiz bir URL ile aç (URL limiti takılmaz)
-            window.location.href = 'web/viewer.html';
+            window.location.href = 'viewer.html';
         } catch (e) {
             console.error("Depolama hatası (Muhtemelen kota dolu):", e);
             alert("PDF çok büyük, açılamadı.");
@@ -3025,3 +3025,4 @@ function openPdfViewer(fileData, name) {
   </script>
 </body>
 </html>
+
