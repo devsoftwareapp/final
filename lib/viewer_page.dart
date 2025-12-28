@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart'; // BU SATIR ZATEN VAR
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class ViewerPage extends StatefulWidget {
@@ -75,9 +75,6 @@ class _ViewerPageState extends State<ViewerPage> {
                 useHybridComposition: true,
                 mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
                 transparentBackground: true,
-                // FULL SCREEN için
-                disableVerticalScroll: true,
-                disableHorizontalScroll: true,
               ),
               onWebViewCreated: (controller) {
                 _webViewController = controller;
