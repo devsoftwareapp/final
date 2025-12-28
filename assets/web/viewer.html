@@ -1434,83 +1434,73 @@ See https://github.com/adobe-type-tools/cmap-resources
     </div>
 </div>
 
+
+    
+<!-- ozel toolbar -->
+
+
 <script>
-// Tema kontrolü - index.html ile senkronize
+// 1. Veriyi Güvenli Şekilde Depodan Al (URL Limiti Çözümü)
+function getPdfDataFromStorage() {
+    try {
+        const data = sessionStorage.getItem('currentPdfData');
+        const name = sessionStorage.getItem('currentPdfName');
+        
+        if (data && data.startsWith('data:application/pdf')) {
+            return { data: data, name: name || "belge.pdf" };
+        }
+    } catch (e) {
+        console.error("Depo okuma hatası:", e);
+    }
+    return null;
+}
+
+// 2. Tema Kontrolü - index.html ile senkronize
 function initCustomToolbarTheme() {
-    // Önce localStorage'dan tema ayarını oku
     const savedTheme = localStorage.getItem('pdfTheme');
     const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     
     let themeToSet = 'light';
+    if (savedTheme === 'dark') themeToSet = 'dark';
+    else if (savedTheme === 'device') themeToSet = systemPrefersDark ? 'dark' : 'light';
+    else if (savedTheme === 'light') themeToSet = 'light';
+    else themeToSet = systemPrefersDark ? 'dark' : 'light';
     
-    if (savedTheme === 'dark') {
-        themeToSet = 'dark';
-    } else if (savedTheme === 'device') {
-        themeToSet = systemPrefersDark ? 'dark' : 'light';
-    } else if (savedTheme === 'light') {
-        themeToSet = 'light';
-    } else {
-        // Hiç tema ayarı yoksa, cihaz temasını kullan
-        themeToSet = systemPrefersDark ? 'dark' : 'light';
-    }
-    
-    // HTML elementine tema attribute'u ekle
     document.documentElement.setAttribute('data-theme', themeToSet);
-    
-    console.log('Toolbar tema ayarlandı:', themeToSet);
     return themeToSet;
 }
 
-// Cihaz teması değiştiğinde güncelle
 function setupThemeListener() {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    mediaQuery.addEventListener('change', (e) => {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
         const savedTheme = localStorage.getItem('pdfTheme');
         if (savedTheme === 'device' || !savedTheme) {
-            const themeToSet = e.matches ? 'dark' : 'light';
-            document.documentElement.setAttribute('data-theme', themeToSet);
-            console.log('Cihaz teması değişti, toolbar güncellendi:', themeToSet);
+            document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
         }
     });
 }
 
-// Yerel font kontrolü
-function checkLocalFont() {
-    const testFont = new FontFace('Material Symbols Test', 'url(fonts/MaterialSymbolsRounded.woff2) format("woff2")');
-    testFont.load().then(() => {
-        document.fonts.add(testFont);
-    }).catch(() => {
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200';
-        document.head.appendChild(link);
-    });
-}
-
+// 3. Başlık Güncelleme
 function updateToolbarTitle() {
-    const pdfInfo = getPdfDataFromUrl();
+    const pdfInfo = getPdfDataFromStorage();
     if (pdfInfo && pdfInfo.name) {
         document.getElementById('customTitle').textContent = pdfInfo.name;
         document.title = pdfInfo.name + ' - PDF Reader';
     } else {
         setTimeout(() => {
             const pdfTitle = document.querySelector('#fileNameField')?.textContent || 
-                            document.querySelector('#titleField')?.textContent ||
-                            'PDF Dosyası';
-            if (pdfTitle !== '-') {
-                document.getElementById('customTitle').textContent = pdfTitle;
-            }
+                            document.querySelector('#titleField')?.textContent || 'PDF Dosyası';
+            if (pdfTitle !== '-') document.getElementById('customTitle').textContent = pdfTitle;
         }, 1000);
     }
 }
 
 function goBackToIndex() {
-    window.location.href = 'index.html';
+    window.location.href = '../index.html'; // web/viewer.html'den bir üst klasöre
 }
 
-// Paylaş fonksiyonu
+// 4. Paylaş ve Kaydet (Storage Destekli)
 async function sharePDF() {
-    const pdfInfo = getPdfDataFromUrl();
+    const pdfInfo = getPdfDataFromStorage();
     if (!pdfInfo || !pdfInfo.data) return;
     
     try {
@@ -1519,219 +1509,90 @@ async function sharePDF() {
         const file = new File([blob], pdfInfo.name || 'document.pdf', { type: 'application/pdf' });
         
         if (navigator.share && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-                files: [file],
-                title: pdfInfo.name || 'PDF Document'
-            });
+            await navigator.share({ files: [file], title: pdfInfo.name });
         } else {
-            alert('Tarayıcınız paylaşımı desteklemiyor. Kaydet butonunu kullanın.');
+            alert('Tarayıcı paylaşımı desteklemiyor. Kaydet butonunu deneyin.');
         }
     } catch (error) {
         console.error('Share error:', error);
-        alert('Paylaşım sırasında hata oluştu.');
     }
 }
 
-// Kaydet fonksiyonu
 function savePDF() {
-    try {
-        const downloadButton = document.getElementById('downloadButton');
-        if (downloadButton) {
-            downloadButton.click();
-        } else {
-            const pdfInfo = getPdfDataFromUrl();
-            if (pdfInfo && pdfInfo.data) {
-                const tempLink = document.createElement('a');
-                tempLink.href = pdfInfo.data;
-                tempLink.download = pdfInfo.name || 'document.pdf';
-                document.body.appendChild(tempLink);
-                tempLink.click();
-                document.body.removeChild(tempLink);
-            } else {
-                alert('PDF verisi bulunamadı.');
-            }
-        }
-    } catch (error) {
-        console.error('Save error:', error);
-        alert('Kaydetme sırasında hata oluştu.');
+    const pdfInfo = getPdfDataFromStorage();
+    if (pdfInfo && pdfInfo.data) {
+        const tempLink = document.createElement('a');
+        tempLink.href = pdfInfo.data;
+        tempLink.download = pdfInfo.name || 'document.pdf';
+        tempLink.click();
     }
 }
 
-// Print Dialog Fonksiyonları
-function printWithWebShare() {
-    showPrintDialog();
-}
+// 5. Yazdırma İşlemleri
+function printWithWebShare() { showPrintDialog(); }
+function showPrintDialog() { document.getElementById('printDialogOverlay').style.display = 'flex'; }
+function hidePrintDialog() { document.getElementById('printDialogOverlay').style.display = 'none'; }
 
-function showPrintDialog() {
-    document.getElementById('printDialogOverlay').style.display = 'flex';
-}
-
-function hidePrintDialog() {
-    document.getElementById('printDialogOverlay').style.display = 'none';
-}
-
-// Web Share API ile Yazdırma
 async function triggerWebSharePrint() {
     hidePrintDialog();
-    
-    const pdfInfo = getPdfDataFromUrl();
-    if (!pdfInfo || !pdfInfo.data) {
-        alert('PDF verisi bulunamadı.');
-        return;
-    }
-    
+    const pdfInfo = getPdfDataFromStorage();
+    if (!pdfInfo) return;
+
     try {
-        // PDF'i blob'a çevir
         const response = await fetch(pdfInfo.data);
         const blob = await response.blob();
-        const file = new File([blob], pdfInfo.name || 'document.pdf', { 
-            type: 'application/pdf',
-            lastModified: new Date().getTime()
-        });
-        
-        // Web Share API kontrolü
-        if (!navigator.share) {
-            throw new Error('Web Share API desteklenmiyor');
-        }
-        
-        if (!navigator.canShare({ files: [file] })) {
-            throw new Error('Bu dosya paylaşım için uygun değil');
-        }
-        
-        // Web Share API'yi tetikle
-        await navigator.share({
-            files: [file],
-            title: pdfInfo.name || 'PDF Document',
-            text: 'Bu PDF dosyasını yazdırmak istiyorum'
-        });
-        
-    } catch (error) {
-        console.error('Web Share Print error:', error);
-        
-        // Kullanıcı iptal etti
-        if (error.name === 'AbortError') {
-            console.log('Kullanıcı iptal etti');
-            return;
-        }
-        
-        // Web Share desteklenmiyorsa klasik yazdırmaya geç
-        if (error.message.includes('desteklenmiyor')) {
-            // Sessizce klasik yazdırmaya geç
+        const file = new File([blob], pdfInfo.name, { type: 'application/pdf' });
+
+        if (navigator.share && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: pdfInfo.name });
+        } else {
             startClassicPrint();
-        } else {
-            alert('Yazdırma sırasında hata oluştu.');
         }
+    } catch (e) {
+        startClassicPrint();
     }
 }
 
-// Klasik yazdırma (fallback)
 function startClassicPrint() {
-    try {
-        // PDF.js'in print fonksiyonunu kullan
-        if (window.PDFViewerApplication && typeof PDFViewerApplication.print === 'function') {
-            setTimeout(() => PDFViewerApplication.print(), 100);
-            return;
-        }
-        
-        // Print butonunu tetikle
-        const printButton = document.getElementById('printButton');
-        if (printButton) {
-            setTimeout(() => printButton.click(), 100);
-            return;
-        }
-        
-        // Direkt window.print
-        setTimeout(() => window.print(), 100);
-        
-    } catch (error) {
-        console.error('Classic print error:', error);
-        alert('Yazdırma sırasında hata oluştu.');
+    if (window.PDFViewerApplication) PDFViewerApplication.print();
+    else window.print();
+}
+
+// 6. PDF.js'i Manuel Tetikleme (Kritik)
+function loadPdfIntoViewer() {
+    const pdfInfo = getPdfDataFromStorage();
+    if (pdfInfo && window.PDFViewerApplication) {
+        PDFViewerApplication.open({
+            url: pdfInfo.data,
+            originalUrl: pdfInfo.name
+        });
+    } else {
+        // Uygulama henüz hazır değilse tekrar dene
+        setTimeout(loadPdfIntoViewer, 300);
     }
 }
 
-// Enter tuşu ile yazdırma
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && document.getElementById('printDialogOverlay').style.display === 'flex') {
-        triggerWebSharePrint();
-    }
-    if (e.key === 'Escape') {
-        if (document.getElementById('printDialogOverlay').style.display === 'flex') {
-            hidePrintDialog();
-        } else {
-            goBackToIndex();
-        }
-    }
-});
-
-// Android geri tuşu desteği
-window.onkeydown = function(event) {
-    if (event.key === 'Escape' || event.keyCode === 27) {
-        goBackToIndex();
-    }
-};
-
-// Sayfa yüklendiğinde
+// Sayfa yüklendiğinde başlat
 document.addEventListener('DOMContentLoaded', function() {
-    // 1. Temayı başlat
     initCustomToolbarTheme();
     setupThemeListener();
-    
-    // 2. Fontları kontrol et
-    checkLocalFont();
-    
-    // 3. Başlığı güncelle
     updateToolbarTitle();
-    
-    // 4. Geri tuşu için Android bridge desteği
-    if (typeof Android !== 'undefined') {
-        window.androidBackPressed = function() {
-            goBackToIndex();
-            return true;
-        };
-    }
-    
-    // 5. Başlığı tekrar güncelle
-    setTimeout(updateToolbarTitle, 2000);
-    
-    // 6. Yazdır butonuna event listener ekle
+    loadPdfIntoViewer(); // PDF'i depodan yükle
+
     document.getElementById('customPrintBtn')?.addEventListener('click', printWithWebShare);
 });
 
-function getPdfDataFromUrl() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const data = urlParams.get('data');
-    const name = urlParams.get('name');
-    
-    if (data && data.startsWith('data:application/pdf')) {
-        return { data: data, name: name || "belge.pdf" };
+// Klavye ve Geri Tuşu
+window.onkeydown = function(event) {
+    if (event.key === 'Escape') {
+        if (document.getElementById('printDialogOverlay').style.display === 'flex') hidePrintDialog();
+        else goBackToIndex();
     }
-    return null;
-}
-
-// Dokunmatik geri tuşu için
-let touchStartX = 0;
-document.addEventListener('touchstart', function(e) {
-    touchStartX = e.touches[0].clientX;
-});
-
-document.addEventListener('touchend', function(e) {
-    const touchEndX = e.changedTouches[0].clientX;
-    const diffX = touchEndX - touchStartX;
-    
-    if (diffX < -50 && Math.abs(diffX) > 50) {
-        goBackToIndex();
-    }
-});
-
-// Sayfa görünürlüğü değiştiğinde temayı kontrol et (arka plandan dönünce)
-document.addEventListener('visibilitychange', function() {
-    if (!document.hidden) {
-        setTimeout(initCustomToolbarTheme, 100);
-    }
-});
+};
 </script>
 
-<!-- ozel toolbar -->
+
+      
 <!-- ozel toolbar -->
 <!-- ozel toolbar -->
 
