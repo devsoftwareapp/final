@@ -44,10 +44,9 @@ flutter:
     - assets/web/
     
     # Web ana dosyaları (ek güvenlik için)
-    - assets/fonts/MaterialSymbolsRounded.woff2
-    - assets/index.html
-    - assets/iframe.html
-    - assets/img/
+    - assets/web/fonts/MaterialSymbolsRounded.woff2
+    - assets/web/index.html
+    - assets/web/img/
     - assets/web/viewer.html
     - assets/web/viewer.css
     - assets/web/viewer.mjs
