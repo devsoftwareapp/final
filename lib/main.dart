@@ -40,7 +40,7 @@ class _WebViewPageState extends State<WebViewPage> {
       body: SafeArea(
         child: InAppWebView(
           initialUrlRequest: URLRequest(
-            url: WebUri("file:///android_asset/flutter_assets/assets/index.html"),
+            url: WebUri("file:///android_asset/flutter_assets/assets/web/index.html"),
           ),
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
