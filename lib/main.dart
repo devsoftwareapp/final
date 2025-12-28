@@ -14,19 +14,23 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'MindArt',
-      home: const WebViewPage(),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const HomePage(),
+        '/viewer': (context) => const ViewerPage(),
+      },
     );
   }
 }
 
-class WebViewPage extends StatefulWidget {
-  const WebViewPage({super.key});
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
 
   @override
-  State<WebViewPage> createState() => _WebViewPageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
-class _WebViewPageState extends State<WebViewPage> {
+class _HomePageState extends State<HomePage> {
   InAppWebViewController? webViewController;
 
   @override
@@ -35,21 +39,43 @@ class _WebViewPageState extends State<WebViewPage> {
       body: SafeArea(
         child: InAppWebView(
           initialUrlRequest: URLRequest(
-            url: WebUri("file:///android_asset/flutter_assets/assets/web/index.html"),
+            url: WebUri(
+                "file:///android_asset/flutter_assets/assets/web/index.html"),
           ),
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
-            allowFileAccess: true, 
-            allowContentAccess: true, // EKLENDİ: İçerik erişimine izin ver
-            allowFileAccessFromFileURLs: true, 
+            allowFileAccess: true,
+            allowContentAccess: true,
+            allowFileAccessFromFileURLs: true,
             allowUniversalAccessFromFileURLs: true,
-            domStorageEnabled: true, // EKLENDİ: sessionStorage ve localStorage için ŞART
+            domStorageEnabled: true,
             useHybridComposition: true,
-            // Ekstra güvenlik/uyumluluk ayarı
             mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
           ),
           onWebViewCreated: (controller) {
             webViewController = controller;
+          },
+          onLoadStop: (controller, url) async {
+            // JavaScript Channel ekle
+            await controller.addJavaScriptHandler(
+              handlerName: 'openPdfViewer',
+              callback: (args) {
+                // PDF verisi geldi, viewer sayfasına git
+                final pdfData = args[0] as String?;
+                final pdfName = args[1] as String?;
+                
+                if (pdfData != null && pdfName != null) {
+                  Navigator.pushNamed(
+                    context,
+                    '/viewer',
+                    arguments: {
+                      'pdfData': pdfData,
+                      'pdfName': pdfName,
+                    },
+                  );
+                }
+              },
+            );
           },
         ),
       ),
