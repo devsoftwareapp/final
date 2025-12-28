@@ -54,6 +54,8 @@ flutter:
     
     # Images klasörü
     - assets/web/images/
+    - assets/web/locale/locale.json
+
     
     # Tüm locale klasörleri - tam liste
     - assets/web/locale/af/
