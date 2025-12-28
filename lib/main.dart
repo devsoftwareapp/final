@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import 'viewer_page.dart';
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
@@ -14,11 +16,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'MindArt',
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const HomePage(),
-        '/viewer': (context) => const ViewerPage(),
-      },
+      home: const HomePage(),
     );
   }
 }
@@ -55,25 +53,41 @@ class _HomePageState extends State<HomePage> {
           onWebViewCreated: (controller) {
             webViewController = controller;
           },
-          onLoadStop: (controller, url) async {
-            // JavaScript Channel ekle
-            await controller.addJavaScriptHandler(
+          onLoadStop: (controller, url) {
+            // JavaScript Channel ekle - PDF açma mesajını dinle
+            controller.addJavaScriptHandler(
               handlerName: 'openPdfViewer',
               callback: (args) {
-                // PDF verisi geldi, viewer sayfasına git
-                final pdfData = args[0] as String?;
-                final pdfName = args[1] as String?;
-                
-                if (pdfData != null && pdfName != null) {
-                  Navigator.pushNamed(
-                    context,
-                    '/viewer',
-                    arguments: {
-                      'pdfData': pdfData,
-                      'pdfName': pdfName,
-                    },
-                  );
+                if (args.length >= 2) {
+                  final pdfData = args[0] as String;
+                  final pdfName = args[1] as String;
+                  
+                  if (pdfData.isNotEmpty && pdfName.isNotEmpty) {
+                    // Viewer sayfasına geç
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ViewerPage(
+                          pdfData: pdfData,
+                          pdfName: pdfName,
+                        ),
+                      ),
+                    );
+                  }
                 }
+              },
+            );
+            
+            // Android'den döndüğünde tarama mesajı
+            controller.addJavaScriptHandler(
+              handlerName: 'onAndroidResume',
+              callback: (args) {
+                // Android'den dönüşte tarama yap
+                controller.evaluateJavascript(source: '''
+                  if (typeof onAndroidResume === 'function') {
+                    onAndroidResume();
+                  }
+                ''');
               },
             );
           },
