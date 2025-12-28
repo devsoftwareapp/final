@@ -1124,8 +1124,6 @@
 <!-- ozel toolbar -->
 
 
-
-
 <style>
 /* ===== CUSTOM TOP TOOLBAR ===== */
 #customToolbar {
@@ -1365,22 +1363,45 @@ function applyTextFix() {
 }
 
 // 5. Fonksiyonlar
-function goBackToIndex() { window.location.href = 'index.html'; }
 
+// GERİ BUTONU
+function goBackToIndex() { 
+    // Flutterdaysa native geri yapabiliriz veya direkt sayfayı yükleyebiliriz
+    window.location.href = 'index.html'; 
+}
+
+// PAYLAŞ BUTONU
 async function sharePDF() {
     const pdfInfo = getPdfDataFromStorage();
     if (!pdfInfo) return;
+
+    // FLUTTER KONTROLÜ
+    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+        window.flutter_inappwebview.callHandler('sharePdf', pdfInfo.data, pdfInfo.name);
+        return;
+    }
+
+    // TARAYICI (BROWSER) MODU
     try {
         const response = await fetch(pdfInfo.data);
         const blob = await response.blob();
         const file = new File([blob], pdfInfo.name, { type: 'application/pdf' });
         if (navigator.share) await navigator.share({ files: [file], title: pdfInfo.name });
-    } catch (e) { /* Sessiz hata */ }
+    } catch (e) { console.error(e); }
 }
 
+// İNDİR (KAYDET) BUTONU
 function downloadPDF() {
     const pdfInfo = getPdfDataFromStorage();
     if (!pdfInfo) return;
+
+    // FLUTTER KONTROLÜ
+    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+        window.flutter_inappwebview.callHandler('downloadPdf', pdfInfo.data, pdfInfo.name);
+        return;
+    }
+
+    // TARAYICI (BROWSER) MODU
     try {
         const link = document.createElement('a');
         link.href = pdfInfo.data;
@@ -1391,7 +1412,21 @@ function downloadPDF() {
     } catch (e) { /* Sessiz hata */ }
 }
 
-function printWithWebShare() { document.getElementById('printDialogOverlay').style.display = 'flex'; }
+// YAZDIR BUTONU (Önce Dialog Açar)
+function printWithWebShare() { 
+    // FLUTTER KONTROLÜ (Flutter'da dialog açmadan direkt native print'e gidelim)
+    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+         const pdfInfo = getPdfDataFromStorage();
+         if(pdfInfo) {
+             window.flutter_inappwebview.callHandler('printPdf', pdfInfo.data, pdfInfo.name);
+         }
+         return; 
+    }
+    
+    // TARAYICI MODU
+    document.getElementById('printDialogOverlay').style.display = 'flex'; 
+}
+
 function hidePrintDialog() { document.getElementById('printDialogOverlay').style.display = 'none'; }
 
 async function triggerWebSharePrint() {
@@ -1418,6 +1453,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 window.onkeydown = function(e) { if (e.key === 'Escape') goBackToIndex(); };
 </script>
+
 
 
 <!-- ozel toolbar -->
