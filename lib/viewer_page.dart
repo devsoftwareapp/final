@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class ViewerPage extends StatefulWidget {
@@ -19,144 +20,137 @@ class _ViewerPageState extends State<ViewerPage> {
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
 
-  // PDF verisini güvenli hale getir
-  String _encodePdfData() {
-    return widget.pdfData
-        .replaceAll(r'\', r'\\')
-        .replaceAll("'", r"\'")
-        .replaceAll('\n', ' ')
-        .replaceAll('\r', ' ');
+  @override
+  void initState() {
+    super.initState();
+    // Viewer sayfasında FULL IMMERSIVE MODE
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.immersiveSticky,
+      overlays: [],
+    );
+  }
+
+  @override
+  void dispose() {
+    // Sayfadan çıkınca system UI'ı normale döndür
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.edgeToEdge,
+      overlays: SystemUiOverlay.values,
+    );
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final encodedPdfData = _encodePdfData();
-    final encodedPdfName = widget.pdfName
-        .replaceAll("'", r"\'")
-        .replaceAll('\n', ' ')
-        .replaceAll('\r', ' ');
+    // Safe area değerlerini al (HTML'ye göndermek için)
+    final safeTop = MediaQuery.of(context).padding.top;
+    final safeBottom = MediaQuery.of(context).padding.bottom;
 
-    return Scaffold(
-      // AppBar YOK - viewer.html kendi toolbar'ını kullanacak
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          InAppWebView(
-            initialUrlRequest: URLRequest(
-              url: WebUri(
-                  "file:///android_asset/flutter_assets/assets/web/viewer.html"),
-            ),
-            initialSettings: InAppWebViewSettings(
-              javaScriptEnabled: true,
-              allowFileAccess: true,
-              allowContentAccess: true,
-              allowFileAccessFromFileURLs: true,
-              allowUniversalAccessFromFileURLs: true,
-              domStorageEnabled: true,
-              useHybridComposition: true,
-              mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-              transparentBackground: true,
-            ),
-            onWebViewCreated: (controller) {
-              _webViewController = controller;
-            },
-            onLoadStop: (controller, url) async {
-              // viewer.html yüklendikten sonra PDF verisini gönder
-              await Future.delayed(const Duration(milliseconds: 300));
+    return PopScope(
+      // Android geri tuşu için
+      canPop: true,
+      onPopInvoked: (didPop) {
+        if (!didPop) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        // CRITICAL: AppBar YOK, SafeArea YOK
+        // viewer.html FULL SCREEN olacak
+        backgroundColor: Colors.transparent,
+        body: Stack(
+          children: [
+            InAppWebView(
+              initialUrlRequest: URLRequest(
+                url: WebUri(
+                    "file:///android_asset/flutter_assets/assets/web/viewer.html"),
+              ),
+              initialSettings: InAppWebViewSettings(
+                javaScriptEnabled: true,
+                allowFileAccess: true,
+                allowContentAccess: true,
+                allowFileAccessFromFileURLs: true,
+                allowUniversalAccessFromFileURLs: true,
+                domStorageEnabled: true,
+                useHybridComposition: true,
+                mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+                transparentBackground: true,
+                // FULL SCREEN için
+                disableVerticalScroll: true,
+                disableHorizontalScroll: true,
+              ),
+              onWebViewCreated: (controller) {
+                _webViewController = controller;
+              },
+              onLoadStop: (controller, url) async {
+                // viewer.html yüklendikten sonra
+                await Future.delayed(const Duration(milliseconds: 500));
 
-              // PDF verisini sessionStorage'a yazdıran JavaScript kodu
-              final jsCode = '''
-                try {
-                  // Önce mevcut datayı temizle
-                  sessionStorage.removeItem('currentPdfData');
-                  sessionStorage.removeItem('currentPdfName');
+                // SAFE AREA değerlerini HTML'ye gönder
+                final jsCode = '''
+                  // Safe area değerlerini CSS'e aktar
+                  document.documentElement.style.setProperty('--safe-top', '${safeTop}px');
+                  document.documentElement.style.setProperty('--safe-bottom', '${safeBottom}px');
+                  document.documentElement.style.setProperty('--safe-left', '0px');
+                  document.documentElement.style.setProperty('--safe-right', '0px');
                   
-                  // Yeni datayı ekle (güvenli string)
-                  sessionStorage.setItem('currentPdfData', '$encodedPdfData');
-                  sessionStorage.setItem('currentPdfName', '$encodedPdfName');
-                  
-                  console.log('PDF data set in sessionStorage');
-                  
-                  // PDF'yi yüklemeyi dene
-                  if (typeof loadPdfIntoViewer === 'function') {
-                    loadPdfIntoViewer();
-                  } else {
-                    console.warn('loadPdfIntoViewer function not found, waiting...');
-                    // 1 saniye bekle ve tekrar dene
-                    setTimeout(function() {
-                      if (typeof loadPdfIntoViewer === 'function') {
-                        loadPdfIntoViewer();
-                      } else {
-                        console.error('loadPdfIntoViewer still not found');
-                        // Alternatif: direkt PDFViewerApplication kullan
-                        if (typeof PDFViewerApplication !== 'undefined' && PDFViewerApplication.open) {
-                          PDFViewerApplication.open({ 
-                            url: sessionStorage.getItem('currentPdfData'),
-                            originalUrl: sessionStorage.getItem('currentPdfName')
-                          });
-                        }
-                      }
-                    }, 1000);
-                  }
-                } catch(e) {
-                  console.error('Error setting PDF data:', e);
-                  // Hata durumunda fallback
+                  // PDF verisini sessionStorage'a yaz
                   try {
-                    if (typeof PDFViewerApplication !== 'undefined' && PDFViewerApplication.open) {
-                      PDFViewerApplication.open({ 
-                        url: '$encodedPdfData',
-                        originalUrl: '$encodedPdfName'
-                      });
+                    sessionStorage.setItem('currentPdfData', '${widget.pdfData.replaceAll("'", "\\'")}');
+                    sessionStorage.setItem('currentPdfName', '${widget.pdfName.replaceAll("'", "\\'")}');
+                    
+                    // PDF'yi yükle
+                    if (typeof loadPdfIntoViewer === 'function') {
+                      loadPdfIntoViewer();
+                    } else {
+                      setTimeout(() => {
+                        if (typeof loadPdfIntoViewer === 'function') {
+                          loadPdfIntoViewer();
+                        }
+                      }, 1000);
                     }
-                  } catch(e2) {
-                    console.error('Fallback also failed:', e2);
+                  } catch(e) {
+                    console.error('Error:', e);
                   }
+                ''';
+
+                try {
+                  await controller.evaluateJavascript(source: jsCode);
+                } catch (e) {
+                  print('JavaScript error: $e');
                 }
-              ''';
 
-              try {
-                await controller.evaluateJavascript(source: jsCode);
-              } catch (e) {
-                print('JavaScript evaluation error: $e');
-              }
+                setState(() {
+                  _isLoading = false;
+                });
+              },
+            ),
 
-              // Yükleme tamamlandı
-              setState(() {
-                _isLoading = false;
-              });
-            },
-            onLoadError: (controller, url, code, message) {
-              print('WebView load error: $message');
-              setState(() {
-                _isLoading = false;
-              });
-            },
-          ),
-
-          // Sadece yükleme göstergesi
-          if (_isLoading)
-            Container(
-              color: Colors.black.withOpacity(0.7),
-              child: const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
-                    ),
-                    SizedBox(height: 20),
-                    Text(
-                      'PDF yükleniyor...',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
+            // Loading indicator
+            if (_isLoading)
+              Container(
+                color: Colors.black,
+                child: const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
                       ),
-                    ),
-                  ],
+                      SizedBox(height: 20),
+                      Text(
+                        'PDF yükleniyor...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
