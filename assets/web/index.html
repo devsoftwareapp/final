@@ -6,12 +6,33 @@
   <title>PDF Reader | Dev Software</title>
   
   <style>
-  :root {
-    --safe-top: env(safe-area-inset-top, 0px);
-    --safe-bottom: env(safe-area-inset-bottom, 0px);
-    --safe-left: env(safe-area-inset-left, 0px);
-    --safe-right: env(safe-area-inset-right, 0px);
-  }
+/* EN ÜSTE EKLE */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* body'ye ekle */
+body {
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+/* .top-bar-container DÜZELTMESİ */
+.top-bar-container {
+  padding-top: 0 !important; /* Flutter zaten halletti */
+  margin-top: var(--safe-top); /* Status bar altına kaydır */
+}
+  
+  
+  
+  
+  
+  
 
   /* Material Symbols Rounded - Local WebView Font */
   @font-face {
@@ -3052,5 +3073,4 @@ function sendToFlutter(fileData, name) {
   </script>
 </body>
 </html>
-
 
