@@ -1125,6 +1125,7 @@
 
 
 
+
 <style>
 /* ===== CUSTOM TOP TOOLBAR ===== */
 #customToolbar {
@@ -1142,8 +1143,6 @@
     padding-top: env(safe-area-inset-top);
     padding-left: calc(16px + env(safe-area-inset-left));
     padding-right: calc(16px + env(safe-area-inset-right));
-    
-    /* Tema değişkenleri */
     background: var(--toolbar-bg);
     color: var(--text-color);
 }
@@ -1182,10 +1181,7 @@
     color: var(--icon-color);
 }
 
-#customBackButton:hover,
-#customBackButton:active {
-    background-color: var(--button-hover-bg);
-}
+#customBackButton:hover, #customBackButton:active { background-color: var(--button-hover-bg); }
 
 #customTitle {
     flex: 1;
@@ -1199,11 +1195,7 @@
     color: var(--text-color);
 }
 
-#customActions {
-    display: flex;
-    gap: 8px;
-    flex-shrink: 0;
-}
+#customActions { display: flex; gap: 8px; flex-shrink: 0; }
 
 .custom-action-btn {
     background: none;
@@ -1219,20 +1211,8 @@
     color: var(--icon-color);
 }
 
-.custom-action-btn:hover,
-.custom-action-btn:active {
-    background-color: var(--button-hover-bg);
-}
+.custom-action-btn:hover, .custom-action-btn:active { background-color: var(--button-hover-bg); }
 
-#customBackButton .material-symbols-rounded {
-    font-size: 24px;
-}
-
-.custom-action-btn .material-symbols-rounded {
-    font-size: 22px;
-}
-
-/* DUZELTME: OuterContainer zaten 56px aşağıda başlar */
 #outerContainer {
     margin-top: 56px !important;
     height: calc(100vh - 56px) !important;
@@ -1241,8 +1221,7 @@
 
 @font-face {
     font-family: 'Material Symbols Rounded Local';
-    src: local('Material Symbols Rounded'),
-         url('fonts/MaterialSymbolsRounded.woff2') format('woff2');
+    src: local('Material Symbols Rounded'), url('fonts/MaterialSymbolsRounded.woff2') format('woff2');
     font-weight: 100 700;
     font-style: normal;
     font-display: block;
@@ -1261,123 +1240,46 @@
     direction: ltr;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 48;
 }
 
-/* DUZELTME: Viewer alanı orijinal barın altından başlamalı */
-#viewerContainer {
-    top: 32px !important;
-    height: calc(100% - 32px) !important;
-}
+#viewerContainer { top: 32px !important; height: calc(100% - 32px) !important; }
 
 /* Print Dialog Stili */
 #printDialogOverlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    top: 0; left: 0; right: 0; bottom: 0;
     background: rgba(0, 0, 0, 0.8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 20000;
-    padding: 20px;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 20000; padding: 20px;
 }
 
 #printDialog {
     background: var(--dialog-bg, white);
-    border-radius: 12px;
-    padding: 24px;
-    max-width: 320px;
-    width: 100%;
-    text-align: center;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    border-radius: 12px; padding: 24px;
+    max-width: 320px; width: 100%;
+    text-align: center; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
     animation: dialogFadeIn 0.3s ease;
     color: var(--dialog-text, #333);
 }
 
-/* Dialog tema */
 [data-theme="light"] #printDialog {
-    --dialog-bg: white;
-    --dialog-text: #333;
-    --dialog-secondary-text: #666;
-    --dialog-btn-bg: #4285f4;
-    --dialog-btn-hover: #3367d6;
-    --dialog-btn-cancel-bg: #f0f0f0;
-    --dialog-btn-cancel-text: #666;
+    --dialog-bg: white; --dialog-text: #333; --dialog-secondary-text: #666;
+    --dialog-btn-bg: #4285f4; --dialog-btn-hover: #3367d6;
+    --dialog-btn-cancel-bg: #f0f0f0; --dialog-btn-cancel-text: #666;
 }
 
 [data-theme="dark"] #printDialog {
-    --dialog-bg: #333;
-    --dialog-text: #fff;
-    --dialog-secondary-text: #ccc;
-    --dialog-btn-bg: #4285f4;
-    --dialog-btn-hover: #3367d6;
-    --dialog-btn-cancel-bg: #444;
-    --dialog-btn-cancel-text: #ccc;
+    --dialog-bg: #333; --dialog-text: #fff; --dialog-secondary-text: #ccc;
+    --dialog-btn-bg: #4285f4; --dialog-btn-hover: #3367d6;
+    --dialog-btn-cancel-bg: #444; --dialog-btn-cancel-text: #ccc;
 }
 
-@keyframes dialogFadeIn {
-    from { opacity: 0; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1); }
-}
-
-#printDialog h3 {
-    margin: 0 0 16px 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--dialog-text);
-}
-
-.print-message {
-    margin: 0 0 20px 0;
-    font-size: 15px;
-    line-height: 1.4;
-    color: var(--dialog-secondary-text);
-}
-
-.print-icon-large {
-    font-family: 'Material Symbols Rounded Local', 'Material Symbols Rounded', system-ui, sans-serif;
-    font-size: 48px;
-    color: #4285f4;
-    margin-bottom: 16px;
-    display: block;
-}
-
-.dialog-buttons {
-    display: flex;
-    gap: 12px;
-}
-
-.dialog-btn {
-    flex: 1;
-    padding: 12px 20px;
-    border: none;
-    border-radius: 8px;
-    font-size: 15px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-#confirmPrintBtn {
-    background: var(--dialog-btn-bg);
-    color: white;
-}
-
-#confirmPrintBtn:hover {
-    background: var(--dialog-btn-hover);
-}
-
-#cancelPrintBtn {
-    background: var(--dialog-btn-cancel-bg);
-    color: var(--dialog-btn-cancel-text);
-}
-
-#cancelPrintBtn:hover {
-    filter: brightness(1.1);
-}
+@keyframes dialogFadeIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+.print-icon-large { font-size: 48px; color: #4285f4; margin-bottom: 16px; display: block; }
+.dialog-buttons { display: flex; gap: 12px; }
+.dialog-btn { flex: 1; padding: 12px 20px; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; }
+#confirmPrintBtn { background: var(--dialog-btn-bg); color: white; }
+#cancelPrintBtn { background: var(--dialog-btn-cancel-bg); color: var(--dialog-btn-cancel-text); }
 </style>
 
 <div id="customToolbar">
@@ -1389,7 +1291,7 @@
         <button class="custom-action-btn" id="customShareBtn" onclick="sharePDF()" title="Paylaş">
             <span class="material-symbols-rounded">share</span>
         </button>
-        <button class="custom-action-btn" id="customSaveBtn" onclick="savePDF()" title="Kaydet">
+        <button class="custom-action-btn" id="customSaveBtn" onclick="downloadPDF()" title="Kaydet">
             <span class="material-symbols-rounded">download</span>
         </button>
         <button class="custom-action-btn" id="customPrintBtn" onclick="printWithWebShare()" title="Yazdır">
@@ -1400,18 +1302,9 @@
 
 <div id="printDialogOverlay" style="display: none;">
     <div id="printDialog">
-        <span class="print-icon-large">print</span>
+        <span class="material-symbols-rounded print-icon-large">print</span>
         <h3>Yazdır</h3>
-        
-        <p class="print-message">
-            Açılacak pencerede<br>
-            <span style="color: #4285f4; font-weight: 600;">
-                <span class="material-symbols-rounded" style="font-size: 20px; vertical-align: middle;">print</span>
-                yazıcı simgesini
-            </span><br>
-            seçiniz
-        </p>
-        
+        <p class="print-message">Açılacak pencerede <b>yazıcı simgesini</b> seçiniz</p>
         <div class="dialog-buttons">
             <button id="cancelPrintBtn" class="dialog-btn" onclick="hidePrintDialog()">İptal</button>
             <button id="confirmPrintBtn" class="dialog-btn" onclick="triggerWebSharePrint()">Tamam</button>
@@ -1440,70 +1333,39 @@ function initCustomToolbarTheme() {
     document.documentElement.setAttribute('data-theme', themeToSet);
 }
 
-// 3. Başlık ve PDF.js Yükleme
+// 3. Başlık ve Yükleme
 function updateToolbarTitle() {
     const pdfInfo = getPdfDataFromStorage();
-    if (pdfInfo) {
-        document.getElementById('customTitle').textContent = pdfInfo.name;
-    }
+    if (pdfInfo) document.getElementById('customTitle').textContent = pdfInfo.name;
 }
 
 function loadPdfIntoViewer() {
-    if (typeof PDFViewerApplicationOptions !== 'undefined') {
-        PDFViewerApplicationOptions.set('disableLocalization', true);
-    }
-
+    if (typeof PDFViewerApplicationOptions !== 'undefined') PDFViewerApplicationOptions.set('disableLocalization', true);
     const pdfInfo = getPdfDataFromStorage();
     if (pdfInfo && window.PDFViewerApplication) {
-        PDFViewerApplication.open({
-            url: pdfInfo.data,
-            originalUrl: pdfInfo.name
-        }).then(() => {
+        PDFViewerApplication.open({ url: pdfInfo.data, originalUrl: pdfInfo.name }).then(() => {
             updateToolbarTitle();
             applyTextFix();
         });
-    } else {
-        setTimeout(loadPdfIntoViewer, 200);
-    }
+    } else { setTimeout(loadPdfIntoViewer, 200); }
 }
 
-// 4. Yazı Renklerini Zorlayan ve BOSLUGU SIFIRLAYAN Fonksiyon
 function applyTextFix() {
     const style = document.createElement('style');
     style.innerHTML = `
-        /* Yazıların renklerini ve görünürlüğünü sağla */
         .toolbarLabel, #numPages, #pageNumber, .secondaryToolbarButton span, #sidebarContent span {
-            color: var(--text-color, #333) !important;
-            visibility: visible !important;
-            display: inline-block !important;
-            opacity: 1 !important;
-            font-size: 12px !important;
+            color: var(--text-color, #333) !important; visibility: visible !important;
+            display: inline-block !important; opacity: 1 !important; font-size: 12px !important;
         }
-
-        /* BOSLUGU SIFIRLA: Orijinal barı mavi barın altına tam yapıştır */
-        #toolbarContainer { 
-            top: 0 !important; 
-            box-shadow: none !important; 
-            border-top: none !important;
-            position: absolute !important;
-        }
-
-        /* PDF ICERIGI: Orijinal barın bittiği yerden başlat */
-        #viewerContainer { 
-            top: 32px !important; 
-        }
-
-        #sidebarContainer {
-            top: 0 !important;
-        }
+        #toolbarContainer { top: 0 !important; box-shadow: none !important; border-top: none !important; position: absolute !important; }
+        #viewerContainer { top: 32px !important; }
+        #sidebarContainer { top: 0 !important; }
     `;
     document.head.appendChild(style);
 }
 
-// 5. Navigasyon ve Fonksiyonlar
-function goBackToIndex() {
-    window.location.href = 'index.html';
-}
+// 5. Fonksiyonlar
+function goBackToIndex() { window.location.href = 'index.html'; }
 
 async function sharePDF() {
     const pdfInfo = getPdfDataFromStorage();
@@ -1513,20 +1375,22 @@ async function sharePDF() {
         const blob = await response.blob();
         const file = new File([blob], pdfInfo.name, { type: 'application/pdf' });
         if (navigator.share) await navigator.share({ files: [file], title: pdfInfo.name });
-    } catch (e) { alert("Paylaşım başarısız."); }
+    } catch (e) { /* Sessiz hata */ }
 }
 
-function savePDF() {
+function downloadPDF() {
     const pdfInfo = getPdfDataFromStorage();
-    if (pdfInfo) {
-        const a = document.createElement('a');
-        a.href = pdfInfo.data;
-        a.download = pdfInfo.name;
-        a.click();
-    }
+    if (!pdfInfo) return;
+    try {
+        const link = document.createElement('a');
+        link.href = pdfInfo.data;
+        link.download = pdfInfo.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (e) { /* Sessiz hata */ }
 }
 
-// 6. Yazdırma
 function printWithWebShare() { document.getElementById('printDialogOverlay').style.display = 'flex'; }
 function hidePrintDialog() { document.getElementById('printDialogOverlay').style.display = 'none'; }
 
@@ -1550,15 +1414,10 @@ function startClassicPrint() {
 document.addEventListener('DOMContentLoaded', function() {
     initCustomToolbarTheme();
     loadPdfIntoViewer();
-    document.getElementById('customPrintBtn')?.addEventListener('click', printWithWebShare);
 });
 
-window.onkeydown = function(e) {
-    if (e.key === 'Escape') goBackToIndex();
-};
+window.onkeydown = function(e) { if (e.key === 'Escape') goBackToIndex(); };
 </script>
-
-
 
 
 <!-- ozel toolbar -->
@@ -1571,3 +1430,4 @@ window.onkeydown = function(e) {
     
   </body>
 </html>
+
