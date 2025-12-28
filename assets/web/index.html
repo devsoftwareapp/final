@@ -2948,6 +2948,11 @@
     window.showPermissionModal = showPermissionModal;
     window.closePermissionModal = closePermissionModal;
     window.openSettingsForPermission = openSettingsForPermission;
+    
+    
+    
+    
+    
 function handleCardClick(element, name, cardId) {
     if (isSelectionMode) {
         toggleCardSelection(cardId);
@@ -2955,7 +2960,7 @@ function handleCardClick(element, name, cardId) {
     }
     
     if (!isLongPress) {
-        // Dosyayı bul (Recent, Imported veya Device içinden)
+        // Dosyayı bul
         let fileData = recentFiles.find(f => f.id === cardId) || 
                        importedFiles.find(f => f.id === cardId) || 
                        devicePDFs.find(f => f.id === cardId);
@@ -2971,56 +2976,56 @@ function handleCardClick(element, name, cardId) {
                 lastOpened: new Date().toISOString()
             });
             
-            // YENİ: SessionStorage kullanarak viewer'ı aç
-            openPdfViewer(fileData, name);
+            // FLUTTER'a mesaj gönder
+            sendToFlutter(fileData, name);
         } else {
             console.log("Dosya bulunamadı!");
         }
     }
 }
 
-// PDF viewer'ı açan yardımcı fonksiyon (SessionStorage Destekli)
-function openPdfViewer(fileData, name) {
-    if (!fileData) {
-        console.error("Dosya verisi bulunamadı!");
-        return;
-    }
-    
+// Flutter'a mesaj gönderen fonksiyon
+function sendToFlutter(fileData, name) {
     const pdfName = name || fileData.name || "belge.pdf";
-    let base64ToOpen = null;
+    let base64ToSend = null;
 
-    // 1. Durum: Base64 verisi zaten bellekte (importedFiles)
+    // Base64 verisi varsa
     if (fileData.base64) {
-        base64ToOpen = fileData.base64;
+        base64ToSend = fileData.base64;
     } 
-    // 2. Durum: Full path var (devicePDFs - Android Bridge ile oku)
+    // Full path varsa (Android Bridge)
     else if (fileData.fullPath) {
         if (typeof Android !== 'undefined' && Android.getFileAsBase64) {
-            base64ToOpen = Android.getFileAsBase64(fileData.fullPath);
+            base64ToSend = Android.getFileAsBase64(fileData.fullPath);
         } else {
             // Test için simülasyon
-            base64ToOpen = `data:application/pdf;base64,simulated_data_for_${fileData.id}`;
+            base64ToSend = `data:application/pdf;base64,simulated_data_for_${fileData.id}`;
         }
     }
 
-    if (base64ToOpen) {
+    if (base64ToSend) {
         try {
-            // KRİTİK: URL parametresi yerine SessionStorage'a yazıyoruz
-            sessionStorage.setItem('currentPdfData', base64ToOpen);
-            sessionStorage.setItem('currentPdfName', pdfName);
-
-            // Viewer'ı temiz bir URL ile aç (URL limiti takılmaz)
-            window.location.href = 'viewer.html';
+            // FLUTTER JavaScript Channel'ı çağır
+            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+                window.flutter_inappwebview.callHandler('openPdfViewer', base64ToSend, pdfName);
+            } else {
+                // Fallback: eski yöntem (sessionStorage + redirect)
+                console.warn('Flutter channel not found, using fallback');
+                sessionStorage.setItem('currentPdfData', base64ToSend);
+                sessionStorage.setItem('currentPdfName', pdfName);
+                window.location.href = 'viewer.html';
+            }
         } catch (e) {
-            console.error("Depolama hatası (Muhtemelen kota dolu):", e);
-            alert("PDF çok büyük, açılamadı.");
+            console.error("Flutter communication error:", e);
+            // Fallback
+            sessionStorage.setItem('currentPdfData', base64ToSend);
+            sessionStorage.setItem('currentPdfName', pdfName);
+            window.location.href = 'viewer.html';
         }
     } else {
         console.log("PDF verisi oluşturulamadı!");
     }
 }
-
-
 
   </script>
 </body>
