@@ -39,10 +39,14 @@ class _WebViewPageState extends State<WebViewPage> {
           ),
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
-            allowFileAccess: true,
-            allowFileAccessFromFileURLs: true,
+            allowFileAccess: true, 
+            allowContentAccess: true, // EKLENDİ: İçerik erişimine izin ver
+            allowFileAccessFromFileURLs: true, 
             allowUniversalAccessFromFileURLs: true,
+            domStorageEnabled: true, // EKLENDİ: sessionStorage ve localStorage için ŞART
             useHybridComposition: true,
+            // Ekstra güvenlik/uyumluluk ayarı
+            mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
           ),
           onWebViewCreated: (controller) {
             webViewController = controller;
