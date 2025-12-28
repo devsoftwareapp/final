@@ -2950,10 +2950,10 @@
     window.openSettingsForPermission = openSettingsForPermission;
     
     
+    <!-- js ozel kodum -->
     
     
-    
-function handleCardClick(element, name, cardId) {
+    function handleCardClick(element, name, cardId) {
     if (isSelectionMode) {
         toggleCardSelection(cardId);
         return;
@@ -3005,29 +3005,52 @@ function sendToFlutter(fileData, name) {
 
     if (base64ToSend) {
         try {
+            // Çok büyük base64 verilerini optimize et (isteğe bağlı)
+            let cleanBase64 = base64ToSend;
+            // 5MB'den büyükse uyarı ver (ama gönder)
+            if (cleanBase64.length > 5000000) {
+                console.warn('PDF verisi çok büyük (' + Math.round(cleanBase64.length / 1024 / 1024) + 'MB). Performans etkilenebilir.');
+            }
+            
             // FLUTTER JavaScript Channel'ı çağır
             if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                window.flutter_inappwebview.callHandler('openPdfViewer', base64ToSend, pdfName);
+                console.log('Flutter\'a PDF gönderiliyor: ' + pdfName);
+                window.flutter_inappwebview.callHandler('openPdfViewer', cleanBase64, pdfName);
             } else {
                 // Fallback: eski yöntem (sessionStorage + redirect)
                 console.warn('Flutter channel not found, using fallback');
-                sessionStorage.setItem('currentPdfData', base64ToSend);
-                sessionStorage.setItem('currentPdfName', pdfName);
-                window.location.href = 'viewer.html';
+                try {
+                    sessionStorage.setItem('currentPdfData', base64ToSend);
+                    sessionStorage.setItem('currentPdfName', pdfName);
+                    window.location.href = 'viewer.html';
+                } catch (storageError) {
+                    console.error('Storage hatası:', storageError);
+                    alert('PDF açılamadı: Bellek yetersiz. Daha küçük bir PDF deneyin.');
+                }
             }
         } catch (e) {
             console.error("Flutter communication error:", e);
             // Fallback
-            sessionStorage.setItem('currentPdfData', base64ToSend);
-            sessionStorage.setItem('currentPdfName', pdfName);
-            window.location.href = 'viewer.html';
+            try {
+                sessionStorage.setItem('currentPdfData', base64ToSend);
+                sessionStorage.setItem('currentPdfName', pdfName);
+                window.location.href = 'viewer.html';
+            } catch (storageError) {
+                console.error("Storage error:", storageError);
+                alert('PDF açılamadı: Teknik bir hata oluştu.');
+            }
         }
     } else {
         console.log("PDF verisi oluşturulamadı!");
+        alert('PDF verisi bulunamadı!');
     }
 }
+    
+    
+
 
   </script>
 </body>
 </html>
+
 
