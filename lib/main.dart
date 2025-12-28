@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'iframe_page.dart'; // iframe sayfasını import ediyoruz
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,11 +13,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'PDF Reader',
+      title: 'MindArt',
       home: const WebViewPage(),
-      routes: {
-        '/iframe': (context) => const IframePage(),
-      },
     );
   }
 }
@@ -50,14 +46,6 @@ class _WebViewPageState extends State<WebViewPage> {
           ),
           onWebViewCreated: (controller) {
             webViewController = controller;
-
-            // index.html'den iframe açma talebi geldiğinde yönlendirme
-            controller.addJavaScriptHandler(
-              handlerName: 'openIframe',
-              callback: (args) {
-                Navigator.pushNamed(context, '/iframe');
-              },
-            );
           },
         ),
       ),
