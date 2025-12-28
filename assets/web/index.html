@@ -2949,49 +2949,86 @@
     window.closePermissionModal = closePermissionModal;
     window.openSettingsForPermission = openSettingsForPermission;
 
-    // ✅ FLUTTER VE TARAYICI UYUMLU PDF AÇMA FONKSİYONU
-    window.handlePdfOpen = function(fileData, name) {
+function handleCardClick(element, name, cardId) {
+    if (isSelectionMode) {
+        toggleCardSelection(cardId);
+        return;
+    }
+    
+    if (!isLongPress) {
+        // 1. Önce recentFiles'ta ara
+        let fileData = recentFiles.find(f => f.id === cardId);
+        
+        // 2. Sonra importedFiles'ta ara
         if (!fileData) {
-            console.error("Dosya verisi bulunamadı!");
-            return;
+            fileData = importedFiles.find(f => f.id === cardId);
         }
         
-        const pdfName = name || fileData.name || "belge.pdf";
-
-        // 1. Durum: Base64 verisi varsa (Yüklenen dosyalar)
-        if (fileData.base64) {
-            if (window.flutter_inappwebview) {
-                // Flutter'a mesaj gönder
-                window.flutter_inappwebview.callHandler('openPdf', {
-                    pdfData: fileData.base64,
-                    pdfName: pdfName
-                });
-            } else {
-                // Normal tarayıcıda sessionStorage kullan
-                sessionStorage.setItem("pdfData", fileData.base64);
-                sessionStorage.setItem("pdfName", pdfName);
-                window.location.href = "iframe.html";
-            }
-        } 
-        // 2. Durum: Android cihaz yolu varsa (Taranan dosyalar)
-        else if (fileData.fullPath) {
-            if (typeof Android !== 'undefined' && Android.getFileAsBase64) {
-                const base64FromAndroid = Android.getFileAsBase64(fileData.fullPath);
-                if (base64FromAndroid) {
-                    if (window.flutter_inappwebview) {
-                        window.flutter_inappwebview.callHandler('openPdf', {
-                            pdfData: base64FromAndroid,
-                            pdfName: pdfName
-                        });
-                    } else {
-                        sessionStorage.setItem("pdfData", base64FromAndroid);
-                        sessionStorage.setItem("pdfName", pdfName);
-                        window.location.href = "iframe.html";
-                    }
-                }
-            }
+        // 3. Sonra devicePDFs'te ara
+        if (!fileData) {
+            fileData = devicePDFs.find(f => f.id === cardId);
         }
-    };
+
+        if (fileData) {
+            // Son açılma tarihini güncelle
+            fileData.lastOpened = new Date().toISOString();
+                
+            // Son kullanılanlara ekle/güncelle
+            addToRecentFiles({
+                ...fileData,
+                openedDate: new Date().toISOString(),
+                lastOpened: new Date().toISOString()
+            });
+            
+            // URL parametreleriyle viewer.html'yi aç
+            openPdfViewer(fileData, name);
+        } else {
+            console.log("Dosya bulunamadı!");
+        }
+    }
+}
+
+// PDF viewer'ı açan yardımcı fonksiyon
+function openPdfViewer(fileData, name) {
+    if (!fileData) {
+        console.error("Dosya verisi bulunamadı!");
+        return;
+    }
+    
+    const pdfName = name || fileData.name || "belge.pdf";
+
+    // Base64 verisi varsa (importedFiles için)
+    if (fileData.base64) {
+        // URL parametreleri ile viewer.html'yi aç
+        const viewerUrl = `viewer.html?data=${encodeURIComponent(fileData.base64)}&name=${encodeURIComponent(pdfName)}`;
+        window.location.href = viewerUrl;
+    } 
+    // Full path varsa (devicePDFs için)
+    else if (fileData.fullPath) {
+        // Android'den dosya içeriğini al
+        if (typeof Android !== 'undefined' && Android.getFileAsBase64) {
+            const base64Data = Android.getFileAsBase64(fileData.fullPath);
+            if (base64Data && base64Data.startsWith('data:')) {
+                const viewerUrl = `viewer.html?data=${encodeURIComponent(base64Data)}&name=${encodeURIComponent(pdfName)}`;
+                window.location.href = viewerUrl;
+            } else {
+                console.log("Dosya okunamadı!");
+            }
+        } else {
+            // Simülasyon
+            const simulatedBase64 = `data:application/pdf;base64,simulated_data_for_${fileData.id}`;
+            const viewerUrl = `viewer.html?data=${encodeURIComponent(simulatedBase64)}&name=${encodeURIComponent(pdfName)}`;
+            window.location.href = viewerUrl;
+        }
+    }
+    else {
+        console.log("Dosya verisi bulunamadı!");
+    }
+}
+
+
+
+
 
   </script>
 </body>
