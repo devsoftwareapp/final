@@ -1440,117 +1440,87 @@ See https://github.com/adobe-type-tools/cmap-resources
 
 
 <script>
-// 1. Veriyi Güvenli Şekilde Depodan Al (URL Limiti Çözümü)
+// 1. Veriyi Güvenli Şekilde Depodan Al
 function getPdfDataFromStorage() {
     try {
         const data = sessionStorage.getItem('currentPdfData');
         const name = sessionStorage.getItem('currentPdfName');
-        
         if (data && data.startsWith('data:application/pdf')) {
             return { data: data, name: name || "belge.pdf" };
         }
-    } catch (e) {
-        console.error("Depo okuma hatası:", e);
-    }
+    } catch (e) { console.error("Depo okuma hatası:", e); }
     return null;
 }
 
-// 2. Tema Kontrolü - index.html ile senkronize
+// 2. Tema Kontrolü
 function initCustomToolbarTheme() {
     const savedTheme = localStorage.getItem('pdfTheme');
     const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
-    let themeToSet = 'light';
-    if (savedTheme === 'dark') themeToSet = 'dark';
-    else if (savedTheme === 'device') themeToSet = systemPrefersDark ? 'dark' : 'light';
-    else if (savedTheme === 'light') themeToSet = 'light';
-    else themeToSet = systemPrefersDark ? 'dark' : 'light';
-    
+    let themeToSet = (savedTheme === 'dark' || (savedTheme === 'device' && systemPrefersDark)) ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', themeToSet);
-    return themeToSet;
 }
 
-function setupThemeListener() {
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-        const savedTheme = localStorage.getItem('pdfTheme');
-        if (savedTheme === 'device' || !savedTheme) {
-            document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
-        }
-    });
-}
-
-// 3. Başlık Güncelleme
+// 3. Başlık ve PDF.js Yükleme
 function updateToolbarTitle() {
     const pdfInfo = getPdfDataFromStorage();
-    if (pdfInfo && pdfInfo.name) {
+    if (pdfInfo) {
         document.getElementById('customTitle').textContent = pdfInfo.name;
-        document.title = pdfInfo.name + ' - PDF Reader';
-    } else {
-        setTimeout(() => {
-            const pdfTitle = document.querySelector('#fileNameField')?.textContent || 
-                            document.querySelector('#titleField')?.textContent || 'PDF Dosyası';
-            if (pdfTitle !== '-') document.getElementById('customTitle').textContent = pdfTitle;
-        }, 1000);
     }
 }
 
-function goBackToIndex() {
-    window.location.href = '../index.html'; // web/viewer.html'den bir üst klasöre
+function loadPdfIntoViewer() {
+    const pdfInfo = getPdfDataFromStorage();
+    if (pdfInfo && window.PDFViewerApplication) {
+        // PDF.js motoruna veriyi enjekte et
+        PDFViewerApplication.open({
+            url: pdfInfo.data,
+            originalUrl: pdfInfo.name
+        });
+        updateToolbarTitle();
+    } else {
+        setTimeout(loadPdfIntoViewer, 200);
+    }
 }
 
-// 4. Paylaş ve Kaydet (Storage Destekli)
+// 4. Navigasyon ve Fonksiyonlar
+function goBackToIndex() {
+    window.location.href = 'index.html';
+}
+
 async function sharePDF() {
     const pdfInfo = getPdfDataFromStorage();
-    if (!pdfInfo || !pdfInfo.data) return;
-    
+    if (!pdfInfo) return;
     try {
         const response = await fetch(pdfInfo.data);
         const blob = await response.blob();
-        const file = new File([blob], pdfInfo.name || 'document.pdf', { type: 'application/pdf' });
-        
-        if (navigator.share && navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], title: pdfInfo.name });
-        } else {
-            alert('Tarayıcı paylaşımı desteklemiyor. Kaydet butonunu deneyin.');
-        }
-    } catch (error) {
-        console.error('Share error:', error);
-    }
+        const file = new File([blob], pdfInfo.name, { type: 'application/pdf' });
+        if (navigator.share) await navigator.share({ files: [file], title: pdfInfo.name });
+    } catch (e) { alert("Paylaşım başarısız."); }
 }
 
 function savePDF() {
     const pdfInfo = getPdfDataFromStorage();
-    if (pdfInfo && pdfInfo.data) {
-        const tempLink = document.createElement('a');
-        tempLink.href = pdfInfo.data;
-        tempLink.download = pdfInfo.name || 'document.pdf';
-        tempLink.click();
+    if (pdfInfo) {
+        const a = document.createElement('a');
+        a.href = pdfInfo.data;
+        a.download = pdfInfo.name;
+        a.click();
     }
 }
 
-// 5. Yazdırma İşlemleri
-function printWithWebShare() { showPrintDialog(); }
-function showPrintDialog() { document.getElementById('printDialogOverlay').style.display = 'flex'; }
+// 5. Yazdırma
+function printWithWebShare() { document.getElementById('printDialogOverlay').style.display = 'flex'; }
 function hidePrintDialog() { document.getElementById('printDialogOverlay').style.display = 'none'; }
 
 async function triggerWebSharePrint() {
     hidePrintDialog();
     const pdfInfo = getPdfDataFromStorage();
-    if (!pdfInfo) return;
-
     try {
-        const response = await fetch(pdfInfo.data);
-        const blob = await response.blob();
-        const file = new File([blob], pdfInfo.name, { type: 'application/pdf' });
-
-        if (navigator.share && navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], title: pdfInfo.name });
-        } else {
-            startClassicPrint();
-        }
-    } catch (e) {
-        startClassicPrint();
-    }
+        const res = await fetch(pdfInfo.data);
+        const file = new File([await res.blob()], pdfInfo.name, { type: 'application/pdf' });
+        if (navigator.share) await navigator.share({ files: [file] });
+        else startClassicPrint();
+    } catch (e) { startClassicPrint(); }
 }
 
 function startClassicPrint() {
@@ -1558,38 +1528,18 @@ function startClassicPrint() {
     else window.print();
 }
 
-// 6. PDF.js'i Manuel Tetikleme (Kritik)
-function loadPdfIntoViewer() {
-    const pdfInfo = getPdfDataFromStorage();
-    if (pdfInfo && window.PDFViewerApplication) {
-        PDFViewerApplication.open({
-            url: pdfInfo.data,
-            originalUrl: pdfInfo.name
-        });
-    } else {
-        // Uygulama henüz hazır değilse tekrar dene
-        setTimeout(loadPdfIntoViewer, 300);
-    }
-}
-
-// Sayfa yüklendiğinde başlat
+// Başlatıcı
 document.addEventListener('DOMContentLoaded', function() {
     initCustomToolbarTheme();
-    setupThemeListener();
-    updateToolbarTitle();
-    loadPdfIntoViewer(); // PDF'i depodan yükle
-
+    loadPdfIntoViewer();
     document.getElementById('customPrintBtn')?.addEventListener('click', printWithWebShare);
 });
 
-// Klavye ve Geri Tuşu
-window.onkeydown = function(event) {
-    if (event.key === 'Escape') {
-        if (document.getElementById('printDialogOverlay').style.display === 'flex') hidePrintDialog();
-        else goBackToIndex();
-    }
+window.onkeydown = function(e) {
+    if (e.key === 'Escape') goBackToIndex();
 };
 </script>
+
 
 
       
@@ -1599,3 +1549,4 @@ window.onkeydown = function(event) {
 
   </body>
 </html>
+
