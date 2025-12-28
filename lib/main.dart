@@ -48,37 +48,89 @@ class _WebViewPageState extends State<WebViewPage> {
     return base64Decode(base64String);
   }
 
-  // İzinleri kontrol eden ve gerekirse isteyen fonksiyon
-  Future<bool> _checkAndRequestPermission() async {
-    // Android 11 ve üzeri için 'Tüm Dosyalara Erişim' kontrolü
-    if (await Permission.manageExternalStorage.isGranted) return true;
-    
-    // Klasik depolama izni kontrolü
-    if (await Permission.storage.isGranted) return true;
-
-    // Eğer izin yoksa, önce depolama iste, olmazsa manage iste
-    var status = await Permission.storage.request();
-    if (status.isGranted) return true;
-
-    // Android 11+ için özel izin isteme
-    if (await Permission.manageExternalStorage.request().isGranted) return true;
-
-    return false;
+  // GÖRSELDEKİ İZİN TASARIMINI GÖSTEREN FONKSİYON
+  void _showPermissionDialog(String base64Data, String originalName) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Kırmızı ikon alanı
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.folder_open_rounded, size: 48, color: Colors.redAccent),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              "Dosya Erişimi Gerekli",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF1A1A1A)),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              "Cihazınızdaki dosyaları görmek, düzenlemek ve güncellemek için lütfen gerekli izni verin.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 14, height: 1.5),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.grey.shade200),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("Şimdi Değil", style: TextStyle(color: Colors.grey)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      openAppSettings(); // Ayarlara gönderir
+                      Navigator.pop(context);
+                    },
+                    child: const Text("Ayarlara Gidin"),
+                  ),
+                ),
+              ],
+            )
+          ],
+        ),
+      ),
+    );
   }
 
   // Dosyayı diske yazan ana fonksiyon
   Future<void> _savePdfToFile(String base64Data, String originalName) async {
-    bool hasPermission = await _checkAndRequestPermission();
-    if (!hasPermission) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Dosya kaydetmek için izin verilmedi.")),
-        );
-      }
+    // 1. İzinleri Kontrol Et
+    var status = await Permission.manageExternalStorage.status;
+    if (!status.isGranted) status = await Permission.storage.status;
+
+    // Eğer izin yoksa görsel diyaloğu göster ve dur
+    if (!status.isGranted) {
+      _showPermissionDialog(base64Data, originalName);
       return;
     }
 
-    // 1. İsimlendirme Mantığı: "dosya.pdf" -> "dosya_update.pdf"
+    // 2. İsimlendirme Mantığı
     String baseFileName;
     String extension;
     if (originalName.contains('.')) {
@@ -90,13 +142,13 @@ class _WebViewPageState extends State<WebViewPage> {
       extension = ".pdf";
     }
 
-    // 2. Klasör Hazırlığı
+    // 3. Klasör Hazırlığı
     final directory = Directory('/storage/emulated/0/Download/PDF Reader');
     if (!await directory.exists()) {
       await directory.create(recursive: true);
     }
 
-    // 3. Aynı Dosya Varsa Numara Ekleme (1), (2)...
+    // 4. Dosya Çakışma Kontrolü
     int counter = 0;
     String finalFileName = "$baseFileName$extension";
     File file = File('${directory.path}/$finalFileName');
@@ -107,7 +159,7 @@ class _WebViewPageState extends State<WebViewPage> {
       file = File('${directory.path}/$finalFileName');
     }
 
-    // 4. Yazma İşlemi
+    // 5. Yazma İşlemi (Sessiz Kayıt)
     try {
       final bytes = _decodeBase64(base64Data);
       await file.writeAsBytes(bytes);
@@ -117,12 +169,13 @@ class _WebViewPageState extends State<WebViewPage> {
           SnackBar(
             content: Text("Kaydedildi: $finalFileName"),
             backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
-      print("Kaydetme Hatası: $e");
+      debugPrint("Kaydetme Hatası: $e");
     }
   }
 
@@ -170,7 +223,7 @@ class _WebViewPageState extends State<WebViewPage> {
                   await file.writeAsBytes(bytes);
                   await Share.shareXFiles([XFile(file.path)], text: fileName);
                 } catch (e) {
-                  print("Paylaşma Hatası: $e");
+                  debugPrint("Paylaşma Hatası: $e");
                 }
               },
             );
@@ -184,7 +237,7 @@ class _WebViewPageState extends State<WebViewPage> {
                   final bytes = _decodeBase64(base64Data);
                   await Printing.layoutPdf(onLayout: (format) async => bytes, name: fileName);
                 } catch (e) {
-                  print("Yazdırma Hatası: $e");
+                  debugPrint("Yazdırma Hatası: $e");
                 }
               },
             );
@@ -194,25 +247,8 @@ class _WebViewPageState extends State<WebViewPage> {
               callback: (args) async {
                 final String base64Data = args[0];
                 final String originalName = args[1];
-
-                // İlk tıklamada sadece bir kez onay sorar, izinleri otomatik halleder
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text("Dosyayı Kaydet"),
-                    content: const Text("Düzenlenen PDF 'Download/PDF Reader' klasörüne kaydedilecek. Onaylıyor musunuz?"),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(context), child: const Text("İptal")),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _savePdfToFile(base64Data, originalName);
-                        },
-                        child: const Text("Kaydet"),
-                      ),
-                    ],
-                  ),
-                );
+                // Doğrudan akıllı kayıt fonksiyonunu çağırır
+                _savePdfToFile(base64Data, originalName);
               },
             );
           },
