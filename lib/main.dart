@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // BU SATIRI EKLEYİN
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'viewer_page.dart';
@@ -16,10 +17,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'MindArt',
-      // CRITICAL: Tüm sayfalarda SystemChrome'u sıfırla
+      // CRITICAL: SystemChrome'u sıfırla
       builder: (context, child) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          // Tüm overlay'leri göster (status bar + navigation bar)
           SystemChrome.setEnabledSystemUIMode(
             SystemUiMode.edgeToEdge,
             overlays: SystemUiOverlay.values,
