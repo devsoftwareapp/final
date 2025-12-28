@@ -55,11 +55,12 @@ class _WebViewPageState extends State<WebViewPage> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Kırmızı ikon alanı
+            // Kırmızı ikon alanı (Görseldeki gibi)
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -103,9 +104,12 @@ class _WebViewPageState extends State<WebViewPage> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    onPressed: () {
-                      openAppSettings(); // Ayarlara gönderir
+                    onPressed: () async {
                       Navigator.pop(context);
+                      // Görseldeki "Tüm dosyalara erişim" sayfasına yönlendirir
+                      if (await Permission.manageExternalStorage.request().isPermanentlyDenied) {
+                        openAppSettings();
+                      }
                     },
                     child: const Text("Ayarlara Gidin"),
                   ),
@@ -120,9 +124,16 @@ class _WebViewPageState extends State<WebViewPage> {
 
   // Dosyayı diske yazan ana fonksiyon
   Future<void> _savePdfToFile(String base64Data, String originalName) async {
-    // 1. İzinleri Kontrol Et
-    var status = await Permission.manageExternalStorage.status;
-    if (!status.isGranted) status = await Permission.storage.status;
+    // 1. İzinleri Kontrol Et (Android 11+ için manageExternalStorage kritik)
+    PermissionStatus status;
+    if (Platform.isAndroid) {
+      status = await Permission.manageExternalStorage.status;
+      if (!status.isGranted) {
+        status = await Permission.storage.status;
+      }
+    } else {
+      status = await Permission.storage.status;
+    }
 
     // Eğer izin yoksa görsel diyaloğu göster ve dur
     if (!status.isGranted) {
@@ -247,7 +258,6 @@ class _WebViewPageState extends State<WebViewPage> {
               callback: (args) async {
                 final String base64Data = args[0];
                 final String originalName = args[1];
-                // Doğrudan akıllı kayıt fonksiyonunu çağırır
                 _savePdfToFile(base64Data, originalName);
               },
             );
