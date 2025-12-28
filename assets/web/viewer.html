@@ -1121,7 +1121,7 @@
         
 <!-- ozel toolbar --> 
 <!-- ozel toolbar -->
-<!-- ozel toolbar -->
+
 
 
 <style>
@@ -1286,21 +1286,15 @@
     </button>
     <div id="customTitle">PDF Yükleniyor...</div>
     <div id="customActions">
-        
         <button class="custom-action-btn" id="customSaveBtn" onclick="downloadPDF()" title="Kaydet">
             <span class="material-symbols-rounded">download</span>
         </button>
         <button class="custom-action-btn" id="customPrintBtn" onclick="printWithWebShare()" title="Yazdır">
             <span class="material-symbols-rounded">print</span>
         </button>
-        
-        
         <button class="custom-action-btn" id="customShareBtn" onclick="sharePDF()" title="Paylaş">
             <span class="material-symbols-rounded">share</span>
         </button>
-        
-        
-        
     </div>
 </div>
 
@@ -1316,17 +1310,10 @@
     </div>
 </div>
 
-
-<!-- scriptsadece -->
-
-
-
 <script>
 /**
  * 1. VERİ YÖNETİMİ VE DÜZENLEME YAKALAMA
  */
-
-// Depodan ham veriyi al (İlk yükleme için kullanılır)
 function getPdfDataFromStorage() {
     try {
         const data = sessionStorage.getItem('currentPdfData');
@@ -1338,29 +1325,18 @@ function getPdfDataFromStorage() {
     return null;
 }
 
-// KRİTİK: PDF üzerindeki tüm düzenlemeleri (çizim, metin, imza vb.) paketleyip güncel Base64 döndürür
 async function getUpdatedPdfData() {
     try {
         if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) {
-            // PDF.js dahili saveDocument fonksiyonu ile tüm katmanları (annotations) birleştirir
             const data = await window.PDFViewerApplication.pdfDocument.saveDocument();
-            
-            // Uint8Array'i Base64'e dönüştür (Büyük dosyalarda performanslı ve güvenli yöntem)
             let binary = '';
             const bytes = new Uint8Array(data);
             const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
+            for (let i = 0; i < len; i++) { binary += String.fromCharCode(bytes[i]); }
             const base64 = "data:application/pdf;base64," + btoa(binary);
-            const name = sessionStorage.getItem('currentPdfName') || "belge.pdf";
-            
-            return { data: base64, name: name };
+            return { data: base64, name: sessionStorage.getItem('currentPdfName') || "belge.pdf" };
         }
-    } catch (e) {
-        console.error("Güncel PDF verisi paketlenirken hata oluştu:", e);
-    }
-    // Hata durumunda orijinal veriyi döndür (çökmemesi için)
+    } catch (e) { console.error("Güncel PDF verisi paketlenirken hata oluştu:", e); }
     return getPdfDataFromStorage();
 }
 
@@ -1406,48 +1382,51 @@ function loadPdfIntoViewer() {
             updateToolbarTitle();
             applyTextFix();
         });
-    } else { 
-        setTimeout(loadPdfIntoViewer, 200); 
-    }
+    } else { setTimeout(loadPdfIntoViewer, 200); }
 }
 
 /**
- * 4. NATIVE FONKSİYONLAR (FLUTTER KÖPRÜSÜ)
+ * 4. NATIVE & BROWSER FONKSİYONLAR
  */
+function goBackToIndex() { window.location.href = 'index.html'; }
 
-// GERİ BUTONU
-function goBackToIndex() { 
-    window.location.href = 'index.html'; 
-}
-
-// PAYLAŞ BUTONU (Düzenlemeler Dahil)
 async function sharePDF() {
-    const pdfInfo = await getUpdatedPdfData(); // Değişiklikleri bekle
+    const pdfInfo = await getUpdatedPdfData();
     if (!pdfInfo) return;
 
+    // Flutter Handler varsa kullan
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-        // Flutter tarafına güncel veriyi gönder
         window.flutter_inappwebview.callHandler('sharePdf', pdfInfo.data, pdfInfo.name);
-    } else {
-        // Tarayıcı Modu Paylaşım
+    } 
+    // Yoksa Tarayıcı Paylaşımını dene
+    else if (navigator.share) {
         try {
             const res = await fetch(pdfInfo.data);
-            const file = new File([await res.blob()], pdfInfo.name, { type: 'application/pdf' });
-            if (navigator.share) await navigator.share({ files: [file], title: pdfInfo.name });
-        } catch (e) { console.error("Tarayıcı paylaşım hatası:", e); }
+            const blob = await res.blob();
+            const file = new File([blob], pdfInfo.name, { type: 'application/pdf' });
+            await navigator.share({
+                files: [file],
+                title: pdfInfo.name
+            });
+        } catch (e) {
+            console.error("Paylaşım hatası:", e);
+            alert("Paylaşım bu tarayıcıda desteklenmiyor.");
+        }
+    } else {
+        alert("Paylaşım özelliği bu cihazda aktif değil.");
     }
 }
 
-// İNDİR / KAYDET BUTONU (Düzenlemeler Dahil)
 async function downloadPDF() {
-    const pdfInfo = await getUpdatedPdfData(); // Değişiklikleri bekle
+    const pdfInfo = await getUpdatedPdfData();
     if (!pdfInfo) return;
 
+    // Flutter Handler varsa kullan
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-        // Flutter'a gönder (Flutter tarafı _update ve (1) mantığını burada işler)
         window.flutter_inappwebview.callHandler('downloadPdf', pdfInfo.data, pdfInfo.name);
-    } else {
-        // Tarayıcı İndirme Fallback
+    } 
+    // Yoksa Tarayıcı İndirmesini tetikle
+    else {
         const link = document.createElement('a');
         link.href = pdfInfo.data;
         link.download = pdfInfo.name;
@@ -1457,21 +1436,17 @@ async function downloadPDF() {
     }
 }
 
-// YAZDIR BUTONU (Düzenlemeler Dahil)
 async function printWithWebShare() { 
-    const pdfInfo = await getUpdatedPdfData(); // Değişiklikleri bekle
+    const pdfInfo = await getUpdatedPdfData();
     if (!pdfInfo) return;
 
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-        // Flutter Native Yazdırma
         window.flutter_inappwebview.callHandler('printPdf', pdfInfo.data, pdfInfo.name);
     } else {
-        // Tarayıcıda Print Dialog Göster
         document.getElementById('printDialogOverlay').style.display = 'flex'; 
     }
 }
 
-// Tarayıcı Yazdırma Diyaloğu Fonksiyonları
 function hidePrintDialog() { document.getElementById('printDialogOverlay').style.display = 'none'; }
 
 async function triggerWebSharePrint() {
@@ -1480,9 +1455,14 @@ async function triggerWebSharePrint() {
     try {
         const res = await fetch(pdfInfo.data);
         const file = new File([await res.blob()], pdfInfo.name, { type: 'application/pdf' });
-        if (navigator.share) await navigator.share({ files: [file] });
-        else startClassicPrint();
-    } catch (e) { startClassicPrint(); }
+        if (navigator.share) {
+            await navigator.share({ files: [file] });
+        } else {
+            startClassicPrint();
+        }
+    } catch (e) { 
+        startClassicPrint(); 
+    }
 }
 
 function startClassicPrint() {
@@ -1490,24 +1470,14 @@ function startClassicPrint() {
     else window.print();
 }
 
-/**
- * 5. BAŞLATICI VE OLAYLAR
- */
 document.addEventListener('DOMContentLoaded', function() {
     initCustomToolbarTheme();
     loadPdfIntoViewer();
 });
 
-// ESC tuşu ile geri gitme
-window.onkeydown = function(e) { 
-    if (e.key === 'Escape') goBackToIndex(); 
-};
+window.onkeydown = function(e) { if (e.key === 'Escape') goBackToIndex(); };
 </script>
 
-
-
-
-<!-- ozel toolbar -->
 
 <!-- ozel toolbar -->
     
