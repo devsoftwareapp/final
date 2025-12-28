@@ -2948,7 +2948,6 @@
     window.showPermissionModal = showPermissionModal;
     window.closePermissionModal = closePermissionModal;
     window.openSettingsForPermission = openSettingsForPermission;
-
 function handleCardClick(element, name, cardId) {
     if (isSelectionMode) {
         toggleCardSelection(cardId);
@@ -2956,18 +2955,10 @@ function handleCardClick(element, name, cardId) {
     }
     
     if (!isLongPress) {
-        // 1. Önce recentFiles'ta ara
-        let fileData = recentFiles.find(f => f.id === cardId);
-        
-        // 2. Sonra importedFiles'ta ara
-        if (!fileData) {
-            fileData = importedFiles.find(f => f.id === cardId);
-        }
-        
-        // 3. Sonra devicePDFs'te ara
-        if (!fileData) {
-            fileData = devicePDFs.find(f => f.id === cardId);
-        }
+        // Dosyayı bul (Recent, Imported veya Device içinden)
+        let fileData = recentFiles.find(f => f.id === cardId) || 
+                       importedFiles.find(f => f.id === cardId) || 
+                       devicePDFs.find(f => f.id === cardId);
 
         if (fileData) {
             // Son açılma tarihini güncelle
@@ -2980,7 +2971,7 @@ function handleCardClick(element, name, cardId) {
                 lastOpened: new Date().toISOString()
             });
             
-            // URL parametreleriyle viewer.html'yi aç
+            // YENİ: SessionStorage kullanarak viewer'ı aç
             openPdfViewer(fileData, name);
         } else {
             console.log("Dosya bulunamadı!");
@@ -2988,7 +2979,7 @@ function handleCardClick(element, name, cardId) {
     }
 }
 
-// PDF viewer'ı açan yardımcı fonksiyon
+// PDF viewer'ı açan yardımcı fonksiyon (SessionStorage Destekli)
 function openPdfViewer(fileData, name) {
     if (!fileData) {
         console.error("Dosya verisi bulunamadı!");
@@ -2996,37 +2987,38 @@ function openPdfViewer(fileData, name) {
     }
     
     const pdfName = name || fileData.name || "belge.pdf";
+    let base64ToOpen = null;
 
-    // Base64 verisi varsa (importedFiles için)
+    // 1. Durum: Base64 verisi zaten bellekte (importedFiles)
     if (fileData.base64) {
-        // URL parametreleri ile viewer.html'yi aç
-        const viewerUrl = `viewer.html?data=${encodeURIComponent(fileData.base64)}&name=${encodeURIComponent(pdfName)}`;
-        window.location.href = viewerUrl;
+        base64ToOpen = fileData.base64;
     } 
-    // Full path varsa (devicePDFs için)
+    // 2. Durum: Full path var (devicePDFs - Android Bridge ile oku)
     else if (fileData.fullPath) {
-        // Android'den dosya içeriğini al
         if (typeof Android !== 'undefined' && Android.getFileAsBase64) {
-            const base64Data = Android.getFileAsBase64(fileData.fullPath);
-            if (base64Data && base64Data.startsWith('data:')) {
-                const viewerUrl = `viewer.html?data=${encodeURIComponent(base64Data)}&name=${encodeURIComponent(pdfName)}`;
-                window.location.href = viewerUrl;
-            } else {
-                console.log("Dosya okunamadı!");
-            }
+            base64ToOpen = Android.getFileAsBase64(fileData.fullPath);
         } else {
-            // Simülasyon
-            const simulatedBase64 = `data:application/pdf;base64,simulated_data_for_${fileData.id}`;
-            const viewerUrl = `viewer.html?data=${encodeURIComponent(simulatedBase64)}&name=${encodeURIComponent(pdfName)}`;
-            window.location.href = viewerUrl;
+            // Test için simülasyon
+            base64ToOpen = `data:application/pdf;base64,simulated_data_for_${fileData.id}`;
         }
     }
-    else {
-        console.log("Dosya verisi bulunamadı!");
+
+    if (base64ToOpen) {
+        try {
+            // KRİTİK: URL parametresi yerine SessionStorage'a yazıyoruz
+            sessionStorage.setItem('currentPdfData', base64ToOpen);
+            sessionStorage.setItem('currentPdfName', pdfName);
+
+            // Viewer'ı temiz bir URL ile aç (URL limiti takılmaz)
+            window.location.href = 'web/viewer.html';
+        } catch (e) {
+            console.error("Depolama hatası (Muhtemelen kota dolu):", e);
+            alert("PDF çok büyük, açılamadı.");
+        }
+    } else {
+        console.log("PDF verisi oluşturulamadı!");
     }
 }
-
-
 
 
 
