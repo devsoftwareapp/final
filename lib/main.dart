@@ -4,13 +4,12 @@ import 'dart:typed_data'; // Byte verileri için
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-// Aşağıdaki paketlerin pubspec.yaml'da olduğundan emin olun:
+// Paketlerin pubspec.yaml'da olduğundan emin olun
 import 'package:path_provider/path_provider.dart'; 
 import 'package:share_plus/share_plus.dart'; 
 import 'package:printing/printing.dart'; 
 
 void main() {
-  // WebView ve diğer pluginlerin düzgün çalışması için gerekli
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
@@ -53,38 +52,28 @@ class _WebViewPageState extends State<WebViewPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // SafeArea: Çentik ve alt bar çakışmalarını önler
       body: SafeArea(
         child: InAppWebView(
-          // Yerel index.html yolun
           initialUrlRequest: URLRequest(
             url: WebUri("file:///android_asset/flutter_assets/assets/web/index.html"),
           ),
           initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,          // JS çalıştırabilme
-            allowFileAccess: true,             // Yerel dosyalara erişim
-            allowFileAccessFromFileURLs: true, // Dosya içinden dosya çağırma
-            allowUniversalAccessFromFileURLs: true, // Cross-origin izinleri (PDF.js için kritik)
-            useHybridComposition: true,        // Android performansı için
-            domStorageEnabled: true,           // sessionStorage kullanımı için gerekli
+            javaScriptEnabled: true,
+            allowFileAccess: true,
+            allowFileAccessFromFileURLs: true,
+            allowUniversalAccessFromFileURLs: true,
+            useHybridComposition: true,
+            domStorageEnabled: true,
           ),
           onWebViewCreated: (controller) {
             webViewController = controller;
 
-            // ---------------------------------------------------------
-            // 1. PDF GÖRÜNTÜLEYİCİ AÇMA HANDLER'I (Mevcut Olan)
-            // ---------------------------------------------------------
+            // 1. PDF GÖRÜNTÜLEYİCİ AÇMA
             controller.addJavaScriptHandler(
               handlerName: 'openPdfViewer',
               callback: (args) {
-                // args[0] -> base64 string
-                // args[1] -> pdf dosya adı
                 final String base64Data = args[0];
                 final String pdfName = args[1];
-
-                print("PDF Açılıyor: $pdfName");
-
-                // JavaScript tarafında veriyi set edip viewer.html'e yönlendiriyoruz
                 controller.evaluateJavascript(source: """
                   sessionStorage.setItem('currentPdfData', '$base64Data');
                   sessionStorage.setItem('currentPdfName', '$pdfName');
@@ -93,24 +82,17 @@ class _WebViewPageState extends State<WebViewPage> {
               },
             );
 
-            // ---------------------------------------------------------
-            // 2. PAYLAŞMA HANDLER'I (YENİ)
-            // ---------------------------------------------------------
+            // 2. PAYLAŞMA
             controller.addJavaScriptHandler(
               handlerName: 'sharePdf',
               callback: (args) async {
                 try {
                   final String base64Data = args[0];
                   final String fileName = args[1];
-                  
                   final bytes = _decodeBase64(base64Data);
-                  
-                  // Dosyayı geçici dizine yaz
                   final tempDir = await getTemporaryDirectory();
                   final file = File('${tempDir.path}/$fileName');
                   await file.writeAsBytes(bytes);
-
-                  // Native paylaşım penceresini aç
                   await Share.shareXFiles([XFile(file.path)], text: fileName);
                 } catch (e) {
                   print("Paylaşma Hatası: $e");
@@ -118,68 +100,90 @@ class _WebViewPageState extends State<WebViewPage> {
               },
             );
 
-            // ---------------------------------------------------------
-            // 3. YAZDIRMA HANDLER'I (YENİ)
-            // ---------------------------------------------------------
+            // 3. YAZDIRMA
             controller.addJavaScriptHandler(
               handlerName: 'printPdf',
               callback: (args) async {
                 try {
                   final String base64Data = args[0];
                   final String fileName = args[1];
-                  
                   final bytes = _decodeBase64(base64Data);
-
-                  // Printing paketi ile yazdır
-                  await Printing.layoutPdf(
-                    onLayout: (format) async => bytes,
-                    name: fileName,
-                  );
+                  await Printing.layoutPdf(onLayout: (format) async => bytes, name: fileName);
                 } catch (e) {
                   print("Yazdırma Hatası: $e");
                 }
               },
             );
 
-            // ---------------------------------------------------------
-            // 4. İNDİRME / KAYDETME HANDLER'I (YENİ)
-            // ---------------------------------------------------------
+            // 4. KRİTİK GÜNCELLEME: ÖZEL KAYDETME (Diyalog + Klasör + İsim Güncelleme)
             controller.addJavaScriptHandler(
               handlerName: 'downloadPdf',
               callback: (args) async {
-                try {
-                  final String base64Data = args[0];
-                  final String fileName = args[1];
-                  
-                  final bytes = _decodeBase64(base64Data);
+                final String base64Data = args[0];
+                final String originalName = args[1];
 
-                  // Uygulama belgeler dizinine kaydet (Güvenli Alan)
-                  final appDocDir = await getApplicationDocumentsDirectory();
-                  final file = File('${appDocDir.path}/$fileName');
-                  await file.writeAsBytes(bytes);
-
-                  // Kullanıcıya bilgi ver
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text("Dosya kaydedildi: ${file.path}"),
-                        duration: const Duration(seconds: 3),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  print("Kaydetme Hatası: $e");
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Dosya kaydedilemedi!")),
-                    );
-                  }
+                // İsim güncelleme: "dosya.pdf" -> "dosya+update.pdf"
+                String newFileName;
+                if (originalName.contains('.')) {
+                  int lastDot = originalName.lastIndexOf('.');
+                  newFileName = "${originalName.substring(0, lastDot)}+update${originalName.substring(lastDot)}";
+                } else {
+                  newFileName = "${originalName}+update";
                 }
+
+                // Kullanıcıya Onay Diyaloğu Göster
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text("Dosyayı Kaydet"),
+                    content: Text("Dosya 'Download/PDF Reader' klasörüne kaydedilsin mi?\n\nYeni isim: $newFileName"),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text("İptal"),
+                      ),
+                      ElevatedButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          try {
+                            // Klasör yolunu ayarla (Android)
+                            final directory = Directory('/storage/emulated/0/Download/PDF Reader');
+                            
+                            // Klasör yoksa oluştur
+                            if (!await directory.exists()) {
+                              await directory.create(recursive: true);
+                            }
+
+                            final bytes = _decodeBase64(base64Data);
+                            final file = File('${directory.path}/$newFileName');
+                            await file.writeAsBytes(bytes);
+
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text("Kaydedildi: Download/PDF Reader/$newFileName"),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            print("Kaydetme Hatası: $e");
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Kaydetme başarısız! İzinleri kontrol edin.")),
+                              );
+                            }
+                          }
+                        },
+                        child: const Text("Kaydet"),
+                      ),
+                    ],
+                  ),
+                );
               },
             );
           },
           onConsoleMessage: (controller, consoleMessage) {
-            // Tarayıcıdaki (index.html/viewer.html) hataları Flutter konsolunda görmek için
             print("WebView Console: ${consoleMessage.message}");
           },
           onLoadError: (controller, url, code, message) {
