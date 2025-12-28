@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <!--
 Copyright 2012 Mozilla Foundation
 
@@ -1138,22 +1138,603 @@ See https://github.com/adobe-type-tools/cmap-resources
     
     
     
+<!-- ozel toolbar -->
+<!-- ozel toolbar -->
+<!-- ozel toolbar -->
+<!-- ozel toolbar -->
+<!-- ozel toolbar -->
+<style>
+/* ===== CUSTOM TOP TOOLBAR ===== */
+#customToolbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    z-index: 10000;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    border-bottom: 1px solid var(--border-color);
+    padding-top: env(safe-area-inset-top);
+    padding-left: calc(16px + env(safe-area-inset-left));
+    padding-right: calc(16px + env(safe-area-inset-right));
     
-    <script>
-window.addEventListener("message", (e) => {
-  const url = e.data;
-  if (!url || typeof url !== "string") return;
+    /* Tema değişkenleri */
+    background: var(--toolbar-bg);
+    color: var(--text-color);
+}
 
-  const wait = setInterval(() => {
-    if (!window.PDFViewerApplication) return;
-    if (!PDFViewerApplication.initialized) return;
+/* Light tema */
+[data-theme="light"] #customToolbar {
+    --toolbar-bg: #f5f5f5;
+    --text-color: #333;
+    --border-color: #ddd;
+    --icon-color: #333;
+    --button-hover-bg: rgba(0, 0, 0, 0.1);
+}
 
-    clearInterval(wait);
-    PDFViewerApplication.open({ url });
-  }, 30);
+/* Dark tema */
+[data-theme="dark"] #customToolbar {
+    --toolbar-bg: #2d2d2d;
+    --text-color: #fff;
+    --border-color: #404040;
+    --icon-color: #fff;
+    --button-hover-bg: rgba(255, 255, 255, 0.1);
+}
+
+#customBackButton {
+    background: none;
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 16px;
+    flex-shrink: 0;
+    transition: background-color 0.2s;
+    color: var(--icon-color);
+}
+
+#customBackButton:hover,
+#customBackButton:active {
+    background-color: var(--button-hover-bg);
+}
+
+#customTitle {
+    flex: 1;
+    font-size: 16px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 8px;
+    text-align: center;
+    color: var(--text-color);
+}
+
+#customActions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.custom-action-btn {
+    background: none;
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+    color: var(--icon-color);
+}
+
+.custom-action-btn:hover,
+.custom-action-btn:active {
+    background-color: var(--button-hover-bg);
+}
+
+#customBackButton .material-symbols-rounded {
+    font-size: 24px;
+}
+
+.custom-action-btn .material-symbols-rounded {
+    font-size: 22px;
+}
+
+#outerContainer {
+    margin-top: 56px;
+    height: calc(100vh - 56px);
+}
+
+@font-face {
+    font-family: 'Material Symbols Rounded Local';
+    src: local('Material Symbols Rounded'),
+         url('fonts/MaterialSymbolsRounded.woff2') format('woff2');
+    font-weight: 100 700;
+    font-style: normal;
+    font-display: block;
+}
+
+.material-symbols-rounded {
+    font-family: 'Material Symbols Rounded Local', 'Material Symbols Rounded', system-ui, sans-serif;
+    font-weight: 400;
+    font-style: normal;
+    font-size: 24px;
+    display: inline-block;
+    line-height: 1;
+    letter-spacing: normal;
+    word-wrap: normal;
+    white-space: nowrap;
+    direction: ltr;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 48;
+}
+
+#viewerContainer {
+    height: calc(100vh - 56px) !important;
+}
+
+/* Print Dialog Stili */
+#printDialogOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20000;
+    padding: 20px;
+}
+
+#printDialog {
+    background: var(--dialog-bg, white);
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 320px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    animation: dialogFadeIn 0.3s ease;
+    color: var(--dialog-text, #333);
+}
+
+/* Dialog tema */
+[data-theme="light"] #printDialog {
+    --dialog-bg: white;
+    --dialog-text: #333;
+    --dialog-secondary-text: #666;
+    --dialog-btn-bg: #4285f4;
+    --dialog-btn-hover: #3367d6;
+    --dialog-btn-cancel-bg: #f0f0f0;
+    --dialog-btn-cancel-text: #666;
+}
+
+[data-theme="dark"] #printDialog {
+    --dialog-bg: #333;
+    --dialog-text: #fff;
+    --dialog-secondary-text: #ccc;
+    --dialog-btn-bg: #4285f4;
+    --dialog-btn-hover: #3367d6;
+    --dialog-btn-cancel-bg: #444;
+    --dialog-btn-cancel-text: #ccc;
+}
+
+@keyframes dialogFadeIn {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+#printDialog h3 {
+    margin: 0 0 16px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--dialog-text);
+}
+
+.print-message {
+    margin: 0 0 20px 0;
+    font-size: 15px;
+    line-height: 1.4;
+    color: var(--dialog-secondary-text);
+}
+
+.print-icon-large {
+    font-family: 'Material Symbols Rounded Local', 'Material Symbols Rounded', system-ui, sans-serif;
+    font-size: 48px;
+    color: #4285f4;
+    margin-bottom: 16px;
+    display: block;
+}
+
+.dialog-buttons {
+    display: flex;
+    gap: 12px;
+}
+
+.dialog-btn {
+    flex: 1;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#confirmPrintBtn {
+    background: var(--dialog-btn-bg);
+    color: white;
+}
+
+#confirmPrintBtn:hover {
+    background: var(--dialog-btn-hover);
+}
+
+#cancelPrintBtn {
+    background: var(--dialog-btn-cancel-bg);
+    color: var(--dialog-btn-cancel-text);
+}
+
+#cancelPrintBtn:hover {
+    filter: brightness(1.1);
+}
+</style>
+
+<div id="customToolbar">
+    <button id="customBackButton" onclick="goBackToIndex()">
+        <span class="material-symbols-rounded">arrow_back</span>
+    </button>
+    <div id="customTitle">PDF Yükleniyor...</div>
+    <div id="customActions">
+        <button class="custom-action-btn" id="customShareBtn" onclick="sharePDF()" title="Paylaş">
+            <span class="material-symbols-rounded">share</span>
+        </button>
+        <button class="custom-action-btn" id="customSaveBtn" onclick="savePDF()" title="Kaydet">
+            <span class="material-symbols-rounded">download</span>
+        </button>
+        <button class="custom-action-btn" id="customPrintBtn" onclick="printWithWebShare()" title="Yazdır">
+            <span class="material-symbols-rounded">print</span>
+        </button>
+    </div>
+</div>
+
+<!-- Print Dialog -->
+<div id="printDialogOverlay" style="display: none;">
+    <div id="printDialog">
+        <span class="print-icon-large">print</span>
+        <h3>Yazdır</h3>
+        
+        <p class="print-message">
+            Açılacak pencerede<br>
+            <span style="color: #4285f4; font-weight: 600;">
+                <span class="material-symbols-rounded" style="font-size: 20px; vertical-align: middle;">print</span>
+                yazıcı simgesini
+            </span><br>
+            seçiniz
+        </p>
+        
+        <div class="dialog-buttons">
+            <button id="cancelPrintBtn" class="dialog-btn" onclick="hidePrintDialog()">İptal</button>
+            <button id="confirmPrintBtn" class="dialog-btn" onclick="triggerWebSharePrint()">Tamam</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Tema kontrolü - index.html ile senkronize
+function initCustomToolbarTheme() {
+    // Önce localStorage'dan tema ayarını oku
+    const savedTheme = localStorage.getItem('pdfTheme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    let themeToSet = 'light';
+    
+    if (savedTheme === 'dark') {
+        themeToSet = 'dark';
+    } else if (savedTheme === 'device') {
+        themeToSet = systemPrefersDark ? 'dark' : 'light';
+    } else if (savedTheme === 'light') {
+        themeToSet = 'light';
+    } else {
+        // Hiç tema ayarı yoksa, cihaz temasını kullan
+        themeToSet = systemPrefersDark ? 'dark' : 'light';
+    }
+    
+    // HTML elementine tema attribute'u ekle
+    document.documentElement.setAttribute('data-theme', themeToSet);
+    
+    console.log('Toolbar tema ayarlandı:', themeToSet);
+    return themeToSet;
+}
+
+// Cihaz teması değiştiğinde güncelle
+function setupThemeListener() {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    mediaQuery.addEventListener('change', (e) => {
+        const savedTheme = localStorage.getItem('pdfTheme');
+        if (savedTheme === 'device' || !savedTheme) {
+            const themeToSet = e.matches ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', themeToSet);
+            console.log('Cihaz teması değişti, toolbar güncellendi:', themeToSet);
+        }
+    });
+}
+
+// Yerel font kontrolü
+function checkLocalFont() {
+    const testFont = new FontFace('Material Symbols Test', 'url(fonts/MaterialSymbolsRounded.woff2) format("woff2")');
+    testFont.load().then(() => {
+        document.fonts.add(testFont);
+    }).catch(() => {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200';
+        document.head.appendChild(link);
+    });
+}
+
+function updateToolbarTitle() {
+    const pdfInfo = getPdfDataFromUrl();
+    if (pdfInfo && pdfInfo.name) {
+        document.getElementById('customTitle').textContent = pdfInfo.name;
+        document.title = pdfInfo.name + ' - PDF Reader';
+    } else {
+        setTimeout(() => {
+            const pdfTitle = document.querySelector('#fileNameField')?.textContent || 
+                            document.querySelector('#titleField')?.textContent ||
+                            'PDF Dosyası';
+            if (pdfTitle !== '-') {
+                document.getElementById('customTitle').textContent = pdfTitle;
+            }
+        }, 1000);
+    }
+}
+
+function goBackToIndex() {
+    window.location.href = 'index.html';
+}
+
+// Paylaş fonksiyonu
+async function sharePDF() {
+    const pdfInfo = getPdfDataFromUrl();
+    if (!pdfInfo || !pdfInfo.data) return;
+    
+    try {
+        const response = await fetch(pdfInfo.data);
+        const blob = await response.blob();
+        const file = new File([blob], pdfInfo.name || 'document.pdf', { type: 'application/pdf' });
+        
+        if (navigator.share && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+                files: [file],
+                title: pdfInfo.name || 'PDF Document'
+            });
+        } else {
+            alert('Tarayıcınız paylaşımı desteklemiyor. Kaydet butonunu kullanın.');
+        }
+    } catch (error) {
+        console.error('Share error:', error);
+        alert('Paylaşım sırasında hata oluştu.');
+    }
+}
+
+// Kaydet fonksiyonu
+function savePDF() {
+    try {
+        const downloadButton = document.getElementById('downloadButton');
+        if (downloadButton) {
+            downloadButton.click();
+        } else {
+            const pdfInfo = getPdfDataFromUrl();
+            if (pdfInfo && pdfInfo.data) {
+                const tempLink = document.createElement('a');
+                tempLink.href = pdfInfo.data;
+                tempLink.download = pdfInfo.name || 'document.pdf';
+                document.body.appendChild(tempLink);
+                tempLink.click();
+                document.body.removeChild(tempLink);
+            } else {
+                alert('PDF verisi bulunamadı.');
+            }
+        }
+    } catch (error) {
+        console.error('Save error:', error);
+        alert('Kaydetme sırasında hata oluştu.');
+    }
+}
+
+// Print Dialog Fonksiyonları
+function printWithWebShare() {
+    showPrintDialog();
+}
+
+function showPrintDialog() {
+    document.getElementById('printDialogOverlay').style.display = 'flex';
+}
+
+function hidePrintDialog() {
+    document.getElementById('printDialogOverlay').style.display = 'none';
+}
+
+// Web Share API ile Yazdırma
+async function triggerWebSharePrint() {
+    hidePrintDialog();
+    
+    const pdfInfo = getPdfDataFromUrl();
+    if (!pdfInfo || !pdfInfo.data) {
+        alert('PDF verisi bulunamadı.');
+        return;
+    }
+    
+    try {
+        // PDF'i blob'a çevir
+        const response = await fetch(pdfInfo.data);
+        const blob = await response.blob();
+        const file = new File([blob], pdfInfo.name || 'document.pdf', { 
+            type: 'application/pdf',
+            lastModified: new Date().getTime()
+        });
+        
+        // Web Share API kontrolü
+        if (!navigator.share) {
+            throw new Error('Web Share API desteklenmiyor');
+        }
+        
+        if (!navigator.canShare({ files: [file] })) {
+            throw new Error('Bu dosya paylaşım için uygun değil');
+        }
+        
+        // Web Share API'yi tetikle
+        await navigator.share({
+            files: [file],
+            title: pdfInfo.name || 'PDF Document',
+            text: 'Bu PDF dosyasını yazdırmak istiyorum'
+        });
+        
+    } catch (error) {
+        console.error('Web Share Print error:', error);
+        
+        // Kullanıcı iptal etti
+        if (error.name === 'AbortError') {
+            console.log('Kullanıcı iptal etti');
+            return;
+        }
+        
+        // Web Share desteklenmiyorsa klasik yazdırmaya geç
+        if (error.message.includes('desteklenmiyor')) {
+            // Sessizce klasik yazdırmaya geç
+            startClassicPrint();
+        } else {
+            alert('Yazdırma sırasında hata oluştu.');
+        }
+    }
+}
+
+// Klasik yazdırma (fallback)
+function startClassicPrint() {
+    try {
+        // PDF.js'in print fonksiyonunu kullan
+        if (window.PDFViewerApplication && typeof PDFViewerApplication.print === 'function') {
+            setTimeout(() => PDFViewerApplication.print(), 100);
+            return;
+        }
+        
+        // Print butonunu tetikle
+        const printButton = document.getElementById('printButton');
+        if (printButton) {
+            setTimeout(() => printButton.click(), 100);
+            return;
+        }
+        
+        // Direkt window.print
+        setTimeout(() => window.print(), 100);
+        
+    } catch (error) {
+        console.error('Classic print error:', error);
+        alert('Yazdırma sırasında hata oluştu.');
+    }
+}
+
+// Enter tuşu ile yazdırma
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && document.getElementById('printDialogOverlay').style.display === 'flex') {
+        triggerWebSharePrint();
+    }
+    if (e.key === 'Escape') {
+        if (document.getElementById('printDialogOverlay').style.display === 'flex') {
+            hidePrintDialog();
+        } else {
+            goBackToIndex();
+        }
+    }
+});
+
+// Android geri tuşu desteği
+window.onkeydown = function(event) {
+    if (event.key === 'Escape' || event.keyCode === 27) {
+        goBackToIndex();
+    }
+};
+
+// Sayfa yüklendiğinde
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. Temayı başlat
+    initCustomToolbarTheme();
+    setupThemeListener();
+    
+    // 2. Fontları kontrol et
+    checkLocalFont();
+    
+    // 3. Başlığı güncelle
+    updateToolbarTitle();
+    
+    // 4. Geri tuşu için Android bridge desteği
+    if (typeof Android !== 'undefined') {
+        window.androidBackPressed = function() {
+            goBackToIndex();
+            return true;
+        };
+    }
+    
+    // 5. Başlığı tekrar güncelle
+    setTimeout(updateToolbarTitle, 2000);
+    
+    // 6. Yazdır butonuna event listener ekle
+    document.getElementById('customPrintBtn')?.addEventListener('click', printWithWebShare);
+});
+
+function getPdfDataFromUrl() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const data = urlParams.get('data');
+    const name = urlParams.get('name');
+    
+    if (data && data.startsWith('data:application/pdf')) {
+        return { data: data, name: name || "belge.pdf" };
+    }
+    return null;
+}
+
+// Dokunmatik geri tuşu için
+let touchStartX = 0;
+document.addEventListener('touchstart', function(e) {
+    touchStartX = e.touches[0].clientX;
+});
+
+document.addEventListener('touchend', function(e) {
+    const touchEndX = e.changedTouches[0].clientX;
+    const diffX = touchEndX - touchStartX;
+    
+    if (diffX < -50 && Math.abs(diffX) > 50) {
+        goBackToIndex();
+    }
+});
+
+// Sayfa görünürlüğü değiştiğinde temayı kontrol et (arka plandan dönünce)
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+        setTimeout(initCustomToolbarTheme, 100);
+    }
 });
 </script>
-    
-    
+
+<!-- ozel toolbar -->
+<!-- ozel toolbar -->
+<!-- ozel toolbar -->
+
+
   </body>
 </html>
