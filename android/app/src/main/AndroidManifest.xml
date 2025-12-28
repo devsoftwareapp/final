@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 🌐 WebView / InAppWebView için ZORUNLU -->
     <uses-permission android:name="android.permission.INTERNET" />
+    
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
     <application
         android:name="${applicationName}"
@@ -10,14 +13,13 @@
         android:icon="@mipmap/ic_launcher"
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true"
         android:theme="@style/LaunchTheme">
 
-        <!-- WebView metrikleri (opsiyonel ama güvenli) -->
         <meta-data
             android:name="android.webkit.WebView.MetricsOptOut"
             android:value="true" />
 
-        <!-- 🚀 Ana Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -33,7 +35,6 @@
 
         </activity>
 
-        <!-- InAppWebView internal activities -->
         <activity
             android:name="com.pichillilorenzo.flutter_inappwebview.InAppBrowserActivity"
             android:exported="false"
@@ -50,7 +51,6 @@
             android:hardwareAccelerated="true"
             android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
 
-        <!-- Flutter embedding -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
