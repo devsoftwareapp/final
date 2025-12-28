@@ -2,31 +2,55 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class ViewerPage extends StatefulWidget {
-  const ViewerPage({super.key});
+  final String pdfData;
+  final String pdfName;
+
+  const ViewerPage({
+    super.key,
+    required this.pdfData,
+    required this.pdfName,
+  });
 
   @override
   State<ViewerPage> createState() => _ViewerPageState();
 }
 
 class _ViewerPageState extends State<ViewerPage> {
-  late final Map<String, dynamic> _args;
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
+  double _progress = 0;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+  void initState() {
+    super.initState();
+    // URL encode yap (özel karakterler için)
+    _encodePdfData();
+  }
+
+  // PDF verisini güvenli hale getir
+  String _encodePdfData() {
+    return widget.pdfData
+        .replaceAll(r'\', r'\\')
+        .replaceAll("'", r"\'")
+        .replaceAll('\n', ' ')
+        .replaceAll('\r', ' ');
   }
 
   @override
   Widget build(BuildContext context) {
-    final pdfData = _args['pdfData'] as String;
-    final pdfName = _args['pdfName'] as String;
+    final encodedPdfData = _encodePdfData();
+    final encodedPdfName = widget.pdfName
+        .replaceAll("'", r"\'")
+        .replaceAll('\n', ' ')
+        .replaceAll('\r', ' ');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(pdfName),
+        title: Text(
+          widget.pdfName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -52,34 +76,122 @@ class _ViewerPageState extends State<ViewerPage> {
             onWebViewCreated: (controller) {
               _webViewController = controller;
             },
+            onLoadStart: (controller, url) {
+              setState(() {
+                _isLoading = true;
+                _progress = 0;
+              });
+            },
+            onProgressChanged: (controller, progress) {
+              setState(() {
+                _progress = progress / 100;
+              });
+            },
             onLoadStop: (controller, url) async {
               // viewer.html yüklendikten sonra PDF verisini gönder
-              await Future.delayed(const Duration(milliseconds: 500));
+              await Future.delayed(const Duration(milliseconds: 300));
               
               // PDF verisini sessionStorage'a yazdıran JavaScript kodu
-              final jsCode = """
+              final jsCode = '''
                 try {
-                  sessionStorage.setItem('currentPdfData', '$pdfData');
-                  sessionStorage.setItem('currentPdfName', '$pdfName');
-                  console.log('PDF data set in sessionStorage');
+                  // Önce mevcut datayı temizle
+                  sessionStorage.removeItem('currentPdfData');
+                  sessionStorage.removeItem('currentPdfName');
                   
-                  // PDF'yi yükle
-                  if (window.loadPdfIntoViewer) {
-                    window.loadPdfIntoViewer();
+                  // Yeni datayı ekle (güvenli string)
+                  sessionStorage.setItem('currentPdfData', '$encodedPdfData');
+                  sessionStorage.setItem('currentPdfName', '$encodedPdfName');
+                  
+                  console.log('PDF data set in sessionStorage for: $encodedPdfName');
+                  
+                  // PDF'yi yüklemeyi dene
+                  if (typeof loadPdfIntoViewer === 'function') {
+                    console.log('Calling loadPdfIntoViewer()');
+                    loadPdfIntoViewer();
+                  } else {
+                    console.warn('loadPdfIntoViewer function not found, waiting...');
+                    // 1 saniye bekle ve tekrar dene
+                    setTimeout(function() {
+                      if (typeof loadPdfIntoViewer === 'function') {
+                        loadPdfIntoViewer();
+                      } else {
+                        console.error('loadPdfIntoViewer still not found');
+                        // Alternatif: direkt PDFViewerApplication kullan
+                        if (typeof PDFViewerApplication !== 'undefined' && PDFViewerApplication.open) {
+                          PDFViewerApplication.open({ 
+                            url: sessionStorage.getItem('currentPdfData'),
+                            originalUrl: sessionStorage.getItem('currentPdfName')
+                          });
+                        }
+                      }
+                    }, 1000);
                   }
                 } catch(e) {
                   console.error('Error setting PDF data:', e);
+                  // Hata durumunda fallback
+                  try {
+                    if (typeof PDFViewerApplication !== 'undefined' && PDFViewerApplication.open) {
+                      PDFViewerApplication.open({ 
+                        url: '$encodedPdfData',
+                        originalUrl: '$encodedPdfName'
+                      });
+                    }
+                  } catch(e2) {
+                    console.error('Fallback also failed:', e2);
+                  }
                 }
-              """;
+              ''';
               
-              await controller.evaluateJavascript(source: jsCode);
-              setState(() => _isLoading = false);
+              try {
+                await controller.evaluateJavascript(source: jsCode);
+              } catch (e) {
+                print('JavaScript evaluation error: $e');
+              }
+              
+              // Yükleme tamamlandı
+              await Future.delayed(const Duration(milliseconds: 500));
+              setState(() {
+                _isLoading = false;
+              });
+            },
+            onLoadError: (controller, url, code, message) {
+              print('WebView load error: $message');
+              setState(() {
+                _isLoading = false;
+              });
             },
           ),
           
           if (_isLoading)
-            const Center(
-              child: CircularProgressIndicator(),
+            Container(
+              color: Colors.black.withOpacity(0.7),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      value: _progress,
+                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.red),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'PDF yükleniyor...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                    if (_progress > 0)
+                      Text(
+                        '%${(_progress * 100).toInt()}',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
         ],
       ),
