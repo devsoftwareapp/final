@@ -1346,10 +1346,7 @@ async function getUpdatedPdfData() {
 function initCustomToolbarTheme() {
     const savedTheme = localStorage.getItem('pdfTheme');
     const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    let themeToSet =
-        (savedTheme === 'dark' || (savedTheme === 'device' && systemPrefersDark))
-            ? 'dark'
-            : 'light';
+    let themeToSet = (savedTheme === 'dark' || (savedTheme === 'device' && systemPrefersDark)) ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', themeToSet);
 }
 
@@ -1362,18 +1359,10 @@ function applyTextFix() {
     const style = document.createElement('style');
     style.innerHTML = `
         .toolbarLabel, #numPages, #pageNumber, .secondaryToolbarButton span, #sidebarContent span {
-            color: var(--text-color, #333) !important;
-            visibility: visible !important;
-            display: inline-block !important;
-            opacity: 1 !important;
-            font-size: 12px !important;
+            color: var(--text-color, #333) !important; visibility: visible !important;
+            display: inline-block !important; opacity: 1 !important; font-size: 12px !important;
         }
-        #toolbarContainer {
-            top: 0 !important;
-            box-shadow: none !important;
-            border-top: none !important;
-            position: absolute !important;
-        }
+        #toolbarContainer { top: 0 !important; box-shadow: none !important; border-top: none !important; position: absolute !important; }
         #viewerContainer { top: 32px !important; }
         #sidebarContainer { top: 0 !important; }
     `;
@@ -1381,70 +1370,50 @@ function applyTextFix() {
 }
 
 /**
- * 3. PDF YÜKLEME SÜRECİ (🔥 RESETLİ – KESİN ÇÖZÜM)
+ * 3. PDF YÜKLEME SÜRECİ
  */
-async function loadPdfIntoViewer() {
+function loadPdfIntoViewer() {
+    if (typeof PDFViewerApplicationOptions !== 'undefined') {
+        PDFViewerApplicationOptions.set('disableLocalization', true);
+    }
     const pdfInfo = getPdfDataFromStorage();
-    if (!pdfInfo) {
-        setTimeout(loadPdfIntoViewer, 200);
-        return;
-    }
-
-    if (!window.PDFViewerApplication || !PDFViewerApplication.initialized) {
-        setTimeout(loadPdfIntoViewer, 200);
-        return;
-    }
-
-    try {
-        // 🔥 KRİTİK: Önce açık PDF'yi TAMAMEN kapat
-        if (PDFViewerApplication.pdfDocument) {
-            await PDFViewerApplication.close();
-            PDFViewerApplication.pdfDocument = null;
-        }
-
-        // 🔥 KRİTİK: Viewer DOM'unu resetle
-        const viewer = document.getElementById("viewer");
-        if (viewer) viewer.innerHTML = "";
-
-        const container = document.getElementById("viewerContainer");
-        if (container) container.scrollTop = 0;
-
-        // 🔥 PDF'yi yeniden aç
-        await PDFViewerApplication.open({
-            url: pdfInfo.data,
-            originalUrl: pdfInfo.name
+    if (pdfInfo && window.PDFViewerApplication) {
+        PDFViewerApplication.open({ url: pdfInfo.data, originalUrl: pdfInfo.name }).then(() => {
+            updateToolbarTitle();
+            applyTextFix();
         });
-
-        updateToolbarTitle();
-        applyTextFix();
-
-    } catch (e) {
-        console.error("PDF yeniden yüklenirken hata:", e);
-    }
+    } else { setTimeout(loadPdfIntoViewer, 200); }
 }
 
 /**
  * 4. NATIVE & BROWSER FONKSİYONLAR
  */
-function goBackToIndex() {
-    window.location.href = 'index.html';
-}
+function goBackToIndex() { window.location.href = 'index.html'; }
 
 async function sharePDF() {
     const pdfInfo = await getUpdatedPdfData();
     if (!pdfInfo) return;
 
+    // Flutter Handler varsa kullan
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         window.flutter_inappwebview.callHandler('sharePdf', pdfInfo.data, pdfInfo.name);
-    } else if (navigator.share) {
+    } 
+    // Yoksa Tarayıcı Paylaşımını dene
+    else if (navigator.share) {
         try {
             const res = await fetch(pdfInfo.data);
             const blob = await res.blob();
             const file = new File([blob], pdfInfo.name, { type: 'application/pdf' });
-            await navigator.share({ files: [file], title: pdfInfo.name });
+            await navigator.share({
+                files: [file],
+                title: pdfInfo.name
+            });
         } catch (e) {
-            alert("Paylaşım desteklenmiyor.");
+            console.error("Paylaşım hatası:", e);
+            alert("Paylaşım bu tarayıcıda desteklenmiyor.");
         }
+    } else {
+        alert("Paylaşım özelliği bu cihazda aktif değil.");
     }
 }
 
@@ -1452,9 +1421,12 @@ async function downloadPDF() {
     const pdfInfo = await getUpdatedPdfData();
     if (!pdfInfo) return;
 
+    // Flutter Handler varsa kullan
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         window.flutter_inappwebview.callHandler('downloadPdf', pdfInfo.data, pdfInfo.name);
-    } else {
+    } 
+    // Yoksa Tarayıcı İndirmesini tetikle
+    else {
         const link = document.createElement('a');
         link.href = pdfInfo.data;
         link.download = pdfInfo.name;
@@ -1464,20 +1436,18 @@ async function downloadPDF() {
     }
 }
 
-async function printWithWebShare() {
+async function printWithWebShare() { 
     const pdfInfo = await getUpdatedPdfData();
     if (!pdfInfo) return;
 
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         window.flutter_inappwebview.callHandler('printPdf', pdfInfo.data, pdfInfo.name);
     } else {
-        document.getElementById('printDialogOverlay').style.display = 'flex';
+        document.getElementById('printDialogOverlay').style.display = 'flex'; 
     }
 }
 
-function hidePrintDialog() {
-    document.getElementById('printDialogOverlay').style.display = 'none';
-}
+function hidePrintDialog() { document.getElementById('printDialogOverlay').style.display = 'none'; }
 
 async function triggerWebSharePrint() {
     hidePrintDialog();
@@ -1485,73 +1455,27 @@ async function triggerWebSharePrint() {
     try {
         const res = await fetch(pdfInfo.data);
         const file = new File([await res.blob()], pdfInfo.name, { type: 'application/pdf' });
-        if (navigator.share) await navigator.share({ files: [file] });
-        else startClassicPrint();
-    } catch (e) {
-        startClassicPrint();
+        if (navigator.share) {
+            await navigator.share({ files: [file] });
+        } else {
+            startClassicPrint();
+        }
+    } catch (e) { 
+        startClassicPrint(); 
     }
 }
 
 function startClassicPrint() {
-    if (window.PDFViewerApplication) PDFViewerApplication.print();
+    if (window.PDFViewerApplication) window.PDFViewerApplication.print();
     else window.print();
 }
 
-/**
- * 5. BAŞLATMA
- */
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', function() {
     initCustomToolbarTheme();
     loadPdfIntoViewer();
 });
 
-window.onkeydown = function (e) {
-    if (e.key === 'Escape') goBackToIndex();
-};
-
-
-
-
-
-/* =========================================================
-   GERİ TUŞU + TOOLBAR GERİ OKU = VIEWER TAM ÖLDÜR
-   (MEVCUT KODA DOKUNMADAN)
-   ========================================================= */
-
-// Viewer açıldığında history state ekle
-(function () {
-    try {
-        history.replaceState({ viewer: true }, "", location.href);
-        history.pushState({ viewer: true }, "", location.href);
-    } catch (e) {}
-})();
-
-// Cihaz geri tuşu yakalama
-window.addEventListener("popstate", function () {
-    try {
-        // PDF.js’i kesin kapat
-        if (window.PDFViewerApplication) {
-            PDFViewerApplication.close();
-            PDFViewerApplication.pdfDocument = null;
-        }
-
-        // Session temizle
-        sessionStorage.clear();
-    } catch (e) {}
-
-    // index.html’e dön
-    window.location.href = "index.html";
-});
-
-// Android bazı cihazlarda back keydown olarak gelir
-document.addEventListener("keydown", function (e) {
-    if (e.key === "Backspace" || e.key === "Escape") {
-        e.preventDefault();
-        goBackToIndex();
-    }
-});
-
-
+window.onkeydown = function(e) { if (e.key === 'Escape') goBackToIndex(); };
 </script>
 
 <!-- ozel toolbar -->
