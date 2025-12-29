@@ -1,5 +1,3 @@
-// android/app/build.gradle.kts
-
 import java.util.Properties
 import java.io.FileInputStream
 
@@ -21,12 +19,12 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
 
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = "1.8"
     }
 
     defaultConfig {
@@ -37,28 +35,18 @@ android {
         versionName = flutter.versionName
     }
 
-    lint {
-        checkReleaseBuilds = false
-        abortOnError = false
-    }
-
     signingConfigs {
         create("release") {
-            val sFile = keystoreProperties["storeFile"] as? String
-            if (sFile != null) {
-                storeFile = file(sFile)
-                storePassword = keystoreProperties["storePassword"] as String
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-            }
+            storeFile = file(keystoreProperties["storeFile"] as String)
+            storePassword = keystoreProperties["storePassword"] as String
+            keyAlias = keystoreProperties["keyAlias"] as String
+            keyPassword = keystoreProperties["keyPassword"] as String
         }
     }
 
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = false
-            isShrinkResources = false
         }
     }
 }
