@@ -1,5 +1,3 @@
-// android/build.gradle.kts
-
 allprojects {
     repositories {
         google()
@@ -8,15 +6,22 @@ allprojects {
     }
 }
 
-rootProject.layout.buildDirectory = rootProject.layout.buildDirectory.dir("../../build").get()
+val newBuildDir: Directory =
+    rootProject.layout.buildDirectory
+        .dir("../../build")
+        .get()
+rootProject.layout.buildDirectory.value(newBuildDir)
 
 subprojects {
-    project.layout.buildDirectory = rootProject.layout.buildDirectory.dir(project.name).get()
+    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 
+// HATALI KISIM BURASIYDI - DÜZELTİLDİ:
 subprojects {
+    // Sadece 'app' dışındaki alt projelerin 'app'e bakmasını sağlar, döngüyü kırar.
     if (project.name != "app") {
-        project.evaluationDependsOn(":app")
+        evaluationDependsOn(":app")
     }
 }
 
