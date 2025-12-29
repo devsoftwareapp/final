@@ -55,12 +55,11 @@ class _WebViewPageState extends State<WebViewPage> {
                 final String base64Data = args[0];
                 final String pdfName = args[1];
 
-                // KESİN ÇÖZÜM: UniqueKey() ekleyerek her seferinde sıfır sayfa açıyoruz
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => ViewerPage(
-                      key: UniqueKey(), 
+                      key: UniqueKey(), // Her girişte yeni state
                       pdfBase64: base64Data,
                       pdfName: pdfName,
                     ),
