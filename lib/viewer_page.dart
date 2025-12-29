@@ -136,8 +136,8 @@ class _ViewerPageState extends State<ViewerPage> {
             allowFileAccess: true,
             allowUniversalAccessFromFileURLs: true,
             domStorageEnabled: true,
-            cacheEnabled: false, // Önbellek çakışmasını engellemek için
-            clearCache: true,    // Her girişte temizle
+            cacheEnabled: false, 
+            clearCache: true,    
           ),
           onWebViewCreated: (controller) {
             webViewController = controller;
@@ -158,26 +158,26 @@ class _ViewerPageState extends State<ViewerPage> {
               _savePdfToFile(args[0], args[1]);
             });
           },
-          onLoadStop: (controller, url) async {
-            // KESİN ÇÖZÜM: Veriyi yazdıktan sonra JS fonksiyonunu zorla tetikliyoruz
+          onLoadStart: (controller, url) async {
+            // SAYFA BAŞLARKEN: Veriyi temizleyip yenisini basıyoruz
             final String safeBase64 = widget.pdfBase64;
             final String safeName = widget.pdfName.replaceAll("'", "\\'");
-
             await controller.evaluateJavascript(source: """
-              (function() {
-                sessionStorage.setItem('currentPdfData', '$safeBase64');
-                sessionStorage.setItem('currentPdfName', '$safeName');
-                
-                // HTML tarafındaki yükleme fonksiyonunu tetikle
-                if (typeof loadPdfIntoViewer === 'function') {
-                  loadPdfIntoViewer();
-                } else {
-                  // Yükleme hızı için 300ms bekleyip tekrar dene
-                  setTimeout(function() {
-                    if (typeof loadPdfIntoViewer === 'function') loadPdfIntoViewer();
-                  }, 300);
-                }
-              })();
+              sessionStorage.clear();
+              sessionStorage.setItem('currentPdfData', '$safeBase64');
+              sessionStorage.setItem('currentPdfName', '$safeName');
+            """);
+          },
+          onLoadStop: (controller, url) async {
+            // SAYFA BİTİNCE: Sadece tetikliyoruz
+            await controller.evaluateJavascript(source: """
+              if (typeof loadPdfIntoViewer === 'function') {
+                loadPdfIntoViewer();
+              } else {
+                setTimeout(function() {
+                  if (typeof loadPdfIntoViewer === 'function') loadPdfIntoViewer();
+                }, 500);
+              }
             """);
           },
         ),
