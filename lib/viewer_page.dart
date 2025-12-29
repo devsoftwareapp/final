@@ -48,7 +48,7 @@ class _ViewerPageState extends State<ViewerPage> {
             const Text("Dosya Erişimi Gerekli", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
             const SizedBox(height: 12),
             const Text(
-              "Cihazınızdaki dosyaları görmek, düzenlemek ve güncellemek için lütfen gerekli izni verin.",
+              "Cihazınızdaki dosyaları görmek ve kaydetmek için lütfen izin verin.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey, fontSize: 14),
             ),
@@ -67,11 +67,9 @@ class _ViewerPageState extends State<ViewerPage> {
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
                     onPressed: () async {
                       Navigator.pop(context);
-                      if (await Permission.manageExternalStorage.request().isPermanentlyDenied) {
-                        openAppSettings();
-                      }
+                      await Permission.manageExternalStorage.request();
                     },
-                    child: const Text("Ayarlara Gidin"),
+                    child: const Text("Ayarlar"),
                   ),
                 ),
               ],
@@ -83,44 +81,24 @@ class _ViewerPageState extends State<ViewerPage> {
   }
 
   Future<void> _savePdfToFile(String base64Data, String originalName) async {
-    PermissionStatus status;
-    if (Platform.isAndroid) {
-      status = await Permission.manageExternalStorage.status;
-      if (!status.isGranted) status = await Permission.storage.status;
-    } else {
-      status = await Permission.storage.status;
-    }
+    PermissionStatus status = await Permission.manageExternalStorage.status;
+    if (!status.isGranted) status = await Permission.storage.status;
 
     if (!status.isGranted) {
       _showPermissionDialog(base64Data, originalName);
       return;
     }
 
-    String baseFileName = originalName.contains('.') 
-        ? "${originalName.substring(0, originalName.lastIndexOf('.'))}_update" 
-        : "${originalName}_update";
-    
     final directory = Directory('/storage/emulated/0/Download/PDF Reader');
     if (!await directory.exists()) await directory.create(recursive: true);
 
-    int counter = 0;
-    String finalFileName = "$baseFileName.pdf";
-    File file = File('${directory.path}/$finalFileName');
-
-    while (await file.exists()) {
-      counter++;
-      finalFileName = "$baseFileName($counter).pdf";
-      file = File('${directory.path}/$finalFileName');
-    }
-
+    File file = File('${directory.path}/$originalName');
     try {
       await file.writeAsBytes(_decodeBase64(base64Data));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Kaydedildi: $finalFileName"), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating),
-        );
-      }
-    } catch (e) { debugPrint("Hata: $e"); }
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PDF Kaydedildi"), backgroundColor: Colors.green));
+    } catch (e) {
+      debugPrint("Hata: $e");
+    }
   }
 
   @override
@@ -136,30 +114,26 @@ class _ViewerPageState extends State<ViewerPage> {
             allowFileAccess: true,
             allowUniversalAccessFromFileURLs: true,
             domStorageEnabled: true,
-            cacheEnabled: false, 
-            clearCache: true,    
+            clearCache: true, // Önbelleği temizle
           ),
           onWebViewCreated: (controller) {
             webViewController = controller;
-
             controller.addJavaScriptHandler(handlerName: 'sharePdf', callback: (args) async {
               final bytes = _decodeBase64(args[0]);
               final tempDir = await getTemporaryDirectory();
               final file = File('${tempDir.path}/${args[1]}');
               await file.writeAsBytes(bytes);
-              await Share.shareXFiles([XFile(file.path)], text: args[1]);
+              await Share.shareXFiles([XFile(file.path)]);
             });
-
             controller.addJavaScriptHandler(handlerName: 'printPdf', callback: (args) async {
               await Printing.layoutPdf(onLayout: (format) async => _decodeBase64(args[0]), name: args[1]);
             });
-
             controller.addJavaScriptHandler(handlerName: 'downloadPdf', callback: (args) {
               _savePdfToFile(args[0], args[1]);
             });
           },
           onLoadStart: (controller, url) async {
-            // SAYFA BAŞLARKEN: Veriyi temizleyip yenisini basıyoruz
+            // Veriyi sayfa yüklenirken enjekte ediyoruz
             final String safeBase64 = widget.pdfBase64;
             final String safeName = widget.pdfName.replaceAll("'", "\\'");
             await controller.evaluateJavascript(source: """
@@ -169,14 +143,12 @@ class _ViewerPageState extends State<ViewerPage> {
             """);
           },
           onLoadStop: (controller, url) async {
-            // SAYFA BİTİNCE: Sadece tetikliyoruz
+            // Sayfa bittiğinde yükleme fonksiyonunu tetikliyoruz
             await controller.evaluateJavascript(source: """
               if (typeof loadPdfIntoViewer === 'function') {
                 loadPdfIntoViewer();
               } else {
-                setTimeout(function() {
-                  if (typeof loadPdfIntoViewer === 'function') loadPdfIntoViewer();
-                }, 500);
+                setTimeout(function() { if (typeof loadPdfIntoViewer === 'function') loadPdfIntoViewer(); }, 500);
               }
             """);
           },
