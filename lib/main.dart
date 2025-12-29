@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'viewer_page.dart'; // Viewer sayfasını import ediyoruz
+import 'viewer_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,11 +55,12 @@ class _WebViewPageState extends State<WebViewPage> {
                 final String base64Data = args[0];
                 final String pdfName = args[1];
 
-                // NAVIGATION: Verileri alıp ViewerPage'e gidiyoruz
+                // KESİN ÇÖZÜM: UniqueKey() ekleyerek her seferinde sıfır sayfa açıyoruz
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => ViewerPage(
+                      key: UniqueKey(), 
                       pdfBase64: base64Data,
                       pdfName: pdfName,
                     ),
