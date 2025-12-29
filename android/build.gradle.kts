@@ -1,9 +1,8 @@
 allprojects {
     repositories {
-        google()
+        google() // Her zaman en üstte olmalı
         mavenCentral()
         maven { url = uri("https://plugins.gradle.org/m2/") }
-        maven { url = uri("https://repo.maven.apache.org/maven2/") }
     }
 }
 
@@ -19,7 +18,7 @@ subprojects {
 }
 
 subprojects {
-    // Döngüsel bağımlılığı kıran kritik kontrol
+    // Döngüsel bağımlılığı kıran kontrol
     if (project.name != "app") {
         evaluationDependsOn(":app")
     }
