@@ -2,12 +2,10 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        // Bazı durumlarda kütüphaneler gradle plugin sayfasından çekilemezse alternatif olarak ekliyoruz
         maven { url = uri("https://plugins.gradle.org/m2/") }
     }
 }
 
-// Build dizini ayarları
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory
         .dir("../../build")
@@ -19,12 +17,11 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 
+// HATALI KISIM BURASIYDI - DÜZELTİLDİ:
 subprojects {
-    // Proje değerlendirme bağımlılığını sadece gerekli olduğunda çalışacak şekilde güvenli hale getirelim
-    afterEvaluate {
-        if (project.hasProperty("android")) {
-            project.evaluationDependsOn(":app")
-        }
+    // Sadece 'app' dışındaki alt projelerin 'app'e bakmasını sağlar, döngüyü kırar.
+    if (project.name != "app") {
+        evaluationDependsOn(":app")
     }
 }
 
