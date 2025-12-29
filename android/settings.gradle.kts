@@ -19,7 +19,9 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    // Hata veren 8.11.1 yerine stabil 8.1.0 sürümü
     id("com.android.application") version "8.1.0" apply false
+    // Hata veren 2.2.20 yerine stabil 1.9.24 sürümü
     id("org.jetbrains.kotlin.android") version "1.9.24" apply false
 }
 
