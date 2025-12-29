@@ -1,3 +1,5 @@
+// android/app/build.gradle.kts
+
 import java.util.Properties
 import java.io.FileInputStream
 
@@ -19,12 +21,12 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
 
     defaultConfig {
@@ -35,7 +37,6 @@ android {
         versionName = flutter.versionName
     }
 
-    // LINT HATASINI AŞMAK İÇİN EKLENEN KISIM:
     lint {
         checkReleaseBuilds = false
         abortOnError = false
@@ -43,7 +44,6 @@ android {
 
     signingConfigs {
         create("release") {
-            // Null kontrolü ekleyerek güvenli hale getirildi
             val sFile = keystoreProperties["storeFile"] as? String
             if (sFile != null) {
                 storeFile = file(sFile)
@@ -57,7 +57,6 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
-            // Kod küçültme sırasında sorun çıkmaması için
             isMinifyEnabled = false
             isShrinkResources = false
         }
