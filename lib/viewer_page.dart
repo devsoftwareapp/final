@@ -136,11 +136,12 @@ class _ViewerPageState extends State<ViewerPage> {
             allowFileAccess: true,
             allowUniversalAccessFromFileURLs: true,
             domStorageEnabled: true,
+            cacheEnabled: false, // Önbellek çakışmasını engellemek için
+            clearCache: true,    // Her girişte temizle
           ),
           onWebViewCreated: (controller) {
             webViewController = controller;
 
-            // Share Handler
             controller.addJavaScriptHandler(handlerName: 'sharePdf', callback: (args) async {
               final bytes = _decodeBase64(args[0]);
               final tempDir = await getTemporaryDirectory();
@@ -149,22 +150,34 @@ class _ViewerPageState extends State<ViewerPage> {
               await Share.shareXFiles([XFile(file.path)], text: args[1]);
             });
 
-            // Print Handler
             controller.addJavaScriptHandler(handlerName: 'printPdf', callback: (args) async {
               await Printing.layoutPdf(onLayout: (format) async => _decodeBase64(args[0]), name: args[1]);
             });
 
-            // Download Handler
             controller.addJavaScriptHandler(handlerName: 'downloadPdf', callback: (args) {
               _savePdfToFile(args[0], args[1]);
             });
           },
           onLoadStop: (controller, url) async {
-            // Sayfa yüklendiğinde veriyi sessionStorage'a aktar
+            // KESİN ÇÖZÜM: Veriyi yazdıktan sonra JS fonksiyonunu zorla tetikliyoruz
+            final String safeBase64 = widget.pdfBase64;
+            final String safeName = widget.pdfName.replaceAll("'", "\\'");
+
             await controller.evaluateJavascript(source: """
-              sessionStorage.setItem('currentPdfData', '${widget.pdfBase64}');
-              sessionStorage.setItem('currentPdfName', '${widget.pdfName}');
-              // Viewer zaten DOMContentLoaded ile veriyi otomatik çekecek
+              (function() {
+                sessionStorage.setItem('currentPdfData', '$safeBase64');
+                sessionStorage.setItem('currentPdfName', '$safeName');
+                
+                // HTML tarafındaki yükleme fonksiyonunu tetikle
+                if (typeof loadPdfIntoViewer === 'function') {
+                  loadPdfIntoViewer();
+                } else {
+                  // Yükleme hızı için 300ms bekleyip tekrar dene
+                  setTimeout(function() {
+                    if (typeof loadPdfIntoViewer === 'function') loadPdfIntoViewer();
+                  }, 300);
+                }
+              })();
             """);
           },
         ),
