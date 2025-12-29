@@ -15,10 +15,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'PDF Reader',
-      theme: ThemeData(
-        useMaterial3: true,
-        primarySwatch: Colors.blue,
-      ),
+      theme: ThemeData(useMaterial3: true, primarySwatch: Colors.blue),
       home: const WebViewPage(),
     );
   }
@@ -40,13 +37,12 @@ class _WebViewPageState extends State<WebViewPage> {
       body: SafeArea(
         child: InAppWebView(
           initialUrlRequest: URLRequest(
-            url: WebUri(
-              "file:///android_asset/flutter_assets/assets/web/index.html",
-            ),
+            url: WebUri("file:///android_asset/flutter_assets/assets/web/index.html"),
           ),
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             allowFileAccess: true,
+            allowFileAccessFromFileURLs: true,
             allowUniversalAccessFromFileURLs: true,
             domStorageEnabled: true,
           ),
@@ -56,16 +52,14 @@ class _WebViewPageState extends State<WebViewPage> {
             controller.addJavaScriptHandler(
               handlerName: 'openPdfViewer',
               callback: (args) {
-                if (args.isEmpty) return;
-
                 final String base64Data = args[0];
-                final String pdfName =
-                    args.length > 1 ? args[1] : "dokuman.pdf";
+                final String pdfName = args[1];
 
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => ViewerPage(
+                    builder: (context) => ViewerPage(
+                      key: UniqueKey(), // Her girişte yeni state
                       pdfBase64: base64Data,
                       pdfName: pdfName,
                     ),

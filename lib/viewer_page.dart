@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:path_provider/path_provider.dart';
@@ -13,65 +12,115 @@ class ViewerPage extends StatefulWidget {
   final String pdfBase64;
   final String pdfName;
 
-  const ViewerPage({
-    super.key,
-    required this.pdfBase64,
-    required this.pdfName,
-  });
+  const ViewerPage({super.key, required this.pdfBase64, required this.pdfName});
 
   @override
   State<ViewerPage> createState() => _ViewerPageState();
 }
 
 class _ViewerPageState extends State<ViewerPage> {
-  InAppWebViewController? controller;
+  InAppWebViewController? webViewController;
 
-  Uint8List _decodeBase64(String data) {
-    if (data.contains(',')) {
-      data = data.split(',').last;
+  Uint8List _decodeBase64(String base64String) {
+    if (base64String.contains(',')) {
+      base64String = base64String.split(',').last;
     }
-    return base64Decode(data);
+    return base64Decode(base64String);
   }
 
-  Future<void> _resetAndLoadViewer() async {
-    // 1️⃣ WebView context’i tamamen sıfırla
-    await controller!.loadUrl(
-      urlRequest: URLRequest(url: WebUri("about:blank")),
-    );
-
-    await Future.delayed(const Duration(milliseconds: 80));
-
-    // 2️⃣ Viewer’ı tekrar yükle
-    await controller!.loadUrl(
-      urlRequest: URLRequest(
-        url: WebUri(
-          "file:///android_asset/flutter_assets/assets/web/viewer.html",
+  void _showPermissionDialog(String base64Data, String originalName) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
+              child: const Icon(Icons.folder_open_rounded, size: 48, color: Colors.redAccent),
+            ),
+            const SizedBox(height: 24),
+            const Text("Dosya Erişimi Gerekli", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+            const SizedBox(height: 12),
+            const Text(
+              "Cihazınızdaki dosyaları görmek, düzenlemek ve güncellemek için lütfen gerekli izni verin.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("Şimdi Değil", style: TextStyle(color: Colors.grey)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      if (await Permission.manageExternalStorage.request().isPermanentlyDenied) {
+                        openAppSettings();
+                      }
+                    },
+                    child: const Text("Ayarlara Gidin"),
+                  ),
+                ),
+              ],
+            )
+          ],
         ),
       ),
     );
   }
 
-  Future<void> _savePdf(String base64, String name) async {
-    PermissionStatus status = await Permission.manageExternalStorage.status;
+  Future<void> _savePdfToFile(String base64Data, String originalName) async {
+    PermissionStatus status;
+    if (Platform.isAndroid) {
+      status = await Permission.manageExternalStorage.status;
+      if (!status.isGranted) status = await Permission.storage.status;
+    } else {
+      status = await Permission.storage.status;
+    }
+
     if (!status.isGranted) {
-      status = await Permission.manageExternalStorage.request();
+      _showPermissionDialog(base64Data, originalName);
+      return;
     }
 
-    if (!status.isGranted) return;
+    String baseFileName = originalName.contains('.') 
+        ? "${originalName.substring(0, originalName.lastIndexOf('.'))}_update" 
+        : "${originalName}_update";
+    
+    final directory = Directory('/storage/emulated/0/Download/PDF Reader');
+    if (!await directory.exists()) await directory.create(recursive: true);
 
-    final dir = Directory('/storage/emulated/0/Download/PDF Reader');
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
+    int counter = 0;
+    String finalFileName = "$baseFileName.pdf";
+    File file = File('${directory.path}/$finalFileName');
+
+    while (await file.exists()) {
+      counter++;
+      finalFileName = "$baseFileName($counter).pdf";
+      file = File('${directory.path}/$finalFileName');
     }
 
-    final file = File('${dir.path}/$name');
-    await file.writeAsBytes(_decodeBase64(base64));
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("PDF Kaydedildi")),
-      );
-    }
+    try {
+      await file.writeAsBytes(_decodeBase64(base64Data));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Kaydedildi: $finalFileName"), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating),
+        );
+      }
+    } catch (e) { debugPrint("Hata: $e"); }
   }
 
   @override
@@ -79,63 +128,55 @@ class _ViewerPageState extends State<ViewerPage> {
     return Scaffold(
       body: SafeArea(
         child: InAppWebView(
-          key: ValueKey(
-            widget.pdfName +
-                DateTime.now().millisecondsSinceEpoch.toString(),
+          initialUrlRequest: URLRequest(
+            url: WebUri("file:///android_asset/flutter_assets/assets/web/viewer.html"),
           ),
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             allowFileAccess: true,
             allowUniversalAccessFromFileURLs: true,
             domStorageEnabled: true,
+            cacheEnabled: false, 
+            clearCache: true,    
           ),
-          onWebViewCreated: (c) async {
-            controller = c;
+          onWebViewCreated: (controller) {
+            webViewController = controller;
 
-            await _resetAndLoadViewer();
+            controller.addJavaScriptHandler(handlerName: 'sharePdf', callback: (args) async {
+              final bytes = _decodeBase64(args[0]);
+              final tempDir = await getTemporaryDirectory();
+              final file = File('${tempDir.path}/${args[1]}');
+              await file.writeAsBytes(bytes);
+              await Share.shareXFiles([XFile(file.path)], text: args[1]);
+            });
 
-            // Share
-            controller!.addJavaScriptHandler(
-              handlerName: 'sharePdf',
-              callback: (args) async {
-                final bytes = _decodeBase64(args[0]);
-                final tempDir = await getTemporaryDirectory();
-                final file = File('${tempDir.path}/${args[1]}');
-                await file.writeAsBytes(bytes);
-                await Share.shareXFiles([XFile(file.path)]);
-              },
-            );
+            controller.addJavaScriptHandler(handlerName: 'printPdf', callback: (args) async {
+              await Printing.layoutPdf(onLayout: (format) async => _decodeBase64(args[0]), name: args[1]);
+            });
 
-            // Print
-            controller!.addJavaScriptHandler(
-              handlerName: 'printPdf',
-              callback: (args) async {
-                await Printing.layoutPdf(
-                  name: args[1],
-                  onLayout: (_) async => _decodeBase64(args[0]),
-                );
-              },
-            );
-
-            // Download
-            controller!.addJavaScriptHandler(
-              handlerName: 'downloadPdf',
-              callback: (args) {
-                _savePdf(args[0], args[1]);
-              },
-            );
+            controller.addJavaScriptHandler(handlerName: 'downloadPdf', callback: (args) {
+              _savePdfToFile(args[0], args[1]);
+            });
           },
-          onLoadStop: (controller, url) async {
-            final safeName =
-                widget.pdfName.replaceAll("'", "\\'");
-
+          onLoadStart: (controller, url) async {
+            // SAYFA BAŞLARKEN: Veriyi temizleyip yenisini basıyoruz
+            final String safeBase64 = widget.pdfBase64;
+            final String safeName = widget.pdfName.replaceAll("'", "\\'");
             await controller.evaluateJavascript(source: """
               sessionStorage.clear();
-              sessionStorage.setItem('currentPdfData', '${widget.pdfBase64}');
+              sessionStorage.setItem('currentPdfData', '$safeBase64');
               sessionStorage.setItem('currentPdfName', '$safeName');
-
+            """);
+          },
+          onLoadStop: (controller, url) async {
+            // SAYFA BİTİNCE: Sadece tetikliyoruz
+            await controller.evaluateJavascript(source: """
               if (typeof loadPdfIntoViewer === 'function') {
                 loadPdfIntoViewer();
+              } else {
+                setTimeout(function() {
+                  if (typeof loadPdfIntoViewer === 'function') loadPdfIntoViewer();
+                }, 500);
               }
             """);
           },
