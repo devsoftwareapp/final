@@ -58,8 +58,9 @@ class _WebViewPageState extends State<WebViewPage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
+                    // UniqueKey() sayesinde her giriş sıfır bir başlangıçtır
                     builder: (context) => ViewerPage(
-                      key: UniqueKey(), // Her girişte yeni state
+                      key: UniqueKey(), 
                       pdfBase64: base64Data,
                       pdfName: pdfName,
                     ),
