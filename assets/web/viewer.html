@@ -1114,39 +1114,9 @@
     <div id="printContainer"></div>
     
     
-    
-    
-    
-    
-        
-<!-- ozel toolbar --> 
-<!-- ozel toolbar -->
-
-
-
-<style>
-/* ===== CUSTOM TOP TOOLBAR ===== */
-#customToolbar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 56px;
-    display: flex;
-    align-items: center;
-    padding: 0 16px;
-    z-index: 10000;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
-    border-bottom: 1px solid var(--border-color);
-    padding-top: env(safe-area-inset-top);
-    padding-left: calc(16px + env(safe-area-inset-left));
-    padding-right: calc(16px + env(safe-area-inset-right));
-    background: var(--toolbar-bg);
-    color: var(--text-color);
-}
-
-/* Light tema */
-[data-theme="light"] #customToolbar {
+    <style>
+/* ===== GLOBAL THEME VARIABLES (İki toolbar'ın kaynaşması için genele alındı) ===== */
+[data-theme="light"] {
     --toolbar-bg: #f5f5f5;
     --text-color: #333;
     --border-color: #ddd;
@@ -1154,13 +1124,34 @@
     --button-hover-bg: rgba(0, 0, 0, 0.1);
 }
 
-/* Dark tema */
-[data-theme="dark"] #customToolbar {
+[data-theme="dark"] {
     --toolbar-bg: #2d2d2d;
     --text-color: #fff;
     --border-color: #404040;
     --icon-color: #fff;
     --button-hover-bg: rgba(255, 255, 255, 0.1);
+}
+
+/* ===== CUSTOM TOP TOOLBAR (PART A) ===== */
+#customToolbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    z-index: 10000;
+    /* GÖLGE VE ALT ÇİZGİ KALDIRILDI (B ile birleşmesi için) */
+    box-shadow: none;
+    border-bottom: none; 
+    
+    padding-top: env(safe-area-inset-top);
+    padding-left: calc(16px + env(safe-area-inset-left));
+    padding-right: calc(16px + env(safe-area-inset-right));
+    background: var(--toolbar-bg);
+    color: var(--text-color);
 }
 
 #customBackButton {
@@ -1211,10 +1202,14 @@
 
 .custom-action-btn:hover, .custom-action-btn:active { background-color: var(--button-hover-bg); }
 
+/* Orijinal Container Ayarı */
 #outerContainer {
-    margin-top: 56px !important;
+    position: absolute;
+    top: 35px !important; /* Custom Toolbar yüksekliği */
     height: calc(100vh - 56px) !important;
+    width: 100%;
     padding: 0 !important;
+    margin: 0 !important;
 }
 
 @font-face {
@@ -1240,6 +1235,7 @@
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* Orijinal PDF.js elemanlarının konumları */
 #viewerContainer { top: 32px !important; height: calc(100% - 32px) !important; }
 
 /* Print Dialog Stili */
@@ -1278,6 +1274,25 @@
 .dialog-btn { flex: 1; padding: 12px 20px; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; }
 #confirmPrintBtn { background: var(--dialog-btn-bg); color: white; }
 #cancelPrintBtn { background: var(--dialog-btn-cancel-bg); color: var(--dialog-btn-cancel-text); }
+
+
+
+
+
+
+/* Aç, Yazdır, İndir, Metin Seçme ve El Aracını (Kesin Çözüm) Gizle */
+#openFile, #secondaryOpenFile, 
+#print, #secondaryPrint, 
+#download, #secondaryDownload,
+#cursorSelectTool, #secondaryCursorSelectTool,
+#cursorHandTool, #secondaryCursorHandTool,
+#handTool, #secondaryHandTool {
+    display: none !important;
+}
+
+
+
+
 </style>
 
 <div id="customToolbar">
@@ -1355,16 +1370,50 @@ function updateToolbarTitle() {
     if (pdfInfo) document.getElementById('customTitle').textContent = pdfInfo.name;
 }
 
+/* * CRITICAL: Bu fonksiyon hem metinleri düzeltir hem de 
+ * iki toolbar'ı tek parça gibi gösteren CSS'i enjekte eder.
+ */
 function applyTextFix() {
     const style = document.createElement('style');
     style.innerHTML = `
-        .toolbarLabel, #numPages, #pageNumber, .secondaryToolbarButton span, #sidebarContent span {
-            color: var(--text-color, #333) !important; visibility: visible !important;
-            display: inline-block !important; opacity: 1 !important; font-size: 12px !important;
+        /* Orijinal Toolbar (B) Ayarları - Custom ile Bütünleşme */
+        #toolbarContainer {
+            top: 0 !important;
+            position: absolute !important;
+            background-color: var(--toolbar-bg) !important; /* Renk Eşitleme */
+            background-image: none !important;
+            border-top: none !important; /* Üstteki çizgiyi sil */
+            border-bottom: 1px solid var(--border-color) !important; /* Alt çizgiyi buraya taşı */
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5) !important; /* Gölgeyi buraya taşı */
         }
-        #toolbarContainer { top: 0 !important; box-shadow: none !important; border-top: none !important; position: absolute !important; }
+
+        /* Orijinal toolbar içindeki gereksiz arka planları temizle */
+        #toolbarViewer, .toolbarViewerMiddle {
+            background: none !important;
+        }
+
+        /* Metin Görünürlüğü ve Düzeni */
+        .toolbarLabel, #numPages, #pageNumber, .secondaryToolbarButton span, #sidebarContent span {
+            color: var(--text-color, #333) !important; 
+            visibility: visible !important;
+            display: inline-block !important; 
+            opacity: 1 !important; 
+            font-size: 12px !important;
+        }
+        
         #viewerContainer { top: 32px !important; }
         #sidebarContainer { top: 0 !important; }
+        
+        /* İkonların rengini temaya uydur */
+        .toolbarButton::before {
+             filter: none !important;
+             color: var(--icon-color) !important;
+             opacity: 1 !important;
+        }
+        /* SVG kullanan versiyonlar için fill ayarı */
+        .toolbarButton svg {
+            fill: var(--icon-color) !important;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -1394,38 +1443,26 @@ async function sharePDF() {
     const pdfInfo = await getUpdatedPdfData();
     if (!pdfInfo) return;
 
-    // Flutter Handler varsa kullan
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         window.flutter_inappwebview.callHandler('sharePdf', pdfInfo.data, pdfInfo.name);
     } 
-    // Yoksa Tarayıcı Paylaşımını dene
     else if (navigator.share) {
         try {
             const res = await fetch(pdfInfo.data);
             const blob = await res.blob();
             const file = new File([blob], pdfInfo.name, { type: 'application/pdf' });
-            await navigator.share({
-                files: [file],
-                title: pdfInfo.name
-            });
-        } catch (e) {
-            console.error("Paylaşım hatası:", e);
-            alert("Paylaşım bu tarayıcıda desteklenmiyor.");
-        }
-    } else {
-        alert("Paylaşım özelliği bu cihazda aktif değil.");
-    }
+            await navigator.share({ files: [file], title: pdfInfo.name });
+        } catch (e) { alert("Paylaşım bu tarayıcıda desteklenmiyor."); }
+    } else { alert("Paylaşım özelliği bu cihazda aktif değil."); }
 }
 
 async function downloadPDF() {
     const pdfInfo = await getUpdatedPdfData();
     if (!pdfInfo) return;
 
-    // Flutter Handler varsa kullan
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         window.flutter_inappwebview.callHandler('downloadPdf', pdfInfo.data, pdfInfo.name);
     } 
-    // Yoksa Tarayıcı İndirmesini tetikle
     else {
         const link = document.createElement('a');
         link.href = pdfInfo.data;
@@ -1455,14 +1492,9 @@ async function triggerWebSharePrint() {
     try {
         const res = await fetch(pdfInfo.data);
         const file = new File([await res.blob()], pdfInfo.name, { type: 'application/pdf' });
-        if (navigator.share) {
-            await navigator.share({ files: [file] });
-        } else {
-            startClassicPrint();
-        }
-    } catch (e) { 
-        startClassicPrint(); 
-    }
+        if (navigator.share) await navigator.share({ files: [file] });
+        else startClassicPrint();
+    } catch (e) { startClassicPrint(); }
 }
 
 function startClassicPrint() {
@@ -1478,11 +1510,10 @@ document.addEventListener('DOMContentLoaded', function() {
 window.onkeydown = function(e) { if (e.key === 'Escape') goBackToIndex(); };
 </script>
 
-<!-- ozel toolbar -->
     
     
     
-    
+
     
   </body>
 </html>
