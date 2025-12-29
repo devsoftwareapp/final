@@ -1358,12 +1358,28 @@ async function getUpdatedPdfData() {
 /**
  * 2. GÖRÜNÜM VE TEMA AYARLARI
  */
+/**
+ * 2. GÖRÜNÜM VE TEMA AYARLARI (Sadece Cihaz Bazlı)
+ */
 function initCustomToolbarTheme() {
-    const savedTheme = localStorage.getItem('pdfTheme');
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    let themeToSet = (savedTheme === 'dark' || (savedTheme === 'device' && systemPrefersDark)) ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', themeToSet);
+    // Sistem tercihini (Dark mode var mı?) kontrol eden sorgu
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    // Temayı html etiketine uygulayan fonksiyon
+    const applyTheme = (e) => {
+        // e.matches true ise karanlık, değilse aydınlık moddur
+        const themeToSet = e.matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', themeToSet);
+    };
+
+    // 1. Sayfa ilk açıldığında mevcut cihaz temasını uygula
+    applyTheme(mediaQuery);
+
+    // 2. Kullanıcı cihaz temasını değiştirirse anlık olarak güncelle (Dinleyici)
+    // (Eski tarayıcılar için 'change' yerine 'addListener' kontrolü eklenebilir ama modern webview'lar için bu yeterlidir)
+    mediaQuery.addEventListener('change', applyTheme);
 }
+
 
 function updateToolbarTitle() {
     const pdfInfo = getPdfDataFromStorage();
@@ -1513,7 +1529,6 @@ window.onkeydown = function(e) { if (e.key === 'Escape') goBackToIndex(); };
     
     
     
-
     
   </body>
 </html>
