@@ -5,6 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>PDF Reader | Dev Software</title>
   
+  
+  
+  <script>
+    // --- BURAYA YAPIŞTIRIN ---
+    function initTheme() {
+        const saved = localStorage.getItem('pdfTheme');
+        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        let themeToSet;
+
+        if (saved === 'dark') {
+            themeToSet = 'dark';
+        } else if (saved === 'light') {
+            themeToSet = 'light';
+        } else {
+            themeToSet = systemPrefersDark ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', themeToSet);
+    }
+
+    // Dinleyiciyi de hemen altına ekleyin
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        const saved = localStorage.getItem('pdfTheme');
+        if (saved === 'device' || !saved) {
+            const newTheme = e.matches ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            if (typeof loadData === "function") loadData(); 
+        }
+    });
+
+    // Sayfa yüklenir yüklenmez çalıştırın
+    initTheme();
+    // -------------------------
+</script>
+
+  
+  
+  
+  
   <style>
   :root {
     --safe-top: env(safe-area-inset-top, 0px);
