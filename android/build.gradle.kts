@@ -2,7 +2,6 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        // 403 hatasını aşmak için alternatif depolar
         maven { url = uri("https://plugins.gradle.org/m2/") }
         maven { url = uri("https://repo.maven.apache.org/maven2/") }
     }
@@ -20,7 +19,7 @@ subprojects {
 }
 
 subprojects {
-    // Döngüsel bağımlılığı (Circular referencing) önlemek için kontrol
+    // Döngüsel bağımlılığı kıran kritik kontrol
     if (project.name != "app") {
         evaluationDependsOn(":app")
     }
