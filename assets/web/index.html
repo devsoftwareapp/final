@@ -10,28 +10,16 @@
   <script>
     // --- BURAYA YAPIŞTIRIN ---
     function initTheme() {
-        const saved = localStorage.getItem('pdfTheme');
         const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        let themeToSet;
-
-        if (saved === 'dark') {
-            themeToSet = 'dark';
-        } else if (saved === 'light') {
-            themeToSet = 'light';
-        } else {
-            themeToSet = systemPrefersDark ? 'dark' : 'light';
-        }
+        const themeToSet = systemPrefersDark ? 'dark' : 'light';
         document.documentElement.setAttribute('data-theme', themeToSet);
     }
 
     // Dinleyiciyi de hemen altına ekleyin
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-        const saved = localStorage.getItem('pdfTheme');
-        if (saved === 'device' || !saved) {
-            const newTheme = e.matches ? 'dark' : 'light';
-            document.documentElement.setAttribute('data-theme', newTheme);
-            if (typeof loadData === "function") loadData(); 
-        }
+        const newTheme = e.matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        if (typeof loadData === "function") loadData(); 
     });
 
     // Sayfa yüklenir yüklenmez çalıştırın
@@ -864,7 +852,7 @@
   .fab-menu.show { opacity: 1; transform: translateY(0); pointer-events: all; }
   .fab-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 8px; cursor: pointer; }
   .fab-item:active { background: rgba(0, 0, 0, 0.05); }
-  
+
   /* --- DRAWER (SOL MENÜ) --- */
   .drawer-overlay { 
       position: fixed; 
@@ -1444,7 +1432,6 @@
         <div class="settings-tabs">
             <div class="setting-tab active" data-tab="app-lang">Uygulama Dili</div>
             <div class="setting-tab" data-tab="pdf-lang">PDF Dili</div>
-            <div class="setting-tab" data-tab="theme">Tema</div>
         </div>
         
         <div class="setting-panel active" data-panel="app-lang">
@@ -1546,7 +1533,6 @@
     const overlay = document.getElementById('drawerOverlay');
     const drawerItems = document.querySelectorAll('.drawer-item[data-accordion]');
     const settingsTabs = document.querySelectorAll('.setting-tab');
-    const themeOptions = document.querySelectorAll('.theme-option');
     const pdfFileInput = document.getElementById('pdfFileInput');
     
     // Search Variables
@@ -1668,9 +1654,6 @@
       document.querySelector('.setting-tab').classList.add('active');
       document.querySelector('.setting-panel').classList.add('active');
       
-      const currentTheme = localStorage.getItem('pdfTheme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-      document.querySelector(`.theme-option[data-theme-val="${currentTheme === 'dark' ? 'dark' : (currentTheme === 'light' ? 'light' : 'device')}"]`).classList.add('active');
-      
       // Uygulama açıldığında cihaz PDF'lerini kontrol et
       setTimeout(() => {
         if (currentNav === 'home') {
@@ -1704,25 +1687,9 @@
     }
 
     function initTheme() {
-      const saved = localStorage.getItem('pdfTheme');
       const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      let themeToSet = 'light';
-      if (saved === 'dark' || (saved === 'device' && systemPrefersDark)) {
-        themeToSet = 'dark';
-      } else if (saved === 'light') {
-        themeToSet = 'light';
-      } else if (saved === 'device' && !systemPrefersDark) {
-        themeToSet = 'light';
-      }
+      const themeToSet = systemPrefersDark ? 'dark' : 'light';
       document.documentElement.setAttribute('data-theme', themeToSet);
-    }
-
-    function setThemePreference(preference) {
-        localStorage.setItem('pdfTheme', preference);
-        themeOptions.forEach(opt => opt.classList.remove('active'));
-        document.querySelector(`.theme-option[data-theme-val="${preference}"]`).classList.add('active');
-        initTheme();
-        loadData();
     }
 
     // --- PERMISSION MODAL FUNCTIONS ---
@@ -2961,7 +2928,6 @@
     };
 
     // Global fonksiyonlar
-    window.setThemePreference = setThemePreference;
     window.sendHelpEmail = sendHelpEmail;
     window.handleFileSource = handleFileSource;
     window.handleFabAction = handleFabAction;
@@ -3068,4 +3034,3 @@ function sendToFlutter(fileData, name) {
   </script>
 </body>
 </html>
-
