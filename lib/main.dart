@@ -10,7 +10,7 @@ import 'package:printing/printing.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
-import 'package:package_info_plus/package_info_plus.dart';  // YENİ EKLENDİ
+import 'package:package_info_plus/package_info_plus.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
