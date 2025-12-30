@@ -1114,7 +1114,16 @@
     <div id="printContainer"></div>
     
     
-    <style>
+      
+    <!-- ozel toolbar -->
+       <!-- ozel toolbar -->
+          <!-- ozel toolbar -->
+             <!-- ozel toolbar -->
+         
+         
+         <!-- ozel toolbar -->
+
+<style>
 /* ===== GLOBAL THEME VARIABLES (İki toolbar'ın kaynaşması için genele alındı) ===== */
 [data-theme="light"] {
     --toolbar-bg: #f5f5f5;
@@ -1275,11 +1284,6 @@
 #confirmPrintBtn { background: var(--dialog-btn-bg); color: white; }
 #cancelPrintBtn { background: var(--dialog-btn-cancel-bg); color: var(--dialog-btn-cancel-text); }
 
-
-
-
-
-
 /* Aç, Yazdır, İndir, Metin Seçme ve El Aracını (Kesin Çözüm) Gizle */
 #openFile, #secondaryOpenFile, 
 #print, #secondaryPrint, 
@@ -1289,10 +1293,6 @@
 #handTool, #secondaryHandTool {
     display: none !important;
 }
-
-
-
-
 </style>
 
 <div id="customToolbar">
@@ -1325,7 +1325,9 @@
     </div>
 </div>
 
-    <script>
+<!-- ozel toolbar -->
+
+<script>
 /**
  * VIEWER OPFS PDF MANAGER
  */
@@ -1785,19 +1787,55 @@ async function loadPdfIntoViewer() {
 }
 
 /**
- * 4. NATIVE & BROWSER FONKSİYONLAR (OPFS VERSION)
+ * 4. NAVIGATION & EXIT FUNCTIONS
  */
-function goBackToIndex() { 
-    // Blob URL'leri temizle
-    const blobUrl = sessionStorage.getItem('currentPdfBlobUrl');
-    if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-        sessionStorage.removeItem('currentPdfBlobUrl');
-    }
+function goBackToIndex() {
+    // Tüm kaynakları temizle
+    cleanupBeforeExit();
     
-    window.location.href = 'index.html'; 
+    // Ana sayfaya yönlendir
+    window.location.href = 'index.html';
 }
 
+function cleanupBeforeExit() {
+    try {
+        // Blob URL'leri temizle
+        const blobUrl = sessionStorage.getItem('currentPdfBlobUrl');
+        if (blobUrl) {
+            try {
+                URL.revokeObjectURL(blobUrl);
+            } catch (e) {
+                console.log("Blob URL temizlenemedi:", e);
+            }
+            sessionStorage.removeItem('currentPdfBlobUrl');
+        }
+        
+        // PDF viewer'ı kapat
+        if (window.PDFViewerApplication) {
+            try {
+                PDFViewerApplication.close();
+            } catch (e) {
+                console.log("PDF viewer kapatılamadı:", e);
+            }
+        }
+        
+        // OPFS'yi temizle (isteğe bağlı)
+        // viewerPdfManager.cleanup().catch(e => console.log("OPFS temizlenemedi:", e));
+        
+        // Session storage'ı temizle (isteğe bağlı)
+        // sessionStorage.removeItem('currentPdfData');
+        // sessionStorage.removeItem('currentPdfName');
+        // sessionStorage.removeItem('usingOPFS');
+        
+        console.log("Viewer temizlendi, index.html'ye yönlendiriliyor...");
+    } catch (error) {
+        console.error("Çıkış temizleme hatası:", error);
+    }
+}
+
+/**
+ * 5. NATIVE & BROWSER FONKSİYONLAR (OPFS VERSION)
+ */
 async function sharePDF() {
     const pdfInfo = await getUpdatedPdfData();
     if (!pdfInfo) {
@@ -1898,80 +1936,58 @@ function startClassicPrint() {
 }
 
 /**
- * 5. EVENT LISTENERS AND INITIALIZATION
+ * 6. EVENT LISTENERS AND INITIALIZATION
  */
 document.addEventListener('DOMContentLoaded', function() {
+    // Temayı başlat
     initCustomToolbarTheme();
     
     // OPFS'yi başlat ve PDF'yi yükle
     viewerPdfManager.init().then(() => {
         loadPdfIntoViewer();
     });
+    
+    // Custom toolbar event listener'ları
+    document.getElementById('customBackButton').addEventListener('click', goBackToIndex);
+    document.getElementById('customSaveBtn').addEventListener('click', downloadPDF);
+    document.getElementById('customPrintBtn').addEventListener('click', printWithWebShare);
+    document.getElementById('customShareBtn').addEventListener('click', sharePDF);
+    
+    // Yazdırma dialog'u event listener'ları
+    const printDialogCancel = document.getElementById('cancelPrintBtn');
+    const printDialogConfirm = document.getElementById('confirmPrintBtn');
+    
+    if (printDialogCancel) {
+        printDialogCancel.addEventListener('click', hidePrintDialog);
+    }
+    
+    if (printDialogConfirm) {
+        printDialogConfirm.addEventListener('click', triggerWebSharePrint);
+    }
 });
 
+// Tarayıcı geri tuşu yakalama
+window.onpopstate = function(event) {
+    cleanupBeforeExit();
+};
+
+// Escape tuşu yakalama
 window.onkeydown = function(e) { 
-    if (e.key === 'Escape') goBackToIndex(); 
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        goBackToIndex();
+    }
 };
 
 // Sayfa kapatılırken temizlik yap
 window.addEventListener('beforeunload', function() {
-    const blobUrl = sessionStorage.getItem('currentPdfBlobUrl');
-    if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-    }
+    cleanupBeforeExit();
 });
 
 // Sayfa görünür olduğunda PDF'yi kontrol et
 document.addEventListener('visibilitychange', function() {
     if (!document.hidden) {
-        // Sayfa tekrar görünür olduğunda PDF'yi kontrol et
         console.log("Sayfa görünür oldu, PDF kontrol ediliyor...");
-    }
-});
-
-/**
- * 6. CUSTOM TOOLBAR FUNCTIONS
- */
-// Custom toolbar butonları için event listener'lar
-document.addEventListener('DOMContentLoaded', function() {
-    // Geri butonu
-    const backButton = document.getElementById('backButton');
-    if (backButton) {
-        backButton.addEventListener('click', goBackToIndex);
-    }
-    
-    // Paylaş butonu
-    const shareButton = document.getElementById('shareButton');
-    if (shareButton) {
-        shareButton.addEventListener('click', sharePDF);
-    }
-    
-    // İndir butonu
-    const downloadButton = document.getElementById('downloadButton');
-    if (downloadButton) {
-        downloadButton.addEventListener('click', downloadPDF);
-    }
-    
-    // Yazdır butonu
-    const printButton = document.getElementById('printButton');
-    if (printButton) {
-        printButton.addEventListener('click', printWithWebShare);
-    }
-    
-    // Yazdırma dialog'u butonları
-    const printDialogCancel = document.getElementById('printDialogCancel');
-    if (printDialogCancel) {
-        printDialogCancel.addEventListener('click', hidePrintDialog);
-    }
-    
-    const printDialogConfirm = document.getElementById('printDialogConfirm');
-    if (printDialogConfirm) {
-        printDialogConfirm.addEventListener('click', triggerWebSharePrint);
-    }
-    
-    const printDialogClassic = document.getElementById('printDialogClassic');
-    if (printDialogClassic) {
-        printDialogClassic.addEventListener('click', startClassicPrint);
     }
 });
 
@@ -2070,7 +2086,100 @@ if (window.flutter_inappwebview) {
         }
     });
 }
+
+/**
+ * 11. MOBILE-SPECIFIC FEATURES
+ */
+// Touch gesture for back navigation
+let touchStartX = 0;
+let touchEndX = 0;
+
+document.addEventListener('touchstart', function(e) {
+    touchStartX = e.changedTouches[0].screenX;
+}, { passive: true });
+
+document.addEventListener('touchend', function(e) {
+    touchEndX = e.changedTouches[0].screenX;
+    handleSwipeGesture();
+}, { passive: true });
+
+function handleSwipeGesture() {
+    const swipeThreshold = 100; // Minimum swipe distance
+    const swipeRight = touchEndX - touchStartX > swipeThreshold;
+    
+    // Sağa swipe (geri git)
+    if (swipeRight && touchStartX < 50) { // Ekranın sol kenarından başlayan swipe
+        goBackToIndex();
+    }
+}
+
+// Status bar height adjustment for mobile
+function adjustForStatusBar() {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+        const customToolbar = document.getElementById('customToolbar');
+        if (customToolbar) {
+            customToolbar.style.paddingTop = 'env(safe-area-inset-top)';
+            customToolbar.style.height = 'calc(35px + env(safe-area-inset-top))';
+        }
+    }
+}
+
+// Sayfa yüklendiğinde status bar ayarını yap
+window.addEventListener('load', adjustForStatusBar);
+window.addEventListener('resize', adjustForStatusBar);
+
+/**
+ * 12. BACK BUTTON HANDLER FOR ANDROID WEBVIEW
+ */
+// Android back button için global değişken
+let viewerBackPressedTime = 0;
+
+// Android geri tuşu fonksiyonu (MainActivity'den çağrılacak)
+window.viewerBackPressed = function() {
+    const now = Date.now();
+    
+    // Çift tıklama kontrolü (2000ms içinde)
+    if (viewerBackPressedTime + 2000 > now) {
+        // Çift tıklama ile direkt çık
+        cleanupBeforeExit();
+        return 'exit_viewer';
+    } else {
+        viewerBackPressedTime = now;
+        
+        // Custom toolbar'daki geri butonuna tıkla
+        const backButton = document.getElementById('customBackButton');
+        if (backButton) {
+            backButton.click();
+        } else {
+            goBackToIndex();
+        }
+        
+        return false;
+    }
+};
+
+// Global fonksiyonları export et
+window.goBackToIndex = goBackToIndex;
+window.sharePDF = sharePDF;
+window.downloadPDF = downloadPDF;
+window.printWithWebShare = printWithWebShare;
+window.hidePrintDialog = hidePrintDialog;
+window.triggerWebSharePrint = triggerWebSharePrint;
+window.startClassicPrint = startClassicPrint;
+window.toggleFullscreen = toggleFullscreen;
 </script>
+
+<!-- ozel toolbar -->
+         
+         
+         
+         
+       <!-- ozel toolbar -->
+          <!-- ozel toolbar -->
+             <!-- ozel toolbar -->
+                <!-- ozel toolbar -->
     
     
   </body>
