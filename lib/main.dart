@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/services.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -8,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:printing/printing.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:android_intent_plus/android_intent.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,6 +56,66 @@ class _WebViewPageState extends State<WebViewPage> {
       base64String = base64String.split(',').last;
     }
     return base64Decode(base64String);
+  }
+
+  // DOĞRUDAN "TÜM DOSYALARA ERİŞİM" AYAR SAYFASINA YÖNLENDİRME
+  Future<void> _openAllFilesAccessSettings() async {
+    if (Platform.isAndroid) {
+      try {
+        // YÖNTEM 1: MANAGE_APP_ALL_FILES_ACCESS_PERMISSION (Android 11+)
+        try {
+          final intent1 = AndroidIntent(
+            action: 'android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION',
+            data: 'package:com.devsoftware.pdfreader',
+          );
+          await intent1.launch();
+          return;
+        } catch (e) {
+          debugPrint("Yöntem 1 hatası: $e");
+        }
+
+        // YÖNTEM 2: MANAGE_ALL_FILES_ACCESS_PERMISSION
+        try {
+          final intent2 = AndroidIntent(
+            action: 'android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION',
+          );
+          await intent2.launch();
+          return;
+        } catch (e) {
+          debugPrint("Yöntem 2 hatası: $e");
+        }
+
+        // YÖNTEM 3: Uygulama detay sayfasına git
+        try {
+          final intent3 = AndroidIntent(
+            action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
+            data: 'package:com.devsoftware.pdfreader',
+          );
+          await intent3.launch();
+          return;
+        } catch (e) {
+          debugPrint("Yöntem 3 hatası: $e");
+        }
+
+        // YÖNTEM 4: App info sayfasına git
+        try {
+          const platform = MethodChannel('com.devsoftware.pdfreader/channel');
+          await platform.invokeMethod('openAppSettings');
+        } catch (e) {
+          debugPrint("Yöntem 4 hatası: $e");
+        }
+
+        // SON ÇARE: Normal ayarlar
+        await openAppSettings();
+        
+      } catch (e) {
+        debugPrint("Tüm yöntemler başarısız: $e");
+        // Fallback
+        await openAppSettings();
+      }
+    } else {
+      await openAppSettings();
+    }
   }
 
   // GÖRSELDEKİ İZİN TASARIMINI GÖSTEREN FONKSİYON
@@ -115,16 +177,8 @@ class _WebViewPageState extends State<WebViewPage> {
                     onPressed: () async {
                       Navigator.pop(context);
                       
-                      // GÖRSELDEKİ AYARLAR SAYFASINA YÖNLENDİR
-                      try {
-                        // Android'in dosya erişim izinleri sayfasına yönlendir
-                        await openAppSettings();
-                        
-                        // Alternatif olarak doğrudan uygulama izinleri sayfasına
-                        // await openAppSettings();
-                      } catch (e) {
-                        debugPrint("Ayarlar açma hatası: $e");
-                      }
+                      // DOĞRUDAN "TÜM DOSYALARA ERİŞİM" SAYFASINA YÖNLENDİR
+                      await _openAllFilesAccessSettings();
                     },
                     child: const Text("Ayarlara Gidin"),
                   ),
@@ -142,14 +196,19 @@ class _WebViewPageState extends State<WebViewPage> {
     debugPrint("FAB için izin kontrolü başlatılıyor");
     
     try {
-      // İzin durumlarını kontrol et
-      PermissionStatus storageStatus = await Permission.storage.status;
-      
+      // Android 11+ için MANAGE_EXTERNAL_STORAGE kontrolü
       if (Platform.isAndroid) {
         final manageStatus = await Permission.manageExternalStorage.status;
         debugPrint("ManageExternalStorage durumu: $manageStatus");
+        
+        if (manageStatus.isGranted) {
+          debugPrint("MANAGE_EXTERNAL_STORAGE izni VERİLMİŞ");
+          return true;
+        }
       }
       
+      // Storage iznini kontrol et
+      PermissionStatus storageStatus = await Permission.storage.status;
       debugPrint("Storage izni durumu: $storageStatus");
 
       // Eğer izin verilmişse true dön
