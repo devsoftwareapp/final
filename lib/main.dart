@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:printing/printing.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path/path.dart' as path;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,232 +56,211 @@ class _WebViewPageState extends State<WebViewPage> {
     return base64Decode(base64String);
   }
 
-  // GÖRSELDEKİ İZİN TASARIMINI GÖSTEREN FONKSİYON
-  void _showPermissionDialog(String base64Data, String originalName) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Kırmızı ikon alanı (Görseldeki gibi)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.folder_open_rounded, size: 48, color: Colors.redAccent),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              "Dosya Erişimi Gerekli",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF1A1A1A)),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              "Cihazınızdaki dosyaları görmek, düzenlemek ve güncellemek için lütfen gerekli izni verin.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 14, height: 1.5),
-            ),
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.grey.shade200),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text("Şimdi Değil", style: TextStyle(color: Colors.grey)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      // Görseldeki "Tüm dosyalara erişim" sayfasına yönlendirir
-                      if (await Permission.manageExternalStorage.request().isPermanentlyDenied) {
-                        openAppSettings();
-                      }
-                    },
-                    child: const Text("Ayarlara Gidin"),
-                  ),
-                ),
-              ],
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Dosyayı diske yazan ana fonksiyon
-  Future<void> _savePdfToFile(String base64Data, String originalName) async {
-    // 1. İzinleri Kontrol Et (Android 11+ için manageExternalStorage kritik)
-    PermissionStatus status;
-    if (Platform.isAndroid) {
-      status = await Permission.manageExternalStorage.status;
-      if (!status.isGranted) {
+  // Cihazdaki PDF dosyalarını tara
+  Future<String> _scanDeviceForPDFs() async {
+    try {
+      // İzin kontrolü
+      PermissionStatus status;
+      if (Platform.isAndroid && await Permission.manageExternalStorage.isGranted) {
+        status = PermissionStatus.granted;
+      } else {
         status = await Permission.storage.status;
       }
-    } else {
-      status = await Permission.storage.status;
+
+      if (!status.isGranted) {
+        return "PERMISSION_DENIED";
+      }
+
+      final List<File> pdfFiles = [];
+      final List<String> pdfPaths = [];
+
+      // Tarama yapılacak dizinler (Android)
+      final List<String> scanPaths = [
+        '/storage/emulated/0/Download',
+        '/storage/emulated/0/Documents',
+        '/storage/emulated/0/DCIM',
+        '/storage/emulated/0/Pictures',
+        '/storage/emulated/0',
+      ];
+
+      for (final scanPath in scanPaths) {
+        try {
+          final directory = Directory(scanPath);
+          if (await directory.exists()) {
+            await _scanDirectoryRecursive(directory, pdfFiles);
+          }
+        } catch (e) {
+          debugPrint("Directory scan error for $scanPath: $e");
+        }
+      }
+
+      // PDF dosyalarını path listesine çevir
+      for (final file in pdfFiles) {
+        pdfPaths.add(file.path);
+      }
+
+      // Listeyi string olarak döndür (|| ile ayrılmış)
+      return pdfPaths.join('||');
+    } catch (e) {
+      debugPrint("PDF scan error: $e");
+      return "ERROR";
     }
+  }
 
-    // Eğer izin yoksa görsel diyaloğu göster ve dur
-    if (!status.isGranted) {
-      _showPermissionDialog(base64Data, originalName);
-      return;
-    }
-
-    // 2. İsimlendirme Mantığı
-    String baseFileName;
-    String extension;
-    if (originalName.contains('.')) {
-      int lastDot = originalName.lastIndexOf('.');
-      baseFileName = "${originalName.substring(0, lastDot)}_update";
-      extension = originalName.substring(lastDot);
-    } else {
-      baseFileName = "${originalName}_update";
-      extension = ".pdf";
-    }
-
-    // 3. Klasör Hazırlığı
-    final directory = Directory('/storage/emulated/0/Download/PDF Reader');
-    if (!await directory.exists()) {
-      await directory.create(recursive: true);
-    }
-
-    // 4. Dosya Çakışma Kontrolü
-    int counter = 0;
-    String finalFileName = "$baseFileName$extension";
-    File file = File('${directory.path}/$finalFileName');
-
-    while (await file.exists()) {
-      counter++;
-      finalFileName = "$baseFileName($counter)$extension";
-      file = File('${directory.path}/$finalFileName');
-    }
-
-    // 5. Yazma İşlemi (Sessiz Kayıt)
+  // Rekürsif olarak dizin tara
+  Future<void> _scanDirectoryRecursive(Directory dir, List<File> pdfFiles) async {
     try {
-      final bytes = _decodeBase64(base64Data);
-      await file.writeAsBytes(bytes);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Kaydedildi: $finalFileName"),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+      final List<FileSystemEntity> entities = await dir.list().toList();
+      
+      for (final entity in entities) {
+        if (entity is File) {
+          // Sadece PDF dosyalarını ekle
+          if (entity.path.toLowerCase().endsWith('.pdf')) {
+            pdfFiles.add(entity);
+          }
+        } else if (entity is Directory) {
+          // Bazı sistem dizinlerini atla
+          final dirName = path.basename(entity.path).toLowerCase();
+          if (!dirName.startsWith('.') && 
+              !['android', 'sys', 'proc', 'dev'].contains(dirName)) {
+            try {
+              await _scanDirectoryRecursive(entity, pdfFiles);
+            } catch (e) {
+              // Alt dizin okuma hatasını görmezden gel
+            }
+          }
+        }
       }
     } catch (e) {
-      debugPrint("Kaydetme Hatası: $e");
+      debugPrint("Directory list error for ${dir.path}: $e");
     }
   }
 
-  // Viewer'dan index'e geri dönme fonksiyonu
-  Future<bool> _goBackFromViewer() async {
-    if (_isViewerOpen && webViewController != null) {
-      try {
-        // Viewer'ı temizlemek için JavaScript çalıştır
-        await webViewController!.evaluateJavascript(source: """
-          try {
-            // Blob URL'leri temizle
-            const blobUrl = sessionStorage.getItem('currentPdfBlobUrl');
-            if (blobUrl) {
-              URL.revokeObjectURL(blobUrl);
-              sessionStorage.removeItem('currentPdfBlobUrl');
-            }
-            
-            // PDF viewer'ı kapat
-            if (window.PDFViewerApplication) {
-              try {
-                PDFViewerApplication.close();
-              } catch (e) {
-                console.log("PDF viewer kapatılamadı:", e);
-              }
-            }
-            
-            console.log("Viewer temizlendi, index.html'ye yönlendiriliyor...");
-          } catch (error) {
-            console.error("Viewer temizleme hatası:", error);
-          }
-        """);
-        
-        // Index.html'ye yönlendir
-        await webViewController!.loadUrl(
-          urlRequest: URLRequest(
-            url: WebUri("file:///android_asset/flutter_assets/assets/web/index.html"),
-          ),
-        );
-        
-        setState(() {
-          _isViewerOpen = false;
-          _currentViewerPdfName = null;
-        });
-        
-        return true; // İşlemi başarılı şekilde handle ettik
-      } catch (e) {
-        debugPrint("Viewer'dan çıkış hatası: $e");
-      }
-    }
-    return false;
+  // Dosya boyutunu formatla
+  String _formatFileSize(int bytes) {
+    if (bytes <= 0) return "0 B";
+    const suffixes = ["B", "KB", "MB", "GB", "TB"];
+    final i = (log(bytes) / log(1024)).floor();
+    return '${(bytes / pow(1024, i)).toStringAsFixed(1)} ${suffixes[i]}';
   }
 
-  // Çift tıklama ile uygulamadan çıkma
-  Future<bool> _exitApp() async {
-    final now = DateTime.now();
-    final isDoubleTap = _lastBackPressTime != null && 
-        now.difference(_lastBackPressTime!) < const Duration(seconds: 2);
-    
-    if (isDoubleTap) {
-      return true; // Uygulamadan çık
-    } else {
-      _lastBackPressTime = now;
+  // Dosya tarihini formatla
+  String _formatFileDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}.'
+           '${date.month.toString().padLeft(2, '0')}.'
+           '${date.year}';
+  }
+
+  // WebView için Android fonksiyonlarını enjekte et
+  Future<void> _injectAndroidFunctions() async {
+    if (webViewController == null) return;
+
+    // PDF listeleme fonksiyonu
+    await webViewController!.evaluateJavascript(source: """
+      // Global Android object'i oluştur
+      window.Android = window.Android || {};
       
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Çıkmak için tekrar basın"),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-      return false;
-    }
+      // PDF listeleme fonksiyonu
+      Android.listPDFs = function() {
+        return new Promise((resolve) => {
+          try {
+            window.flutter_inappwebview.callHandler('listPDFs').then(function(result) {
+              resolve(result);
+            }).catch(function(error) {
+              console.log('PDF listeleme hatası:', error);
+              resolve('PERMISSION_DENIED');
+            });
+          } catch (e) {
+            console.log('listPDFs error:', e);
+            resolve('ERROR');
+          }
+        });
+      };
+      
+      // İzin kontrol fonksiyonu
+      Android.checkPermission = function() {
+        return new Promise((resolve) => {
+          try {
+            window.flutter_inappwebview.callHandler('checkPermission').then(function(result) {
+              resolve(result === 'true');
+            }).catch(function(error) {
+              console.log('İzin kontrol hatası:', error);
+              resolve(false);
+            });
+          } catch (e) {
+            console.log('checkPermission error:', e);
+            resolve(false);
+          }
+        });
+      };
+      
+      // Ayarları açma fonksiyonu
+      Android.openSettings = function() {
+        try {
+          window.flutter_inappwebview.callHandler('openSettings');
+        } catch (e) {
+          console.log('openSettings error:', e);
+        }
+      };
+      
+      // Dosyayı base64 olarak alma
+      Android.getFileAsBase64 = function(filePath) {
+        return new Promise((resolve) => {
+          try {
+            window.flutter_inappwebview.callHandler('getFileAsBase64', filePath)
+              .then(function(base64Data) {
+                resolve(base64Data);
+              })
+              .catch(function(error) {
+                console.log('Dosya okuma hatası:', error);
+                resolve(null);
+              });
+          } catch (e) {
+            console.log('getFileAsBase64 error:', e);
+            resolve(null);
+          }
+        });
+      };
+      
+      console.log('Android fonksiyonları enjekte edildi');
+    """);
   }
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // Önce viewer'dan çıkmayı dene
-        if (await _goBackFromViewer()) {
-          return false; // Viewer'dan çıktık, Flutter'ın işlemesine gerek yok
+        // Viewer'dan çıkma kontrolü
+        if (_isViewerOpen && webViewController != null) {
+          await webViewController!.evaluateJavascript(source: """
+            try {
+              // Index.html'ye geri dön
+              window.location.href = 'index.html';
+            } catch (e) {
+              console.log('Back navigation error:', e);
+            }
+          """);
+          setState(() {
+            _isViewerOpen = false;
+            _currentViewerPdfName = null;
+          });
+          return false;
         }
-        
-        // Eğer viewer açık değilse, uygulamadan çıkma kontrolü yap
-        return await _exitApp();
+
+        // Çift tıklama ile çıkış
+        final now = DateTime.now();
+        if (_lastBackPressTime == null || 
+            now.difference(_lastBackPressTime!) > Duration(seconds: 2)) {
+          _lastBackPressTime = now;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Çıkmak için tekrar basın'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          return false;
+        }
+        return true;
       },
       child: Scaffold(
         body: SafeArea(
@@ -302,10 +281,85 @@ class _WebViewPageState extends State<WebViewPage> {
               verticalScrollBarEnabled: true,
               horizontalScrollBarEnabled: true,
               supportZoom: false,
+              mediaPlaybackRequiresUserGesture: false,
             ),
             onWebViewCreated: (controller) {
               webViewController = controller;
 
+              // Android fonksiyonlarını ekle
+              _injectAndroidFunctions();
+
+              // PDF listeleme handler
+              controller.addJavaScriptHandler(
+                handlerName: 'listPDFs',
+                callback: (args) async {
+                  try {
+                    final result = await _scanDeviceForPDFs();
+                    return result;
+                  } catch (e) {
+                    debugPrint("listPDFs error: $e");
+                    return "ERROR";
+                  }
+                },
+              );
+
+              // İzin kontrol handler
+              controller.addJavaScriptHandler(
+                handlerName: 'checkPermission',
+                callback: (args) async {
+                  try {
+                    PermissionStatus status;
+                    if (Platform.isAndroid) {
+                      // Android 11+ için MANAGE_EXTERNAL_STORAGE kontrolü
+                      if (await Permission.manageExternalStorage.isGranted) {
+                        return "true";
+                      }
+                      status = await Permission.storage.status;
+                    } else {
+                      status = await Permission.storage.status;
+                    }
+                    return status.isGranted ? "true" : "false";
+                  } catch (e) {
+                    debugPrint("checkPermission error: $e");
+                    return "false";
+                  }
+                },
+              );
+
+              // Ayarları açma handler
+              controller.addJavaScriptHandler(
+                handlerName: 'openSettings',
+                callback: (args) async {
+                  try {
+                    await openAppSettings();
+                  } catch (e) {
+                    debugPrint("openSettings error: $e");
+                  }
+                },
+              );
+
+              // Dosyayı base64 olarak okuma handler
+              controller.addJavaScriptHandler(
+                handlerName: 'getFileAsBase64',
+                callback: (args) async {
+                  try {
+                    final filePath = args[0] as String;
+                    final file = File(filePath);
+                    
+                    if (await file.exists()) {
+                      final bytes = await file.readAsBytes();
+                      final base64 = base64Encode(bytes);
+                      return "data:application/pdf;base64,$base64";
+                    }
+                    return null;
+                  } catch (e) {
+                    debugPrint("getFileAsBase64 error: $e");
+                    return null;
+                  }
+                },
+              );
+
+              // Diğer mevcut handler'lar...
               controller.addJavaScriptHandler(
                 handlerName: 'openPdfViewer',
                 callback: (args) {
@@ -318,64 +372,9 @@ class _WebViewPageState extends State<WebViewPage> {
                   });
                   
                   controller.evaluateJavascript(source: """
-                    // OPFS kullanıp kullanmadığımızı kontrol et
-                    const usingOPFS = navigator.storage && navigator.storage.getDirectory;
-                    
-                    if (usingOPFS) {
-                      // OPFS'ye kaydet
-                      sessionStorage.setItem('usingOPFS', 'true');
-                      
-                      // Base64 verisini OPFS'ye kaydetmek için özel fonksiyon
-                      (async function() {
-                        try {
-                          const root = await navigator.storage.getDirectory();
-                          const pdfDir = await root.getDirectoryHandle('pdfs', { create: true });
-                          
-                          // Önceki dosyayı temizle
-                          try {
-                            await pdfDir.removeEntry('current.pdf');
-                          } catch (e) {}
-                          
-                          // Base64'ten ArrayBuffer'a çevir
-                          const base64Data = '$base64Data';
-                          const base64 = base64Data.split(',')[1];
-                          const binaryString = atob(base64);
-                          const bytes = new Uint8Array(binaryString.length);
-                          for (let i = 0; i < binaryString.length; i++) {
-                            bytes[i] = binaryString.charCodeAt(i);
-                          }
-                          
-                          // OPFS'ye kaydet
-                          const fileHandle = await pdfDir.getFileHandle('$pdfName', { create: true });
-                          const writable = await fileHandle.createWritable();
-                          await writable.write(bytes);
-                          await writable.close();
-                          
-                          // current.pdf olarak da kaydet
-                          const currentHandle = await pdfDir.getFileHandle('current.pdf', { create: true });
-                          const currentWritable = await currentHandle.createWritable();
-                          await currentWritable.write(bytes);
-                          await currentWritable.close();
-                          
-                          console.log('PDF OPFS\'ye kaydedildi: $pdfName');
-                        } catch (error) {
-                          console.error('OPFS kaydetme hatası:', error);
-                          // Fallback: sessionStorage
-                          sessionStorage.setItem('currentPdfData', '$base64Data');
-                          sessionStorage.setItem('usingOPFS', 'false');
-                        }
-                        
-                        // Viewer'a yönlendir
-                        sessionStorage.setItem('currentPdfName', '$pdfName');
-                        window.location.href = 'viewer.html';
-                      })();
-                    } else {
-                      // OPFS desteklenmiyorsa sessionStorage
-                      sessionStorage.setItem('currentPdfData', '$base64Data');
-                      sessionStorage.setItem('currentPdfName', '$pdfName');
-                      sessionStorage.setItem('usingOPFS', 'false');
-                      window.location.href = 'viewer.html';
-                    }
+                    sessionStorage.setItem('currentPdfData', '$base64Data');
+                    sessionStorage.setItem('currentPdfName', '$pdfName');
+                    window.location.href = 'viewer.html';
                   """);
                 },
               );
@@ -414,32 +413,85 @@ class _WebViewPageState extends State<WebViewPage> {
               controller.addJavaScriptHandler(
                 handlerName: 'downloadPdf',
                 callback: (args) async {
-                  final String base64Data = args[0];
-                  final String originalName = args[1];
-                  _savePdfToFile(base64Data, originalName);
-                },
-              );
-
-              // Android back button handler
-              controller.addJavaScriptHandler(
-                handlerName: 'androidBackPressed',
-                callback: (args) async {
                   try {
-                    // Mevcut URL'yi kontrol et
-                    final currentUrl = await controller.getUrl();
-                    final isViewerPage = currentUrl?.toString().contains('viewer.html') == true;
+                    final String base64Data = args[0];
+                    final String originalName = args[1];
                     
-                    if (isViewerPage) {
-                      // Viewer sayfasındaysak, viewer'dan index'e dön
-                      await _goBackFromViewer();
-                      return true; // İşlemi handle ettik
+                    // İzin kontrolü
+                    PermissionStatus status;
+                    if (Platform.isAndroid && await Permission.manageExternalStorage.isGranted) {
+                      status = PermissionStatus.granted;
+                    } else {
+                      status = await Permission.storage.status;
                     }
                     
-                    // Diğer sayfalarda çift tıklama ile çıkış
-                    return false;
+                    if (!status.isGranted) {
+                      // İzin yoksa, izin iste
+                      if (await Permission.storage.request().isGranted ||
+                          await Permission.manageExternalStorage.request().isGranted) {
+                        // İzin verildi, kaydet
+                        final bytes = _decodeBase64(base64Data);
+                        final directory = Directory('/storage/emulated/0/Download/PDF Reader');
+                        if (!await directory.exists()) {
+                          await directory.create(recursive: true);
+                        }
+                        
+                        String finalFileName = originalName;
+                        File file = File('${directory.path}/$finalFileName');
+                        
+                        int counter = 0;
+                        while (await file.exists()) {
+                          counter++;
+                          finalFileName = "${originalName.replaceAll('.pdf', '')}($counter).pdf";
+                          file = File('${directory.path}/$finalFileName');
+                        }
+                        
+                        await file.writeAsBytes(bytes);
+                        
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("Kaydedildi: $finalFileName"),
+                              backgroundColor: Colors.green,
+                              behavior: SnackBarBehavior.floating,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      }
+                    } else {
+                      // İzin var, direkt kaydet
+                      final bytes = _decodeBase64(base64Data);
+                      final directory = Directory('/storage/emulated/0/Download/PDF Reader');
+                      if (!await directory.exists()) {
+                        await directory.create(recursive: true);
+                      }
+                      
+                      String finalFileName = originalName;
+                      File file = File('${directory.path}/$finalFileName');
+                      
+                      int counter = 0;
+                      while (await file.exists()) {
+                        counter++;
+                        finalFileName = "${originalName.replaceAll('.pdf', '')}($counter).pdf";
+                        file = File('${directory.path}/$finalFileName');
+                      }
+                      
+                      await file.writeAsBytes(bytes);
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("Kaydedildi: $finalFileName"),
+                            backgroundColor: Colors.green,
+                            behavior: SnackBarBehavior.floating,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    }
                   } catch (e) {
-                    debugPrint("Back button error: $e");
-                    return false;
+                    debugPrint("Kaydetme Hatası: $e");
                   }
                 },
               );
@@ -457,19 +509,27 @@ class _WebViewPageState extends State<WebViewPage> {
               });
             },
             onLoadStop: (controller, url) async {
-              // Sayfa yüklendiğinde viewer durumunu kontrol et
+              // Sayfa yüklendiğinde Android fonksiyonlarını tekrar enjekte et
+              await _injectAndroidFunctions();
+              
+              // Cihaz sekmesi açıldığında izin kontrolü yap
               final urlString = url?.toString() ?? '';
-              
-              setState(() {
-                _isViewerOpen = urlString.contains('viewer.html');
-              });
-              
-              // Eğer index.html'ye döndüysek, viewer durumunu temizle
               if (urlString.contains('index.html')) {
-                setState(() {
-                  _isViewerOpen = false;
-                  _currentViewerPdfName = null;
-                });
+                await controller.evaluateJavascript(source: """
+                  // Sayfa yüklendiğinde izin durumunu kontrol et
+                  setTimeout(function() {
+                    if (typeof Android !== 'undefined' && typeof Android.checkPermission === 'function') {
+                      Android.checkPermission().then(function(hasPermission) {
+                        if (hasPermission) {
+                          // İzin varsa cihaz PDF'lerini tara
+                          if (typeof scanDeviceForPDFs === 'function') {
+                            scanDeviceForPDFs();
+                          }
+                        }
+                      });
+                    }
+                  }, 1000);
+                """);
               }
             },
             onReceivedError: (controller, request, error) {
