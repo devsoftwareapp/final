@@ -56,14 +56,10 @@ class _WebViewPageState extends State<WebViewPage> {
     return base64Decode(base64String);
   }
 
-  // GÖRSELDEKİ İZİN TASARIMINI GÖSTEREN FONKSİYON
-  void _showPermissionDialog({
-    String? base64Data,
-    String? originalName,
-    required String context,
-  }) {
+  // GÖRSELDEKİ İZİN TASARIMINI GÖSTEREN FONKSİYON (DÜZELTİLDİ)
+  void _showPermissionDialog({String? base64Data, String? originalName, required String dialogContext}) {
     showDialog(
-      context: context,
+      context: context, // BU SATIR DÜZELTİLDİ
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
@@ -178,7 +174,7 @@ class _WebViewPageState extends State<WebViewPage> {
     
     if (!hasPermission) {
       // İzin yoksa diyalog göster
-      _showPermissionDialog(context: "fab_open_pdf");
+      _showPermissionDialog(dialogContext: "fab_open_pdf");
       return;
     }
 
@@ -206,7 +202,7 @@ class _WebViewPageState extends State<WebViewPage> {
 
     // Eğer izin yoksa görsel diyaloğu göster ve dur
     if (!status.isGranted) {
-      _showPermissionDialog(base64Data: base64Data, originalName: originalName, context: "viewer_download");
+      _showPermissionDialog(base64Data: base64Data, originalName: originalName, dialogContext: "viewer_download");
       return;
     }
 
