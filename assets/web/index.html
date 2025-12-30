@@ -1290,19 +1290,24 @@
     </div>
 
     <div class="content-panel" id="devicePanel">
+        
+        
       <!-- İZİN BANNERİ -->
-      <div class="permission-banner" id="permissionContainer">
-        <img src="img/permission.png" alt="İzin Gerekiyor">
-        <h3>Cihazınızdaki PDF'lere erişebilmem için izin gerekli</h3>
-        <p>Devam etmek için Tüm Dosya Erişimi izni verin.</p>
-        <button onclick="requestStoragePermission()">
-            Ayarlardan Erişim Ver
-        </button>
-      </div>
-      
-      <!-- PDF LİSTESİ -->
-      <div class="grid" id="deviceList"></div>
-    </div>
+<!-- SADECE BU KISMI DEĞİŞTİRİN: -->
+<div class="content-panel" id="devicePanel">
+  <!-- İZİN BANNERİ - Varsayılan olarak GÖSTERİLECEK -->
+  <div class="permission-banner" id="permissionContainer">
+    <img src="img/permission.png" alt="İzin Gerekiyor">
+    <h3>Cihazınızdaki PDF'lere erişebilmem için izin gerekli</h3>
+    <p>Devam etmek için Tüm Dosya Erişimi izni verin.</p>
+    <button onclick="requestStoragePermission()">
+        Ayarlardan Erişim Ver
+    </button>
+  </div>
+  
+  <!-- PDF LİSTESİ - Varsayılan olarak GİZLİ -->
+  <div class="grid" id="deviceList"></div>
+</div>
     
     <div class="content-panel static-panel" id="filesPanel">
       <div class="grid">
@@ -2024,6 +2029,9 @@ function toggleFavoriteInStorage(fileId, isFavorite) {
     loadData();
 }
 
+
+
+
 function loadData() {
   const sortedRecent = [...recentFiles].sort((a, b) => {
       return new Date(b.lastOpened || b.openedDate || 0) - new Date(a.lastOpened || a.openedDate || 0);
@@ -2149,72 +2157,176 @@ function createCard(name, size, meta, isFavorite, id, listType) {
   </div>`;
 }
 
+// --- update ---
+
+
 // --- ANDROID PERMISSION AND PDF SCANNING ---
 function checkAndroidPermission() {
     try {
         if (typeof Android !== 'undefined' && Android.checkPermission) {
-            return Android.checkPermission();
+            // Android.checkPermission() bir Promise döndürebilir
+            const result = Android.checkPermission();
+            if (result instanceof Promise) {
+                return result;
+            }
+            return Promise.resolve(result);
         }
-        return false;
+        console.log("Android.checkPermission() fonksiyonu bulunamadı");
+        return Promise.resolve(false);
     } catch (e) {
         console.error('Permission check error:', e);
-        return false;
+        return Promise.resolve(false);
     }
 }
 
-function checkPermissionAndUpdateUI() {
-    const hasPermission = checkAndroidPermission();
-    const permissionContainer = document.getElementById('permissionContainer');
-    const deviceList = document.getElementById('deviceList');
-    
-    if (!hasPermission) {
+async function checkPermissionAndUpdateUI() {
+    try {
+        const hasPermission = await checkAndroidPermission();
+        const permissionContainer = document.getElementById('permissionContainer');
+        const deviceList = document.getElementById('deviceList');
+        
+        console.log("İzin durumu UI güncelleniyor:", hasPermission);
+        
+        if (!hasPermission) {
+            // İZİN YOK: Banner göster, liste gizle
+            if (permissionContainer) {
+                permissionContainer.style.display = 'block';
+                console.log("Permission banner gösteriliyor");
+            }
+            if (deviceList) {
+                deviceList.style.display = 'none';
+            }
+        } else {
+            // İZİN VAR: Banner gizle, listeyi göster
+            if (permissionContainer) {
+                permissionContainer.style.display = 'none';
+                console.log("Permission banner gizlendi");
+            }
+            if (deviceList) {
+                deviceList.style.display = 'grid';
+                console.log("Device listesi gösteriliyor");
+            }
+            
+            // PDF'leri tara (eğer cihaz sekmesi aktifse)
+            const activeTab = document.querySelector('.tab.active').dataset.tab;
+            if (activeTab === 'device') {
+                await scanDeviceForPDFs();
+            }
+        }
+    } catch (error) {
+        console.error("UI güncelleme hatası:", error);
+        // Hata durumunda banner göster
+        const permissionContainer = document.getElementById('permissionContainer');
+        const deviceList = document.getElementById('deviceList');
         if (permissionContainer) permissionContainer.style.display = 'block';
         if (deviceList) deviceList.style.display = 'none';
-    } else {
-        if (permissionContainer) permissionContainer.style.display = 'none';
-        if (deviceList) deviceList.style.display = 'grid';
     }
 }
 
-function scanDeviceForPDFs() {
+async function scanDeviceForPDFs() {
     try {
-        if (!checkAndroidPermission()) {
-            checkPermissionAndUpdateUI();
+        console.log("Cihazda PDF'ler taranıyor...");
+        
+        // Önce izni kontrol et
+        const hasPermission = await checkAndroidPermission();
+        if (!hasPermission) {
+            console.log("İzin yok, tarama yapılamıyor");
+            await checkPermissionAndUpdateUI();
             return;
         }
         
         let pdfPaths = [];
+        
+        // Android fonksiyonunu kontrol et
         if (typeof Android !== 'undefined' && Android.listPDFs) {
-            const result = Android.listPDFs();
-            if (result && result.trim().length > 0 && result !== "PERMISSION_DENIED") {
-                pdfPaths = result.split('||').filter(p => p && p.trim().length > 0);
+            try {
+                const result = Android.listPDFs();
+                // Result Promise olabilir
+                const finalResult = result instanceof Promise ? await result : result;
+                console.log("Tarama sonucu:", finalResult);
+                
+                if (finalResult && finalResult.trim().length > 0 && 
+                    finalResult !== "PERMISSION_DENIED" && finalResult !== "ERROR") {
+                    pdfPaths = finalResult.split('||').filter(p => p && p.trim().length > 0);
+                    console.log("Bulunan PDF sayısı:", pdfPaths.length);
+                } else {
+                    console.log("PDF bulunamadı veya hata:", finalResult);
+                }
+            } catch (error) {
+                console.error("Android.listPDFs() çağrı hatası:", error);
             }
+        } else {
+            console.log("Android.listPDFs() fonksiyonu bulunamadı");
         }
         
+        // Gerçek tarama sonuçlarını işle
         devicePDFs = [];
-        let nextId = 1000;
-        
-        pdfPaths.forEach(path => {
-            const name = path.split('/').pop();
-            devicePDFs.push({
-                id: nextId++,
-                name: name,
-                size: getFileSizeFromPath(path),
-                date: getFileDateFromPath(path),
-                uploadDate: new Date().toISOString(),
-                isFavorite: false,
-                path: path,
-                fullPath: path,
-                source: 'device'
+        if (pdfPaths.length > 0) {
+            let nextId = 1000;
+            
+            pdfPaths.forEach(path => {
+                const name = path.split('/').pop();
+                devicePDFs.push({
+                    id: nextId++,
+                    name: name,
+                    size: getFileSizeFromPath(path),
+                    date: getFileDateFromPath(path),
+                    uploadDate: new Date().toISOString(),
+                    isFavorite: false,
+                    path: path,
+                    fullPath: path,
+                    source: 'device'
+                });
             });
-        });
+        }
         
-        checkPermissionAndUpdateUI();
-        loadData();
+        // UI'ı güncelle
+        await updateDeviceUI();
         
     } catch (e) {
         console.error('Device scan error:', e);
-        checkPermissionAndUpdateUI();
+        await checkPermissionAndUpdateUI();
+    }
+}
+
+async function updateDeviceUI() {
+    try {
+        const deviceList = document.getElementById('deviceList');
+        const permissionContainer = document.getElementById('permissionContainer');
+        
+        // İzin durumunu tekrar kontrol et
+        const hasPermission = await checkAndroidPermission();
+        
+        if (!hasPermission) {
+            // İzin yoksa banner göster, liste gizle
+            if (permissionContainer) permissionContainer.style.display = 'block';
+            if (deviceList) deviceList.style.display = 'none';
+            return;
+        }
+        
+        // İzin varsa banner gizle, listeyi göster
+        if (permissionContainer) permissionContainer.style.display = 'none';
+        if (deviceList) deviceList.style.display = 'grid';
+        
+        // PDF'leri listele
+        if (devicePDFs.length === 0) {
+            deviceList.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon material-symbols-rounded">folder_open</div>
+                    <p>Cihazda PDF bulunamadı.</p>
+                </div>`;
+        } else {
+            let html = '';
+            devicePDFs.forEach(file => {
+                const metaText = getMetaText(file, 'device');
+                html += createCard(file.name, file.size, metaText, file.isFavorite, file.id, 'device');
+            });
+            deviceList.innerHTML = html;
+            attachLongPressEvents();
+        }
+        
+    } catch (error) {
+        console.error("Device UI güncelleme hatası:", error);
     }
 }
 
@@ -2226,6 +2338,84 @@ function getFileSizeFromPath(path) {
 function getFileDateFromPath(path) {
     const now = new Date();
     return `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+}
+
+// --- PERMISSION MODAL FUNCTIONS ---
+async function requestStoragePermission() {
+    showPermissionModal();
+}
+
+async function openSettingsForPermission() {
+    closePermissionModal();
+    
+    if (typeof Android !== 'undefined' && Android.openSettings) {
+        try {
+            const result = Android.openSettings();
+            // Result Promise olabilir
+            if (result instanceof Promise) {
+                await result;
+            }
+            
+            // Kullanıcı ayarlardan döndükten sonra izni kontrol et
+            setTimeout(async () => {
+                await checkPermissionAndUpdateUI();
+            }, 1000);
+        } catch (error) {
+            console.error("Ayarlar açma hatası:", error);
+        }
+    } else {
+        console.log("Ayarlar açılıyor...");
+        // Web için simülasyon
+        setTimeout(async () => {
+            await checkPermissionAndUpdateUI();
+        }, 500);
+    }
+}
+
+// LoadData fonksiyonunu da güncelleyelim
+function loadData() {
+  const sortedRecent = [...recentFiles].sort((a, b) => {
+      return new Date(b.lastOpened || b.openedDate || 0) - new Date(a.lastOpened || a.openedDate || 0);
+  });
+  renderList('recentList', sortedRecent, 'recent');
+  
+  const sortedFavorites = [...favoriteFiles].sort((a, b) => {
+      return new Date(b.favoriteDate || 0) - new Date(a.favoriteDate || 0);
+  });
+  renderList('favoritesList', sortedFavorites, 'favorites');
+  
+  // Device listesi için özel işlem yap, asenkron olarak
+  checkPermissionAndUpdateUI();
+}
+
+// Tab değiştiğinde cihaz sekmesi için özel işlem
+function switchTab(id, isClickOrNav = false) {
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+    
+    document.querySelectorAll('#recentPanel, #favoritesPanel, #devicePanel').forEach(p => {
+        p.classList.toggle('active', p.id === `${id}Panel`);
+        if(p.id === `${id}Panel`) {
+            if(isClickOrNav) {
+                p.scrollTop = 0;
+                topBar.style.transform = 'translateY(0)';
+                lastScrollY = 0;
+            } else {
+                const currentTransform = topBar.style.transform;
+                if (currentTransform === `translateY(-${headerHeight}px)`) {
+                     p.scrollTop = headerHeight + 1;
+                     lastScrollY = headerHeight + 1;
+                } else {
+                    p.scrollTop = 0;
+                    lastScrollY = 0;
+                }
+            }
+        }
+    });
+    
+    if (id === 'device') {
+        // Cihaz sekmesine geçildiğinde izin kontrolü yap ve PDF'leri tara
+        checkPermissionAndUpdateUI();
+    }
 }
 
 // --- FILE HANDLING FUNCTIONS (OPFS VERSION) ---
@@ -2365,7 +2555,10 @@ async function openPdfFile(fileData, name) {
         // Device file (Android)
         else if (fileData.source === 'device' && fileData.fullPath) {
             if (typeof Android !== 'undefined' && Android.getFileAsBase64) {
-                const base64Data = Android.getFileAsBase64(fileData.fullPath);
+                const result = Android.getFileAsBase64(fileData.fullPath);
+                // Result Promise olabilir
+                const base64Data = result instanceof Promise ? await result : result;
+                
                 if (base64Data && base64Data.startsWith('data:')) {
                     sessionStorage.setItem('currentPdfData', base64Data);
                     sessionStorage.setItem('currentPdfName', pdfName);
@@ -2389,6 +2582,29 @@ async function openPdfFile(fileData, name) {
         alert("PDF açılırken hata oluştu. Lütfen tekrar deneyin.");
     }
 }
+
+
+
+
+
+// --- update ---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // --- SELECTION MODE FUNCTIONS ---
 function enterSelectionMode() {
@@ -3095,3 +3311,4 @@ window.addEventListener('beforeunload', async () => {
   </script>
 </body>
 </html>
+
