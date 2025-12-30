@@ -10,6 +10,7 @@ import 'package:printing/printing.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
+import 'package:package_info_plus/package_info_plus.dart';  // YENİ EKLENDİ
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,6 +51,20 @@ class _WebViewPageState extends State<WebViewPage> {
   DateTime? _lastBackPressTime;
   bool _isViewerOpen = false;
   String? _currentViewerPdfName;
+  PackageInfo? _packageInfo;
+
+  @override
+  void initState() {
+    super.initState();
+    _initPackageInfo();
+  }
+
+  Future<void> _initPackageInfo() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    setState(() {
+      _packageInfo = packageInfo;
+    });
+  }
 
   Uint8List _decodeBase64(String base64String) {
     if (base64String.contains(',')) {
@@ -62,10 +77,13 @@ class _WebViewPageState extends State<WebViewPage> {
   Future<void> _openAllFilesAccessPermission() async {
     try {
       if (Platform.isAndroid) {
+        // Paket adını al
+        final packageName = _packageInfo?.packageName ?? 'com.example.pdfreader';
+        
         // Android 11+ için MANAGE_EXTERNAL_STORAGE izin sayfasını aç
         final intent = AndroidIntent(
           action: 'android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION',
-          data: 'package:${await getPackageName()}',
+          data: 'package:$packageName',
           flags: [Flag.FLAG_ACTIVITY_NEW_TASK],
         );
         await intent.launch();
@@ -176,15 +194,6 @@ class _WebViewPageState extends State<WebViewPage> {
     }
     
     return pdfPaths;
-  }
-
-  // Flutter uygulama paket adını al
-  Future<String> getPackageName() async {
-    if (Platform.isAndroid) {
-      final String? packageName = await getApplicationPackageName();
-      return packageName ?? 'com.example.pdfreader';
-    }
-    return 'com.example.pdfreader';
   }
 
   @override
