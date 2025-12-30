@@ -1325,70 +1325,361 @@
     </div>
 </div>
 
-<script>
+    <script>
 /**
- * 1. VERİ YÖNETİMİ VE DÜZENLEME YAKALAMA
+ * VIEWER OPFS PDF MANAGER
  */
-function getPdfDataFromStorage() {
-    try {
-        const data = sessionStorage.getItem('currentPdfData');
-        const name = sessionStorage.getItem('currentPdfName');
-        if (data && data.startsWith('data:application/pdf')) {
-            return { data: data, name: name || "belge.pdf" };
+class ViewerOPFSPdfManager {
+    constructor() {
+        this.root = null;
+        this.currentPdfHandle = null;
+        this.currentPdfName = '';
+        this.isInitialized = false;
+    }
+
+    async init() {
+        try {
+            if (!navigator.storage || !navigator.storage.getDirectory) {
+                console.warn("OPFS desteklenmiyor");
+                return false;
+            }
+            this.root = await navigator.storage.getDirectory();
+            this.isInitialized = true;
+            console.log("OPFS viewer için başlatıldı");
+            return true;
+        } catch (e) {
+            console.error("OPFS başlatma hatası:", e);
+            return false;
         }
-    } catch (e) { console.error("Depo okuma hatası:", e); }
-    return null;
+    }
+
+    async getCurrentPdfFromOPFS() {
+        try {
+            if (!this.isInitialized) {
+                await this.init();
+            }
+
+            const usingOPFS = sessionStorage.getItem('usingOPFS') === 'true';
+            const pdfName = sessionStorage.getItem('currentPdfName') || "belge.pdf";
+            
+            if (usingOPFS && this.isInitialized) {
+                try {
+                    const pdfDir = await this.root.getDirectoryHandle('pdfs', { create: false });
+                    
+                    // Önce current.pdf'i dene
+                    try {
+                        const fileHandle = await pdfDir.getFileHandle('current.pdf', { create: false });
+                        const file = await fileHandle.getFile();
+                        this.currentPdfHandle = fileHandle;
+                        this.currentPdfName = pdfName;
+                        return URL.createObjectURL(file);
+                    } catch (e) {
+                        // current.pdf yoksa, dosya adıyla ara
+                        const fileHandle = await pdfDir.getFileHandle(pdfName, { create: false });
+                        const file = await fileHandle.getFile();
+                        this.currentPdfHandle = fileHandle;
+                        this.currentPdfName = pdfName;
+                        return URL.createObjectURL(file);
+                    }
+                } catch (dirError) {
+                    console.log("pdfs klasörü bulunamadı, base64'e fallback");
+                    // Base64 fallback
+                    const base64Data = sessionStorage.getItem('currentPdfData');
+                    if (base64Data) {
+                        return base64Data;
+                    }
+                }
+            } else {
+                // Base64 fallback
+                const base64Data = sessionStorage.getItem('currentPdfData');
+                if (base64Data) {
+                    return base64Data;
+                }
+            }
+            
+            return null;
+        } catch (error) {
+            console.error("PDF OPFS'den alınırken hata:", error);
+            return null;
+        }
+    }
+
+    async saveUpdatedPdf(arrayBuffer) {
+        try {
+            if (!this.isInitialized) {
+                await this.init();
+            }
+
+            const usingOPFS = sessionStorage.getItem('usingOPFS') === 'true';
+            const pdfName = sessionStorage.getItem('currentPdfName') || "belge.pdf";
+            
+            if (usingOPFS && this.isInitialized) {
+                try {
+                    const pdfDir = await this.root.getDirectoryHandle('pdfs', { create: true });
+                    
+                    // Mevcut dosyayı güncelle
+                    let fileHandle;
+                    try {
+                        fileHandle = await pdfDir.getFileHandle(pdfName, { create: false });
+                    } catch (e) {
+                        fileHandle = await pdfDir.getFileHandle(pdfName, { create: true });
+                    }
+                    
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(arrayBuffer);
+                    await writable.close();
+                    
+                    // current.pdf'i de güncelle
+                    try {
+                        const currentHandle = await pdfDir.getFileHandle('current.pdf', { create: true });
+                        const currentWritable = await currentHandle.createWritable();
+                        await currentWritable.write(arrayBuffer);
+                        await currentWritable.close();
+                    } catch (e) {
+                        console.log("current.pdf güncellenemedi:", e);
+                    }
+                    
+                    console.log(`PDF OPFS'ye güncellendi: ${pdfName} (${arrayBuffer.byteLength} bytes)`);
+                    return { success: true, name: pdfName, size: arrayBuffer.byteLength };
+                    
+                } catch (opfsError) {
+                    console.error("OPFS güncelleme hatası, base64'e fallback:", opfsError);
+                    // OPFS başarısız olursa base64'e dön
+                    return await this.saveUpdatedPdfAsBase64(arrayBuffer, pdfName);
+                }
+            } else {
+                // Base64 modunda çalış
+                return await this.saveUpdatedPdfAsBase64(arrayBuffer, pdfName);
+            }
+        } catch (error) {
+            console.error("PDF güncelleme hatası:", error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async saveUpdatedPdfAsBase64(arrayBuffer, pdfName) {
+        try {
+            // ArrayBuffer'ı base64'e çevir
+            let binary = '';
+            const bytes = new Uint8Array(arrayBuffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            const base64 = "data:application/pdf;base64," + btoa(binary);
+            
+            // Session storage'a kaydet
+            sessionStorage.setItem('currentPdfData', base64);
+            sessionStorage.setItem('currentPdfName', pdfName);
+            
+            console.log(`PDF base64 olarak güncellendi: ${pdfName}`);
+            return { 
+                success: true, 
+                name: pdfName, 
+                size: arrayBuffer.byteLength,
+                method: 'base64' 
+            };
+        } catch (e) {
+            console.error("Base64 dönüşüm hatası:", e);
+            return { success: false, error: e.message };
+        }
+    }
+
+    async getUpdatedPdfData() {
+        try {
+            const usingOPFS = sessionStorage.getItem('usingOPFS') === 'true';
+            const pdfName = sessionStorage.getItem('currentPdfName') || "belge.pdf";
+            
+            if (usingOPFS && this.isInitialized) {
+                try {
+                    const pdfDir = await this.root.getDirectoryHandle('pdfs', { create: false });
+                    const fileHandle = await pdfDir.getFileHandle(pdfName, { create: false });
+                    const file = await fileHandle.getFile();
+                    
+                    // File'ı base64'e çevir
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            resolve({ 
+                                data: e.target.result, 
+                                name: pdfName 
+                            });
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                } catch (e) {
+                    console.log("OPFS'den okuma başarısız, session storage kontrolü");
+                    // Fallback to session storage
+                    return await this.getPdfDataFromStorage();
+                }
+            } else {
+                return await this.getPdfDataFromStorage();
+            }
+        } catch (error) {
+            console.error("Güncel PDF verisi alınırken hata:", error);
+            return await this.getPdfDataFromStorage();
+        }
+    }
+
+    async getPdfDataFromStorage() {
+        try {
+            const data = sessionStorage.getItem('currentPdfData');
+            const name = sessionStorage.getItem('currentPdfName');
+            if (data && data.startsWith('data:application/pdf')) {
+                return { data: data, name: name || "belge.pdf" };
+            }
+            
+            // Eğer session storage'da yoksa, OPFS'den blob URL'i al
+            const blobUrl = sessionStorage.getItem('currentPdfBlobUrl');
+            if (blobUrl) {
+                const response = await fetch(blobUrl);
+                const blob = await response.blob();
+                
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        resolve({ 
+                            data: e.target.result, 
+                            name: name || "belge.pdf" 
+                        });
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            }
+        } catch (e) { 
+            console.error("Depo okuma hatası:", e); 
+        }
+        return null;
+    }
+
+    async getPdfUrlForViewer() {
+        try {
+            const usingOPFS = sessionStorage.getItem('usingOPFS') === 'true';
+            
+            if (usingOPFS && this.isInitialized) {
+                const pdfUrl = await this.getCurrentPdfFromOPFS();
+                if (pdfUrl && pdfUrl.startsWith('blob:')) {
+                    return pdfUrl;
+                }
+            }
+            
+            // Fallback: session storage'dan base64
+            const pdfData = await this.getPdfDataFromStorage();
+            return pdfData ? pdfData.data : null;
+        } catch (error) {
+            console.error("PDF URL alınırken hata:", error);
+            return null;
+        }
+    }
+}
+
+// Global OPFS Manager instance
+const viewerPdfManager = new ViewerOPFSPdfManager();
+
+/**
+ * 1. VERİ YÖNETİMİ VE DÜZENLEME YAKALAMA (OPFS VERSION)
+ */
+async function getPdfDataFromStorage() {
+    return await viewerPdfManager.getPdfDataFromStorage();
 }
 
 async function getUpdatedPdfData() {
     try {
         if (window.PDFViewerApplication && window.PDFViewerApplication.pdfDocument) {
-            const data = await window.PDFViewerApplication.pdfDocument.saveDocument();
-            let binary = '';
-            const bytes = new Uint8Array(data);
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) { binary += String.fromCharCode(bytes[i]); }
-            const base64 = "data:application/pdf;base64," + btoa(binary);
-            return { data: base64, name: sessionStorage.getItem('currentPdfName') || "belge.pdf" };
+            // PDF'den ArrayBuffer al
+            const arrayBuffer = await window.PDFViewerApplication.pdfDocument.saveDocument();
+            
+            // OPFS'ye kaydet
+            const result = await viewerPdfManager.saveUpdatedPdf(arrayBuffer);
+            
+            if (result.success) {
+                // Başarılı kayıttan sonra veriyi döndür
+                return await viewerPdfManager.getUpdatedPdfData();
+            } else {
+                console.error("PDF güncellenemedi:", result.error);
+                return await getPdfDataFromStorage();
+            }
         }
-    } catch (e) { console.error("Güncel PDF verisi paketlenirken hata oluştu:", e); }
-    return getPdfDataFromStorage();
+    } catch (e) { 
+        console.error("Güncel PDF verisi paketlenirken hata oluştu:", e); 
+    }
+    return await getPdfDataFromStorage();
 }
 
 /**
  * 2. GÖRÜNÜM VE TEMA AYARLARI
  */
-/**
- * 2. GÖRÜNÜM VE TEMA AYARLARI (Sadece Cihaz Bazlı)
- */
 function initCustomToolbarTheme() {
-    // Sistem tercihini (Dark mode var mı?) kontrol eden sorgu
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-    // Temayı html etiketine uygulayan fonksiyon
     const applyTheme = (e) => {
-        // e.matches true ise karanlık, değilse aydınlık moddur
         const themeToSet = e.matches ? 'dark' : 'light';
         document.documentElement.setAttribute('data-theme', themeToSet);
+        
+        // PDF.js tema ayarlarını da güncelle
+        updatePDFViewerTheme(themeToSet);
     };
 
-    // 1. Sayfa ilk açıldığında mevcut cihaz temasını uygula
     applyTheme(mediaQuery);
-
-    // 2. Kullanıcı cihaz temasını değiştirirse anlık olarak güncelle (Dinleyici)
-    // (Eski tarayıcılar için 'change' yerine 'addListener' kontrolü eklenebilir ama modern webview'lar için bu yeterlidir)
     mediaQuery.addEventListener('change', applyTheme);
 }
 
-
-function updateToolbarTitle() {
-    const pdfInfo = getPdfDataFromStorage();
-    if (pdfInfo) document.getElementById('customTitle').textContent = pdfInfo.name;
+function updatePDFViewerTheme(theme) {
+    // PDF.js viewer için tema değişiklikleri
+    const style = document.createElement('style');
+    style.id = 'pdfjs-theme-override';
+    
+    if (theme === 'dark') {
+        style.innerHTML = `
+            .textLayer {
+                filter: invert(1) hue-rotate(180deg);
+                mix-blend-mode: difference;
+            }
+            
+            .annotationLayer section {
+                filter: invert(1) hue-rotate(180deg);
+            }
+            
+            .pdfViewer .page {
+                background-color: #1e1e1e !important;
+                border-color: #444 !important;
+            }
+        `;
+    } else {
+        style.innerHTML = `
+            .textLayer {
+                filter: none;
+                mix-blend-mode: normal;
+            }
+            
+            .annotationLayer section {
+                filter: none;
+            }
+            
+            .pdfViewer .page {
+                background-color: white !important;
+                border-color: #ddd !important;
+            }
+        `;
+    }
+    
+    // Eski style'ı kaldır
+    const oldStyle = document.getElementById('pdfjs-theme-override');
+    if (oldStyle) oldStyle.remove();
+    
+    document.head.appendChild(style);
 }
 
-/* * CRITICAL: Bu fonksiyon hem metinleri düzeltir hem de 
- * iki toolbar'ı tek parça gibi gösteren CSS'i enjekte eder.
- */
+function updateToolbarTitle() {
+    const pdfName = sessionStorage.getItem('currentPdfName') || "belge.pdf";
+    const titleElement = document.getElementById('customTitle');
+    if (titleElement) {
+        titleElement.textContent = pdfName;
+    }
+}
+
 function applyTextFix() {
     const style = document.createElement('style');
     style.innerHTML = `
@@ -1396,11 +1687,11 @@ function applyTextFix() {
         #toolbarContainer {
             top: 0 !important;
             position: absolute !important;
-            background-color: var(--toolbar-bg) !important; /* Renk Eşitleme */
+            background-color: var(--toolbar-bg) !important;
             background-image: none !important;
-            border-top: none !important; /* Üstteki çizgiyi sil */
-            border-bottom: 1px solid var(--border-color) !important; /* Alt çizgiyi buraya taşı */
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5) !important; /* Gölgeyi buraya taşı */
+            border-top: none !important;
+            border-bottom: 1px solid var(--border-color) !important;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5) !important;
         }
 
         /* Orijinal toolbar içindeki gereksiz arka planları temizle */
@@ -1420,44 +1711,99 @@ function applyTextFix() {
         #viewerContainer { top: 32px !important; }
         #sidebarContainer { top: 0 !important; }
         
-        /* İkonların rengini temaya uydur */
+        /* İkonların reğini temaya uydur */
         .toolbarButton::before {
              filter: none !important;
              color: var(--icon-color) !important;
              opacity: 1 !important;
         }
-        /* SVG kullanan versiyonlar için fill ayarı */
+        
         .toolbarButton svg {
             fill: var(--icon-color) !important;
+        }
+        
+        /* Custom toolbar tema desteği */
+        :root[data-theme="dark"] {
+            --toolbar-bg: #1e293b;
+            --border-color: #334155;
+            --text-color: #f8fafc;
+            --icon-color: #cbd5e1;
+        }
+        
+        :root[data-theme="light"] {
+            --toolbar-bg: #ffffff;
+            --border-color: #d4d4d4;
+            --text-color: #0f172a;
+            --icon-color: #64748b;
         }
     `;
     document.head.appendChild(style);
 }
 
 /**
- * 3. PDF YÜKLEME SÜRECİ
+ * 3. PDF YÜKLEME SÜRECİ (OPFS VERSION)
  */
-function loadPdfIntoViewer() {
-    if (typeof PDFViewerApplicationOptions !== 'undefined') {
-        PDFViewerApplicationOptions.set('disableLocalization', true);
+async function loadPdfIntoViewer() {
+    try {
+        if (typeof PDFViewerApplicationOptions !== 'undefined') {
+            PDFViewerApplicationOptions.set('disableLocalization', true);
+        }
+        
+        // OPFS Manager'ı başlat
+        await viewerPdfManager.init();
+        
+        // PDF URL'sini al (OPFS veya base64)
+        const pdfUrl = await viewerPdfManager.getPdfUrlForViewer();
+        
+        if (pdfUrl && window.PDFViewerApplication) {
+            const pdfName = sessionStorage.getItem('currentPdfName') || "belge.pdf";
+            
+            PDFViewerApplication.open({ 
+                url: pdfUrl, 
+                originalUrl: pdfName 
+            }).then(() => {
+                updateToolbarTitle();
+                applyTextFix();
+                
+                // PDF yüklendikten sonra tema uygula
+                const theme = document.documentElement.getAttribute('data-theme') || 'light';
+                updatePDFViewerTheme(theme);
+                
+                console.log("PDF başarıyla yüklendi:", pdfName);
+            }).catch(error => {
+                console.error("PDF açma hatası:", error);
+                setTimeout(loadPdfIntoViewer, 500);
+            });
+        } else {
+            console.log("PDF verisi bekleniyor...");
+            setTimeout(loadPdfIntoViewer, 500);
+        }
+    } catch (error) {
+        console.error("PDF yükleme hatası:", error);
+        setTimeout(loadPdfIntoViewer, 1000);
     }
-    const pdfInfo = getPdfDataFromStorage();
-    if (pdfInfo && window.PDFViewerApplication) {
-        PDFViewerApplication.open({ url: pdfInfo.data, originalUrl: pdfInfo.name }).then(() => {
-            updateToolbarTitle();
-            applyTextFix();
-        });
-    } else { setTimeout(loadPdfIntoViewer, 200); }
 }
 
 /**
- * 4. NATIVE & BROWSER FONKSİYONLAR
+ * 4. NATIVE & BROWSER FONKSİYONLAR (OPFS VERSION)
  */
-function goBackToIndex() { window.location.href = 'index.html'; }
+function goBackToIndex() { 
+    // Blob URL'leri temizle
+    const blobUrl = sessionStorage.getItem('currentPdfBlobUrl');
+    if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+        sessionStorage.removeItem('currentPdfBlobUrl');
+    }
+    
+    window.location.href = 'index.html'; 
+}
 
 async function sharePDF() {
     const pdfInfo = await getUpdatedPdfData();
-    if (!pdfInfo) return;
+    if (!pdfInfo) {
+        alert("PDF verisi bulunamadı.");
+        return;
+    }
 
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         window.flutter_inappwebview.callHandler('sharePdf', pdfInfo.data, pdfInfo.name);
@@ -1468,13 +1814,20 @@ async function sharePDF() {
             const blob = await res.blob();
             const file = new File([blob], pdfInfo.name, { type: 'application/pdf' });
             await navigator.share({ files: [file], title: pdfInfo.name });
-        } catch (e) { alert("Paylaşım bu tarayıcıda desteklenmiyor."); }
-    } else { alert("Paylaşım özelliği bu cihazda aktif değil."); }
+        } catch (e) { 
+            alert("Paylaşım bu tarayıcıda desteklenmiyor."); 
+        }
+    } else { 
+        alert("Paylaşım özelliği bu cihazda aktif değil."); 
+    }
 }
 
 async function downloadPDF() {
     const pdfInfo = await getUpdatedPdfData();
-    if (!pdfInfo) return;
+    if (!pdfInfo) {
+        alert("PDF verisi bulunamadı.");
+        return;
+    }
 
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         window.flutter_inappwebview.callHandler('downloadPdf', pdfInfo.data, pdfInfo.name);
@@ -1486,12 +1839,20 @@ async function downloadPDF() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        
+        // iOS için özel uyarı
+        if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
+            alert("PDF indirildi. Dosyanız 'Dosyalar' uygulamasında görünebilir.");
+        }
     }
 }
 
 async function printWithWebShare() { 
     const pdfInfo = await getUpdatedPdfData();
-    if (!pdfInfo) return;
+    if (!pdfInfo) {
+        alert("PDF verisi bulunamadı.");
+        return;
+    }
 
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         window.flutter_inappwebview.callHandler('printPdf', pdfInfo.data, pdfInfo.name);
@@ -1500,34 +1861,216 @@ async function printWithWebShare() {
     }
 }
 
-function hidePrintDialog() { document.getElementById('printDialogOverlay').style.display = 'none'; }
+function hidePrintDialog() { 
+    document.getElementById('printDialogOverlay').style.display = 'none'; 
+}
 
 async function triggerWebSharePrint() {
     hidePrintDialog();
     const pdfInfo = await getUpdatedPdfData();
+    
+    if (!pdfInfo) {
+        startClassicPrint();
+        return;
+    }
+    
     try {
         const res = await fetch(pdfInfo.data);
         const file = new File([await res.blob()], pdfInfo.name, { type: 'application/pdf' });
-        if (navigator.share) await navigator.share({ files: [file] });
-        else startClassicPrint();
-    } catch (e) { startClassicPrint(); }
+        
+        if (navigator.share) {
+            await navigator.share({ files: [file] });
+        } else {
+            startClassicPrint();
+        }
+    } catch (e) { 
+        console.error("Web Share hatası:", e);
+        startClassicPrint(); 
+    }
 }
 
 function startClassicPrint() {
-    if (window.PDFViewerApplication) window.PDFViewerApplication.print();
-    else window.print();
+    if (window.PDFViewerApplication) {
+        window.PDFViewerApplication.print();
+    } else {
+        window.print();
+    }
 }
 
+/**
+ * 5. EVENT LISTENERS AND INITIALIZATION
+ */
 document.addEventListener('DOMContentLoaded', function() {
     initCustomToolbarTheme();
-    loadPdfIntoViewer();
+    
+    // OPFS'yi başlat ve PDF'yi yükle
+    viewerPdfManager.init().then(() => {
+        loadPdfIntoViewer();
+    });
 });
 
-window.onkeydown = function(e) { if (e.key === 'Escape') goBackToIndex(); };
-</script>
+window.onkeydown = function(e) { 
+    if (e.key === 'Escape') goBackToIndex(); 
+};
 
+// Sayfa kapatılırken temizlik yap
+window.addEventListener('beforeunload', function() {
+    const blobUrl = sessionStorage.getItem('currentPdfBlobUrl');
+    if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+    }
+});
+
+// Sayfa görünür olduğunda PDF'yi kontrol et
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+        // Sayfa tekrar görünür olduğunda PDF'yi kontrol et
+        console.log("Sayfa görünür oldu, PDF kontrol ediliyor...");
+    }
+});
+
+/**
+ * 6. CUSTOM TOOLBAR FUNCTIONS
+ */
+// Custom toolbar butonları için event listener'lar
+document.addEventListener('DOMContentLoaded', function() {
+    // Geri butonu
+    const backButton = document.getElementById('backButton');
+    if (backButton) {
+        backButton.addEventListener('click', goBackToIndex);
+    }
     
+    // Paylaş butonu
+    const shareButton = document.getElementById('shareButton');
+    if (shareButton) {
+        shareButton.addEventListener('click', sharePDF);
+    }
     
+    // İndir butonu
+    const downloadButton = document.getElementById('downloadButton');
+    if (downloadButton) {
+        downloadButton.addEventListener('click', downloadPDF);
+    }
+    
+    // Yazdır butonu
+    const printButton = document.getElementById('printButton');
+    if (printButton) {
+        printButton.addEventListener('click', printWithWebShare);
+    }
+    
+    // Yazdırma dialog'u butonları
+    const printDialogCancel = document.getElementById('printDialogCancel');
+    if (printDialogCancel) {
+        printDialogCancel.addEventListener('click', hidePrintDialog);
+    }
+    
+    const printDialogConfirm = document.getElementById('printDialogConfirm');
+    if (printDialogConfirm) {
+        printDialogConfirm.addEventListener('click', triggerWebSharePrint);
+    }
+    
+    const printDialogClassic = document.getElementById('printDialogClassic');
+    if (printDialogClassic) {
+        printDialogClassic.addEventListener('click', startClassicPrint);
+    }
+});
+
+/**
+ * 7. FULLSCREEN SUPPORT
+ */
+function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+            console.log(`Fullscreen hatası: ${err.message}`);
+        });
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+    }
+}
+
+// Fullscreen değişikliklerini dinle
+document.addEventListener('fullscreenchange', function() {
+    if (document.fullscreenElement) {
+        document.body.classList.add('fullscreen');
+    } else {
+        document.body.classList.remove('fullscreen');
+    }
+});
+
+/**
+ * 8. ERROR HANDLING
+ */
+window.addEventListener('error', function(e) {
+    console.error('Global hata:', e.error);
+    
+    // PDF yükleme hatası durumunda yeniden dene
+    if (e.message && e.message.includes('PDF')) {
+        setTimeout(loadPdfIntoViewer, 1000);
+    }
+});
+
+// PDF.js hata yakalama
+if (window.PDFViewerApplication) {
+    window.PDFViewerApplication.eventBus.on('error', function(evt) {
+        console.error('PDF.js hatası:', evt);
+    });
+}
+
+/**
+ * 9. PERFORMANCE OPTIMIZATIONS
+ */
+// Sayfa geçişlerinde performans optimizasyonu
+let lastPageRendered = 0;
+const pageRenderDelay = 100; // ms
+
+function optimizePageRendering() {
+    if (window.PDFViewerApplication && window.PDFViewerApplication.pdfViewer) {
+        const currentPage = window.PDFViewerApplication.pdfViewer.currentPageNumber;
+        const now = Date.now();
+        
+        if (now - lastPageRendered > pageRenderDelay) {
+            lastPageRendered = now;
+            // Sayfa değiştiğinde yapılacak işlemler
+            updatePageIndicator(currentPage);
+        }
+    }
+}
+
+function updatePageIndicator(page) {
+    const pageIndicator = document.getElementById('currentPageIndicator');
+    if (pageIndicator) {
+        const totalPages = window.PDFViewerApplication.pagesCount || 0;
+        pageIndicator.textContent = `Sayfa ${page} / ${totalPages}`;
+    }
+}
+
+// Sayfa değişikliklerini dinle
+if (window.PDFViewerApplication) {
+    window.PDFViewerApplication.eventBus.on('pagechanging', optimizePageRendering);
+}
+
+/**
+ * 10. FLUTTER COMMUNICATION (Optional)
+ */
+// Flutter'dan mesaj almak için
+if (window.flutter_inappwebview) {
+    window.addEventListener('flutterInAppWebViewPlatformReady', function(event) {
+        console.log('Flutter WebView hazır');
+        
+        // Flutter'dan PDF verisi almak için handler
+        if (window.flutter_inappwebview.callHandler) {
+            window.flutter_inappwebview.callHandler('getPdfData').then(function(data) {
+                if (data) {
+                    // PDF verisini işle
+                    console.log('Flutter\'dan PDF verisi alındı');
+                }
+            });
+        }
+    });
+}
+</script>
     
     
   </body>
