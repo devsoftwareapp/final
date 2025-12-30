@@ -20,11 +20,9 @@ dependencies:
   connectivity_plus: ^5.0.0
   open_file: ^3.5.10
   android_intent_plus: ^6.0.0
-  
-  # PDF Paylaşım ve Yazdırma Fonksiyonları İçin:
-  printing: ^5.12.3      # Yazdırma diyaloğunu açar
-  share_plus: ^12.0.1    # Dosyayı WhatsApp, Mail vb. ile paylaşır
-
+  printing: ^5.12.3
+  share_plus: ^12.0.1
+  package_info_plus: ^5.0.0  # YENİ EKLENDİ
 
 dev_dependencies:
   flutter_test:
