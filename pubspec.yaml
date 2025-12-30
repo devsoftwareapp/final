@@ -22,7 +22,7 @@ dependencies:
   android_intent_plus: ^6.0.0
   printing: ^5.12.3
   share_plus: ^12.0.1
-  package_info_plus: ^5.0.0  # YENİ EKLENDİ
+  package_info_plus: ^9.0.0  # Versiyonu güncellendi
 
 dev_dependencies:
   flutter_test:
