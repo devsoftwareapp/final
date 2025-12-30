@@ -2149,6 +2149,11 @@ function createCard(name, size, meta, isFavorite, id, listType) {
   </div>`;
 }
 
+
+
+
+
+
 // --- ANDROID PERMISSION AND PDF SCANNING ---
 function checkAndroidPermission() {
     try {
@@ -2231,7 +2236,13 @@ function getFileDateFromPath(path) {
 // --- FILE HANDLING FUNCTIONS (OPFS VERSION) ---
 function handleFabAction(action) {
   if (action === 'open_pdf') {
+    // Flutter'dan izin kontrolü yap
+    if (typeof flutter_inappwebview !== 'undefined' && flutter_inappwebview.callHandler) {
+      flutter_inappwebview.callHandler('openFabPdf');
+    } else {
+      // Fallback: direkt file input
       pdfFileInput.click();
+    }
   }
   fabMenu.classList.remove('show');
 }
@@ -2900,7 +2911,13 @@ function switchTab(id, isClickOrNav = false) {
     });
     
     if (id === 'device') {
-        scanDeviceForPDFs();
+        // FLUTTER İZİN KONTROLÜ
+        if (typeof flutter_inappwebview !== 'undefined' && flutter_inappwebview.callHandler) {
+            flutter_inappwebview.callHandler('checkDevicePermission');
+        } else {
+            // Fallback: normal tarama
+            scanDeviceForPDFs();
+        }
     }
 }
 
@@ -2951,7 +2968,13 @@ function switchNav(id) {
 
 function handleFileSource(source) {
     if (source === 'device') {
-        scanDeviceForPDFs();
+        // FLUTTER İZİN KONTROLÜ
+        if (typeof flutter_inappwebview !== 'undefined' && flutter_inappwebview.callHandler) {
+            flutter_inappwebview.callHandler('checkDevicePermission');
+        } else {
+            // Fallback: normal tarama
+            scanDeviceForPDFs();
+        }
         switchNav('home');
         switchTab('device', true);
     } else if (source === 'browse_more') {
@@ -2997,7 +3020,13 @@ function onAndroidResume() {
         if (currentNav === 'home') {
             const activeTab = document.querySelector('.tab.active').dataset.tab;
             if (activeTab === 'device') {
-                scanDeviceForPDFs();
+                // FLUTTER İZİN KONTROLÜ
+                if (typeof flutter_inappwebview !== 'undefined' && flutter_inappwebview.callHandler) {
+                    flutter_inappwebview.callHandler('checkDevicePermission');
+                } else {
+                    // Fallback: normal tarama
+                    scanDeviceForPDFs();
+                }
             }
         }
     } catch (e) {
@@ -3090,6 +3119,11 @@ window.addEventListener('beforeunload', async () => {
     // Temizlik yapılabilir, isteğe bağlı
     // await pdfManager.cleanup();
 });
+
+
+
+
+
 
 
   </script>
