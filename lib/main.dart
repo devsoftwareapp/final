@@ -1,14 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:printing/printing.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:path/path.dart' as path;
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,17 +58,40 @@ class _WebViewPageState extends State<WebViewPage> {
     return base64Decode(base64String);
   }
 
+  // "Tüm dosyalara erişim" ayarına yönlendirme
+  Future<void> _openAllFilesAccessPermission() async {
+    try {
+      if (Platform.isAndroid) {
+        // Android 11+ için MANAGE_EXTERNAL_STORAGE izin sayfasını aç
+        final intent = AndroidIntent(
+          action: 'android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION',
+          data: 'package:${await getPackageName()}',
+          flags: [Flag.FLAG_ACTIVITY_NEW_TASK],
+        );
+        await intent.launch();
+      } else {
+        // iOS veya diğer platformlar için genel ayarlar
+        await openAppSettings();
+      }
+    } catch (e) {
+      debugPrint("All files access permission açma hatası: $e");
+      // Fallback olarak genel ayarları aç
+      await openAppSettings();
+    }
+  }
+
   // Cihazdaki PDF dosyalarını tara
   Future<String> _scanDeviceForPDFs() async {
     try {
       debugPrint("PDF tarama başlatılıyor...");
       
-      // İzin kontrolü
+      // İzin kontrolü - Android 11+ için MANAGE_EXTERNAL_STORAGE gerekli
       PermissionStatus status;
       if (Platform.isAndroid) {
-        // Önce storage iznini kontrol et
-        status = await Permission.storage.status;
+        // Önce MANAGE_EXTERNAL_STORAGE iznini kontrol et
+        status = await Permission.manageExternalStorage.status;
         if (!status.isGranted) {
+          debugPrint("MANAGE_EXTERNAL_STORAGE izni yok");
           return "PERMISSION_DENIED";
         }
       } else {
@@ -79,50 +103,28 @@ class _WebViewPageState extends State<WebViewPage> {
 
       final List<String> pdfPaths = [];
 
-      // Öncelikli olarak sık kullanılan dizinleri tara
+      // Sık kullanılan dizinleri tara
       final List<String> commonPaths = [
         '/storage/emulated/0/Download',
         '/storage/emulated/0/Documents',
         '/storage/emulated/0/DCIM',
         '/storage/emulated/0/Pictures',
-        '/storage/emulated/0/Telegram',
-        '/storage/emulated/0/WhatsApp/Media',
       ];
-
-      debugPrint("Dizinler taranıyor...");
 
       for (final scanPath in commonPaths) {
         try {
           final directory = Directory(scanPath);
           if (await directory.exists()) {
-            debugPrint("Dizin taranıyor: $scanPath");
             final files = await _findPdfFilesInDirectory(directory);
             pdfPaths.addAll(files);
-            debugPrint("$scanPath dizininde ${files.length} PDF bulundu");
           }
         } catch (e) {
           debugPrint("Dizin tarama hatası ($scanPath): $e");
         }
       }
 
-      // Root dizini de tara (daha yüzeysel)
-      try {
-        final rootDir = Directory('/storage/emulated/0');
-        final rootFiles = await _findPdfFilesInDirectory(rootDir, maxDepth: 1);
-        pdfPaths.addAll(rootFiles);
-        debugPrint("Root dizinde ${rootFiles.length} PDF bulundu");
-      } catch (e) {
-        debugPrint("Root tarama hatası: $e");
-      }
-
-      // Tekilleştir ve sırala
-      final uniquePaths = pdfPaths.toSet().toList();
-      uniquePaths.sort();
-
-      debugPrint("Toplam ${uniquePaths.length} PDF dosyası bulundu");
-
       // Listeyi string olarak döndür (|| ile ayrılmış)
-      return uniquePaths.join('||');
+      return pdfPaths.join('||');
     } catch (e) {
       debugPrint("PDF tarama hatası: $e");
       return "ERROR";
@@ -130,7 +132,7 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 
   // Dizindeki PDF dosyalarını bul
-  Future<List<String>> _findPdfFilesInDirectory(Directory dir, {int maxDepth = 3, int currentDepth = 0}) async {
+  Future<List<String>> _findPdfFilesInDirectory(Directory dir, {int maxDepth = 2, int currentDepth = 0}) async {
     final List<String> pdfPaths = [];
     
     try {
@@ -142,7 +144,6 @@ class _WebViewPageState extends State<WebViewPage> {
       try {
         entities = await dir.list().toList();
       } catch (e) {
-        // Dizin okuma hatası
         return pdfPaths;
       }
 
@@ -154,25 +155,16 @@ class _WebViewPageState extends State<WebViewPage> {
               pdfPaths.add(entity.path);
             }
           } else if (entity is Directory) {
-            // Bazı sistem dizinlerini atla
-            final dirName = path.basename(entity.path).toLowerCase();
-            final skipDirs = {
-              'android', 'sys', 'proc', 'dev', 'data', 'system', 'cache',
-              'lost+found', 'recovery', 'vendor', 'product', 'oem',
-              'preload', 'apex', 'firmware', 'odm', 'postinstall'
-            };
-            
-            if (!dirName.startsWith('.') && !skipDirs.contains(dirName)) {
-              try {
-                final subPdfs = await _findPdfFilesInDirectory(
-                  entity,
-                  maxDepth: maxDepth,
-                  currentDepth: currentDepth + 1
-                );
-                pdfPaths.addAll(subPdfs);
-              } catch (e) {
-                // Alt dizin hatasını görmezden gel
-              }
+            // Sistem dizinlerini atla
+            final dirName = entity.path.split('/').last.toLowerCase();
+            if (!dirName.startsWith('.') && 
+                !['android', 'sys', 'proc', 'dev'].contains(dirName)) {
+              final subPdfs = await _findPdfFilesInDirectory(
+                entity,
+                maxDepth: maxDepth,
+                currentDepth: currentDepth + 1
+              );
+              pdfPaths.addAll(subPdfs);
             }
           }
         } catch (e) {
@@ -186,149 +178,13 @@ class _WebViewPageState extends State<WebViewPage> {
     return pdfPaths;
   }
 
-  // WebView için Android fonksiyonlarını enjekte et
-  Future<void> _injectAndroidFunctions() async {
-    if (webViewController == null) return;
-
-    await webViewController!.evaluateJavascript(source: """
-      // Global Android object'i oluştur veya güncelle
-      if (typeof window.Android === 'undefined') {
-        window.Android = {};
-      }
-      
-      // PDF listeleme fonksiyonu
-      Android.listPDFs = function() {
-        return new Promise((resolve, reject) => {
-          try {
-            window.flutter_inappwebview.callHandler('listPDFs').then(function(result) {
-              resolve(result || '');
-            }).catch(function(error) {
-              console.error('PDF listeleme hatası:', error);
-              reject(error);
-            });
-          } catch (e) {
-            console.error('listPDFs error:', e);
-            reject(e);
-          }
-        });
-      };
-      
-      // İzin kontrol fonksiyonu
-      Android.checkPermission = function() {
-        return new Promise((resolve, reject) => {
-          try {
-            window.flutter_inappwebview.callHandler('checkPermission').then(function(result) {
-              resolve(result === 'true' || result === true);
-            }).catch(function(error) {
-              console.error('İzin kontrol hatası:', error);
-              resolve(false);
-            });
-          } catch (e) {
-            console.error('checkPermission error:', e);
-            resolve(false);
-          }
-        });
-      };
-      
-      // Ayarları açma fonksiyonu
-      Android.openSettings = function() {
-        return new Promise((resolve) => {
-          try {
-            window.flutter_inappwebview.callHandler('openSettings').then(function() {
-              resolve(true);
-            }).catch(function(error) {
-              console.error('Ayarlar açma hatası:', error);
-              resolve(false);
-            });
-          } catch (e) {
-            console.error('openSettings error:', e);
-            resolve(false);
-          }
-        });
-      };
-      
-      // Dosyayı base64 olarak alma
-      Android.getFileAsBase64 = function(filePath) {
-        return new Promise((resolve, reject) => {
-          try {
-            window.flutter_inappwebview.callHandler('getFileAsBase64', filePath)
-              .then(function(base64Data) {
-                resolve(base64Data);
-              })
-              .catch(function(error) {
-                console.error('Dosya okuma hatası:', error);
-                reject(error);
-              });
-          } catch (e) {
-            console.error('getFileAsBase64 error:', e);
-            reject(e);
-          }
-        });
-      };
-      
-      // Dosya paylaşma fonksiyonları
-      Android.shareFile = function(base64Data, fileName) {
-        return new Promise((resolve) => {
-          try {
-            window.flutter_inappwebview.callHandler('sharePdf', base64Data, fileName)
-              .then(function() {
-                resolve(true);
-              })
-              .catch(function(error) {
-                console.error('Dosya paylaşma hatası:', error);
-                resolve(false);
-              });
-          } catch (e) {
-            console.error('shareFile error:', e);
-            resolve(false);
-          }
-        });
-      };
-      
-      Android.shareFiles = function(fileData) {
-        return new Promise((resolve) => {
-          try {
-            const files = fileData.split('||').filter(f => f);
-            if (files.length > 0) {
-              // İlk dosyayı paylaş
-              window.flutter_inappwebview.callHandler('sharePdf', files[0], 'shared_file.pdf')
-                .then(function() {
-                  resolve(true);
-                })
-                .catch(function(error) {
-                  console.error('Dosya paylaşma hatası:', error);
-                  resolve(false);
-                });
-            } else {
-              resolve(false);
-            }
-          } catch (e) {
-            console.error('shareFiles error:', e);
-            resolve(false);
-          }
-        });
-      };
-      
-      Android.printFile = function(base64Data) {
-        return new Promise((resolve) => {
-          try {
-            window.flutter_inappwebview.callHandler('printPdf', base64Data, 'document.pdf')
-              .then(function() {
-                resolve(true);
-              })
-              .catch(function(error) {
-                console.error('Dosya yazdırma hatası:', error);
-                resolve(false);
-              });
-          } catch (e) {
-            console.error('printFile error:', e);
-            resolve(false);
-          }
-        });
-      };
-      
-      console.log('Android fonksiyonları enjekte edildi/güncellendi');
-    """);
+  // Flutter uygulama paket adını al
+  Future<String> getPackageName() async {
+    if (Platform.isAndroid) {
+      final String? packageName = await getApplicationPackageName();
+      return packageName ?? 'com.example.pdfreader';
+    }
+    return 'com.example.pdfreader';
   }
 
   @override
@@ -391,9 +247,42 @@ class _WebViewPageState extends State<WebViewPage> {
             ),
             onWebViewCreated: (controller) async {
               webViewController = controller;
-              
-              // Android fonksiyonlarını enjekte et
-              await _injectAndroidFunctions();
+
+              // İzin kontrol handler
+              controller.addJavaScriptHandler(
+                handlerName: 'checkPermission',
+                callback: (args) async {
+                  try {
+                    PermissionStatus status;
+                    if (Platform.isAndroid) {
+                      // Android için MANAGE_EXTERNAL_STORAGE iznini kontrol et
+                      status = await Permission.manageExternalStorage.status;
+                      debugPrint("MANAGE_EXTERNAL_STORAGE izni durumu: ${status.isGranted}");
+                    } else {
+                      status = await Permission.storage.status;
+                    }
+                    return status.isGranted ? "true" : "false";
+                  } catch (e) {
+                    debugPrint("checkPermission error: $e");
+                    return "false";
+                  }
+                },
+              );
+
+              // Ayarları açma handler - "Tüm dosyalara erişim" sayfasına yönlendir
+              controller.addJavaScriptHandler(
+                handlerName: 'openSettings',
+                callback: (args) async {
+                  try {
+                    debugPrint("Tüm dosyalara erişim sayfası açılıyor...");
+                    await _openAllFilesAccessPermission();
+                    return true;
+                  } catch (e) {
+                    debugPrint("openSettings error: $e");
+                    return false;
+                  }
+                },
+              );
 
               // PDF listeleme handler
               controller.addJavaScriptHandler(
@@ -407,42 +296,6 @@ class _WebViewPageState extends State<WebViewPage> {
                   } catch (e) {
                     debugPrint("listPDFs error: $e");
                     return "ERROR";
-                  }
-                },
-              );
-
-              // İzin kontrol handler
-              controller.addJavaScriptHandler(
-                handlerName: 'checkPermission',
-                callback: (args) async {
-                  try {
-                    PermissionStatus status;
-                    if (Platform.isAndroid) {
-                      // Android için storage iznini kontrol et
-                      status = await Permission.storage.status;
-                      debugPrint("Storage izni durumu: ${status.isGranted}");
-                    } else {
-                      status = await Permission.storage.status;
-                    }
-                    return status.isGranted ? "true" : "false";
-                  } catch (e) {
-                    debugPrint("checkPermission error: $e");
-                    return "false";
-                  }
-                },
-              );
-
-              // Ayarları açma handler
-              controller.addJavaScriptHandler(
-                handlerName: 'openSettings',
-                callback: (args) async {
-                  try {
-                    debugPrint("Ayarlar açılıyor...");
-                    await openAppSettings();
-                    return true;
-                  } catch (e) {
-                    debugPrint("openSettings error: $e");
-                    return false;
                   }
                 },
               );
@@ -461,7 +314,6 @@ class _WebViewPageState extends State<WebViewPage> {
                       final bytes = await file.readAsBytes();
                       final base64 = base64Encode(bytes);
                       final result = "data:application/pdf;base64,$base64";
-                      debugPrint("Base64 veri hazır (${result.length} karakter)");
                       return result;
                     } else {
                       debugPrint("Dosya bulunamadı: $filePath");
@@ -474,7 +326,7 @@ class _WebViewPageState extends State<WebViewPage> {
                 },
               );
 
-              // Mevcut handler'lar (orijinal fonksiyonları koru)
+              // Mevcut handler'ları koru
               controller.addJavaScriptHandler(
                 handlerName: 'openPdfViewer',
                 callback: (args) {
@@ -560,18 +412,14 @@ class _WebViewPageState extends State<WebViewPage> {
                     // İzin kontrolü
                     PermissionStatus status;
                     if (Platform.isAndroid) {
-                      status = await Permission.storage.status;
+                      status = await Permission.manageExternalStorage.status;
                     } else {
                       status = await Permission.storage.status;
                     }
                     
                     if (!status.isGranted) {
-                      debugPrint("İzin gerekli, izin isteniyor...");
-                      final requested = await Permission.storage.request();
-                      if (!requested.isGranted) {
-                        debugPrint("İzin reddedildi");
-                        return;
-                      }
+                      debugPrint("İzin gerekli");
+                      return;
                     }
                     
                     // İzin verildi, kaydet
@@ -579,7 +427,6 @@ class _WebViewPageState extends State<WebViewPage> {
                     final directory = Directory('/storage/emulated/0/Download/PDF Reader');
                     if (!await directory.exists()) {
                       await directory.create(recursive: true);
-                      debugPrint("Dizin oluşturuldu: ${directory.path}");
                     }
                     
                     String finalFileName = originalName;
@@ -641,7 +488,6 @@ class _WebViewPageState extends State<WebViewPage> {
                       return true;
                     }
                     
-                    // Diğer durumlarda false döndür (Flutter handle edecek)
                     return false;
                   } catch (e) {
                     debugPrint("Back button handler error: $e");
@@ -664,38 +510,10 @@ class _WebViewPageState extends State<WebViewPage> {
               });
               
               debugPrint("Sayfa yükleniyor: $urlString");
-              debugPrint("Viewer durumu: $_isViewerOpen");
             },
             onLoadStop: (controller, url) async {
-              // Android fonksiyonlarını tekrar enjekte et
-              await _injectAndroidFunctions();
-              
               final urlString = url?.toString() ?? '';
               debugPrint("Sayfa yüklendi: $urlString");
-              
-              if (urlString.contains('index.html')) {
-                // Cihaz sekmesi için izin kontrolü yap
-                await controller.evaluateJavascript(source: """
-                  // Sayfa yüklendiğinde izin durumunu kontrol et
-                  setTimeout(function() {
-                    if (typeof Android !== 'undefined' && typeof Android.checkPermission === 'function') {
-                      console.log('İzin kontrolü yapılıyor...');
-                      Android.checkPermission().then(function(hasPermission) {
-                        console.log('İzin durumu:', hasPermission);
-                        if (hasPermission) {
-                          // İzin varsa cihaz PDF'lerini tara
-                          if (typeof scanDeviceForPDFs === 'function') {
-                            console.log('Cihaz PDF taraması başlatılıyor...');
-                            scanDeviceForPDFs();
-                          }
-                        } else {
-                          console.log('İzin gerekli, permission banner gösterilecek');
-                        }
-                      });
-                    }
-                  }, 500);
-                """);
-              }
             },
             onReceivedError: (controller, request, error) {
               debugPrint("WebView Error: ${error.description}");
