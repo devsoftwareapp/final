@@ -1521,1129 +1521,1279 @@
   </div>
 
   <script>
-    // --- VARIABLES ---
-    const topBar = document.getElementById('topBar');
-    const mainContent = document.getElementById('mainContent');
-    const tabs = document.querySelectorAll('.tab');
-    const panels = document.querySelectorAll('.content-panel');
-    const navItems = document.querySelectorAll('.nav-item');
-    const fabButton = document.getElementById('fabButton');
-    const fabMenu = document.getElementById('fabMenu');
-    const drawer = document.getElementById('drawer');
-    const overlay = document.getElementById('drawerOverlay');
-    const drawerItems = document.querySelectorAll('.drawer-item[data-accordion]');
-    const settingsTabs = document.querySelectorAll('.setting-tab');
-    const pdfFileInput = document.getElementById('pdfFileInput');
-    
-    // Search Variables
-    const searchBtn = document.getElementById('searchBtn');
-    const headerNormal = document.getElementById('headerNormal');
-    const searchBar = document.getElementById('searchBar');
-    const searchInput = document.getElementById('searchInput');
-    const closeSearchBtn = document.getElementById('closeSearchBtn');
 
-    // Context Menu Variables
-    const contextOverlay = document.getElementById('contextOverlay');
-    const contextSheet = document.getElementById('contextSheet');
-    const contextTitle = document.getElementById('contextTitle');
-    const contextMeta = document.getElementById('contextMeta');
-    let currentContextFile = null;
-
-    // Permission Modal Variables
-    const permissionModalOverlay = document.getElementById('permissionModalOverlay');
-
-    // Selection Mode Variables
-    const selectionHeader = document.getElementById('selectionHeader');
-    const selectionCount = document.getElementById('selectionCount');
-    let isSelectionMode = false;
-    let selectedCards = new Set();
-
-    // Data Storage
-    let importedFiles = []; // PDF Yükle ile gelen dosyalar
-    let devicePDFs = []; // Cihazdan taranan PDF'ler
-    let recentFiles = []; // Son kullanılan PDF'ler
-    let favoriteFiles = []; // Favori PDF'ler
-
-    // Scroll & Swipe State
-    let lastScrollY = 0;
-    let startX = 0;
-    let startY = 0;
-    let isSwiping = false; 
-    let isVerticalScroll = false; 
-    const headerHeight = 64; 
-    let currentNav = 'home';
-    const tabOrder = ['recent', 'favorites', 'device'];
-    
-    // --- ARAÇLAR VERİLERİ ---
-    const toolsData = [
-      {
-        id: 1,
-        title: "PDF Birleştirme",
-        icon: "merge",
-        iconCode: "merge",
-        color: "#E53935",
-        page: "birlestirme.html"
-      },
-      {
-        id: 2,
-        title: "Sesli Okuma",
-        icon: "volume_up",
-        iconCode: "volume_up",
-        color: "#4CAF50",
-        page: "sesli_okuma.html"
-      },
-      {
-        id: 3,
-        title: "OCR Metin Çıkarma",
-        icon: "text_fields",
-        iconCode: "text_fields",
-        color: "#2196F3",
-        page: "orc.html"
-      },
-      {
-        id: 4,
-        title: "PDF İmzalama",
-        icon: "draw",
-        iconCode: "draw",
-        color: "#9C27B0",
-        page: "imza.html"
-      },
-      {
-        id: 5,
-        title: "PDF Sıkıştırma",
-        icon: "compress",
-        iconCode: "compress",
-        color: "#FF9800",
-        page: "sikistirma.html"
-      },
-      {
-        id: 6,
-        title: "PDF Sayfalarını Organize Etme",
-        icon: "reorder",
-        iconCode: "reorder",
-        color: "#795548",
-        page: "organize.html"
-      },
-      {
-        id: 7,
-        title: "Resimden PDF",
-        icon: "image",
-        iconCode: "image",
-        color: "#00BCD4",
-        page: "resimden_pdf.html"
-      },
-      {
-        id: 8,
-        title: "PDF'den Resim",
-        icon: "picture_as_pdf",
-        iconCode: "picture_as_pdf",
-        color: "#607D8B",
-        page: "pdf_resme.html"
-      }
-    ];
-    
-    // --- INITIALIZATION ---
-    document.addEventListener('DOMContentLoaded', () => {
-      initTheme();
-      loadRecentFromStorage();
-      loadFavoritesFromStorage();
-      loadData();
-      loadTools();
-      attachEvents();
-      document.getElementById('recentPanel').scrollTop = 0;
-      document.querySelector('.setting-tab').classList.add('active');
-      document.querySelector('.setting-panel').classList.add('active');
-      
-      // Uygulama açıldığında cihaz PDF'lerini kontrol et
-      setTimeout(() => {
-        if (currentNav === 'home') {
-          scanDeviceForPDFs();
-        }
-      }, 1000);
-    });
-
-    // --- ARAÇLAR YÜKLEME ---
-    function loadTools() {
-      const toolsGrid = document.getElementById('toolsGrid');
-      if (!toolsGrid) return;
-      
-      let html = '';
-      toolsData.forEach(tool => {
-        html += `
-          <div class="tool-card" onclick="openToolPage('${tool.page}')">
-            <div class="tool-icon-wrapper" style="background: ${tool.color}20; color: ${tool.color};">
-              <span class="material-symbols-rounded">${tool.iconCode}</span>
-            </div>
-            <div class="tool-title">${tool.title}</div>
-          </div>
-        `;
-      });
-      
-      toolsGrid.innerHTML = html;
-    }
-    
-    function openToolPage(page) {
-      window.location.href = page;
+// --- OPFS PDF MANAGER ---
+class OPFSPdfManager {
+    constructor() {
+        this.root = null;
+        this.currentPdfHandle = null;
+        this.currentPdfName = '';
+        this.isInitialized = false;
     }
 
-    function initTheme() {
-      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const themeToSet = systemPrefersDark ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', themeToSet);
-    }
-
-    // --- PERMISSION MODAL FUNCTIONS ---
-    function showPermissionModal() {
-        permissionModalOverlay.classList.add('show');
-        // Modal gösterildiğinde diğer etkileşimleri engelle
-        document.body.style.overflow = 'hidden';
-    }
-    
-    function closePermissionModal() {
-        permissionModalOverlay.classList.remove('show');
-        document.body.style.overflow = '';
-    }
-    
-    function openSettingsForPermission() {
-        closePermissionModal();
-        
-        // Android bridge'den ayarlara yönlendir
-        if (typeof Android !== 'undefined' && Android.openSettings) {
-            Android.openSettings();
-        } else {
-            console.log("Ayarlar açılıyor...");
-            // Web için simülasyon
-            setTimeout(() => {
-                // Kullanıcının ayarları açtığını ve izin verdiğini varsayarak taramayı başlat
-                setTimeout(scanDeviceForPDFs, 2000);
-            }, 500);
-        }
-    }
-
-    function requestStoragePermission() {
-        // Eski buton yerine modal göster
-        showPermissionModal();
-    }
-
-    // --- STORAGE FUNCTIONS ---
-    function saveRecentToStorage() {
-        localStorage.setItem('pdfRecentFiles', JSON.stringify(recentFiles));
-    }
-
-    function loadRecentFromStorage() {
-        const saved = localStorage.getItem('pdfRecentFiles');
-        if (saved) {
-            try {
-                recentFiles = JSON.parse(saved);
-            } catch(e) {
-                recentFiles = [];
+    async init() {
+        try {
+            if (!navigator.storage || !navigator.storage.getDirectory) {
+                console.warn("OPFS desteklenmiyor, localStorage'a fallback yapılıyor");
+                return false;
             }
+            this.root = await navigator.storage.getDirectory();
+            this.isInitialized = true;
+            console.log("OPFS başarıyla başlatıldı");
+            return true;
+        } catch (e) {
+            console.error("OPFS başlatma hatası:", e);
+            return false;
         }
     }
 
-    function saveFavoritesToStorage() {
-        localStorage.setItem('pdfFavoriteFiles', JSON.stringify(favoriteFiles));
-    }
-
-    function loadFavoritesFromStorage() {
-        const saved = localStorage.getItem('pdfFavoriteFiles');
-        if (saved) {
-            try {
-                favoriteFiles = JSON.parse(saved);
-            } catch(e) {
-                favoriteFiles = [];
+    async savePdfToOPFS(file, fileName = null) {
+        try {
+            if (!this.isInitialized) {
+                await this.init();
             }
-        }
-    }
 
-    function addToRecentFiles(fileObj) {
-        // Aynı dosyayı kontrol et (id'ye göre)
-        const existingIndex = recentFiles.findIndex(f => f.id === fileObj.id);
-        if (existingIndex > -1) {
-            // Varsa en başa taşı
-            recentFiles.splice(existingIndex, 1);
-        }
-        
-        // En başa ekle (en son açılan en üstte)
-        recentFiles.unshift(fileObj);
-        
-        // Son 20 dosyayı sakla
-        if (recentFiles.length > 20) {
-            recentFiles = recentFiles.slice(0, 20);
-        }
-        
-        saveRecentToStorage();
-    }
-
-    function toggleFavoriteInStorage(fileId, isFavorite) {
-        // Tüm dosya listelerinde favori durumunu güncelle
-        [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
-            const fileIndex = fileList.findIndex(f => f.id === fileId);
-            if (fileIndex > -1) {
-                fileList[fileIndex].isFavorite = isFavorite;
-                fileList[fileIndex].favoriteDate = isFavorite ? new Date().toISOString() : null;
-            }
-        });
-
-        // Favoriler listesini güncelle
-        if (isFavorite) {
-            // Dosyayı bul
-            let fileToAdd = null;
-            [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
-                const file = fileList.find(f => f.id === fileId);
-                if (file && !fileToAdd) {
-                    fileToAdd = {...file};
-                }
-            });
+            const pdfName = fileName || file.name || `document_${Date.now()}.pdf`;
             
-            if (fileToAdd) {
-                // Eğer zaten favorilerde varsa kaldır
-                const existingIndex = favoriteFiles.findIndex(f => f.id === fileId);
-                if (existingIndex > -1) {
-                    favoriteFiles.splice(existingIndex, 1);
+            // 'pdfs' klasörünü oluştur veya al
+            let pdfDir;
+            try {
+                pdfDir = await this.root.getDirectoryHandle('pdfs', { create: true });
+            } catch (e) {
+                console.log("pdfs klasörü oluşturulamadı, yeniden deniyor...");
+                await this.init();
+                pdfDir = await this.root.getDirectoryHandle('pdfs', { create: true });
+            }
+
+            // Mevcut PDF'leri temizle (isteğe bağlı)
+            try {
+                const entries = await pdfDir.keys();
+                for await (const entry of entries) {
+                    if (entry === 'current.pdf' || entry === pdfName) {
+                        await pdfDir.removeEntry(entry);
+                    }
+                }
+            } catch (e) {
+                // Temizleme hatası görmezden gel
+            }
+
+            // Dosyayı ArrayBuffer olarak oku
+            const arrayBuffer = await file.arrayBuffer();
+            
+            // OPFS'ye kaydet
+            const fileHandle = await pdfDir.getFileHandle(pdfName, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(arrayBuffer);
+            await writable.close();
+
+            // Ayrıca current.pdf olarak da kaydet (hızlı erişim için)
+            const currentHandle = await pdfDir.getFileHandle('current.pdf', { create: true });
+            const currentWritable = await currentHandle.createWritable();
+            await currentWritable.write(arrayBuffer);
+            await currentWritable.close();
+
+            this.currentPdfHandle = fileHandle;
+            this.currentPdfName = pdfName;
+
+            // Dosya bilgilerini localStorage'a kaydet (meta veri için)
+            const fileInfo = {
+                name: pdfName,
+                size: file.size,
+                lastModified: file.lastModified,
+                uploaded: new Date().toISOString(),
+                opfsSaved: true
+            };
+            
+            localStorage.setItem('lastPdfInfo', JSON.stringify(fileInfo));
+            sessionStorage.setItem('currentPdfName', pdfName);
+            sessionStorage.setItem('usingOPFS', 'true');
+
+            console.log(`PDF OPFS'ye kaydedildi: ${pdfName} (${arrayBuffer.byteLength} bytes)`);
+            return { success: true, name: pdfName, size: arrayBuffer.byteLength };
+            
+        } catch (error) {
+            console.error("PDF OPFS'ye kaydedilirken hata:", error);
+            
+            // Fallback: base64 olarak sessionStorage'a kaydet
+            return await this.fallbackToBase64(file, fileName);
+        }
+    }
+
+    async fallbackToBase64(file, fileName = null) {
+        try {
+            const pdfName = fileName || file.name || `document_${Date.now()}.pdf`;
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const base64Data = e.target.result;
+                    sessionStorage.setItem('currentPdfData', base64Data);
+                    sessionStorage.setItem('currentPdfName', pdfName);
+                    sessionStorage.setItem('usingOPFS', 'false');
+                    
+                    console.log(`PDF base64 olarak kaydedildi: ${pdfName}`);
+                    resolve({ 
+                        success: true, 
+                        name: pdfName, 
+                        size: file.size,
+                        method: 'base64' 
+                    });
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        } catch (e) {
+            console.error("Base64 fallback hatası:", e);
+            return { success: false, error: e.message };
+        }
+    }
+
+    async getCurrentPdfUrl() {
+        try {
+            if (!this.isInitialized) {
+                await this.init();
+            }
+
+            const usingOPFS = sessionStorage.getItem('usingOPFS') === 'true';
+            
+            if (usingOPFS && this.isInitialized) {
+                const pdfDir = await this.root.getDirectoryHandle('pdfs', { create: false });
+                const fileHandle = await pdfDir.getFileHandle('current.pdf', { create: false });
+                const file = await fileHandle.getFile();
+                return URL.createObjectURL(file);
+            } else {
+                // Base64 fallback
+                const base64Data = sessionStorage.getItem('currentPdfData');
+                if (base64Data) {
+                    return base64Data;
+                }
+            }
+            
+            return null;
+        } catch (error) {
+            console.error("PDF URL alınırken hata:", error);
+            return null;
+        }
+    }
+
+    async cleanup() {
+        try {
+            if (this.isInitialized) {
+                const pdfDir = await this.root.getDirectoryHandle('pdfs', { create: false });
+                const entries = await pdfDir.keys();
+                
+                for await (const entry of entries) {
+                    await pdfDir.removeEntry(entry);
                 }
                 
-                // En başa ekle
-                favoriteFiles.unshift(fileToAdd);
+                await this.root.removeEntry('pdfs', { recursive: true });
+                console.log("OPFS temizlendi");
             }
-        } else {
-            // Favorilerden kaldır
-            favoriteFiles = favoriteFiles.filter(f => f.id !== fileId);
+            
+            // SessionStorage'ı temizle
+            sessionStorage.removeItem('currentPdfData');
+            sessionStorage.removeItem('currentPdfName');
+            sessionStorage.removeItem('usingOPFS');
+        } catch (e) {
+            console.error("Temizleme hatası:", e);
+        }
+    }
+
+    async getPdfFilesFromOPFS() {
+        try {
+            if (!this.isInitialized) {
+                await this.init();
+            }
+            
+            const pdfDir = await this.root.getDirectoryHandle('pdfs', { create: false });
+            const files = [];
+            
+            for await (const entry of pdfDir.values()) {
+                if (entry.kind === 'file' && entry.name.endsWith('.pdf')) {
+                    const file = await entry.getFile();
+                    files.push({
+                        name: entry.name,
+                        size: file.size,
+                        lastModified: file.lastModified,
+                        file: file
+                    });
+                }
+            }
+            
+            return files;
+        } catch (e) {
+            console.error("OPFS'den PDF listesi alınırken hata:", e);
+            return [];
+        }
+    }
+}
+
+// Global OPFS Manager instance
+const pdfManager = new OPFSPdfManager();
+
+// --- THEME INITIALIZATION ---
+function initTheme() {
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const themeToSet = systemPrefersDark ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', themeToSet);
+}
+
+// Theme change listener
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    const newTheme = e.matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    if (typeof loadData === "function") loadData(); 
+});
+
+// Initialize theme on page load
+initTheme();
+
+// --- VARIABLES ---
+const topBar = document.getElementById('topBar');
+const mainContent = document.getElementById('mainContent');
+const tabs = document.querySelectorAll('.tab');
+const panels = document.querySelectorAll('.content-panel');
+const navItems = document.querySelectorAll('.nav-item');
+const fabButton = document.getElementById('fabButton');
+const fabMenu = document.getElementById('fabMenu');
+const drawer = document.getElementById('drawer');
+const overlay = document.getElementById('drawerOverlay');
+const drawerItems = document.querySelectorAll('.drawer-item[data-accordion]');
+const settingsTabs = document.querySelectorAll('.setting-tab');
+const pdfFileInput = document.getElementById('pdfFileInput');
+
+// Search Variables
+const searchBtn = document.getElementById('searchBtn');
+const headerNormal = document.getElementById('headerNormal');
+const searchBar = document.getElementById('searchBar');
+const searchInput = document.getElementById('searchInput');
+const closeSearchBtn = document.getElementById('closeSearchBtn');
+
+// Context Menu Variables
+const contextOverlay = document.getElementById('contextOverlay');
+const contextSheet = document.getElementById('contextSheet');
+const contextTitle = document.getElementById('contextTitle');
+const contextMeta = document.getElementById('contextMeta');
+let currentContextFile = null;
+
+// Permission Modal Variables
+const permissionModalOverlay = document.getElementById('permissionModalOverlay');
+
+// Selection Mode Variables
+const selectionHeader = document.getElementById('selectionHeader');
+const selectionCount = document.getElementById('selectionCount');
+let isSelectionMode = false;
+let selectedCards = new Set();
+
+// Data Storage
+let importedFiles = [];
+let devicePDFs = [];
+let recentFiles = [];
+let favoriteFiles = [];
+
+// Scroll & Swipe State
+let lastScrollY = 0;
+let startX = 0;
+let startY = 0;
+let isSwiping = false; 
+let isVerticalScroll = false; 
+const headerHeight = 64; 
+let currentNav = 'home';
+const tabOrder = ['recent', 'favorites', 'device'];
+
+// --- TOOLS DATA ---
+const toolsData = [
+  {
+    id: 1,
+    title: "PDF Birleştirme",
+    icon: "merge",
+    iconCode: "merge",
+    color: "#E53935",
+    page: "birlestirme.html"
+  },
+  {
+    id: 2,
+    title: "Sesli Okuma",
+    icon: "volume_up",
+    iconCode: "volume_up",
+    color: "#4CAF50",
+    page: "sesli_okuma.html"
+  },
+  {
+    id: 3,
+    title: "OCR Metin Çıkarma",
+    icon: "text_fields",
+    iconCode: "text_fields",
+    color: "#2196F3",
+    page: "orc.html"
+  },
+  {
+    id: 4,
+    title: "PDF İmzalama",
+    icon: "draw",
+    iconCode: "draw",
+    color: "#9C27B0",
+    page: "imza.html"
+  },
+  {
+    id: 5,
+    title: "PDF Sıkıştırma",
+    icon: "compress",
+    iconCode: "compress",
+    color: "#FF9800",
+    page: "sikistirma.html"
+  },
+  {
+    id: 6,
+    title: "PDF Sayfalarını Organize Etme",
+    icon: "reorder",
+    iconCode: "reorder",
+    color: "#795548",
+    page: "organize.html"
+  },
+  {
+    id: 7,
+    title: "Resimden PDF",
+    icon: "image",
+    iconCode: "image",
+    color: "#00BCD4",
+    page: "resimden_pdf.html"
+  },
+  {
+    id: 8,
+    title: "PDF'den Resim",
+    icon: "picture_as_pdf",
+    iconCode: "picture_as_pdf",
+    color: "#607D8B",
+    page: "pdf_resme.html"
+  }
+];
+
+// --- INITIALIZATION ---
+document.addEventListener('DOMContentLoaded', async () => {
+  // OPFS'yi başlat
+  await pdfManager.init();
+  
+  // Diğer init işlemleri
+  loadRecentFromStorage();
+  loadFavoritesFromStorage();
+  loadData();
+  loadTools();
+  attachEvents();
+  document.getElementById('recentPanel').scrollTop = 0;
+  document.querySelector('.setting-tab').classList.add('active');
+  document.querySelector('.setting-panel').classList.add('active');
+  
+  // Uygulama açıldığında cihaz PDF'lerini kontrol et
+  setTimeout(() => {
+    if (currentNav === 'home') {
+      scanDeviceForPDFs();
+    }
+  }, 1000);
+});
+
+// --- TOOLS LOADING ---
+function loadTools() {
+  const toolsGrid = document.getElementById('toolsGrid');
+  if (!toolsGrid) return;
+  
+  let html = '';
+  toolsData.forEach(tool => {
+    html += `
+      <div class="tool-card" onclick="openToolPage('${tool.page}')">
+        <div class="tool-icon-wrapper" style="background: ${tool.color}20; color: ${tool.color};">
+          <span class="material-symbols-rounded">${tool.iconCode}</span>
+        </div>
+        <div class="tool-title">${tool.title}</div>
+      </div>
+    `;
+  });
+  
+  toolsGrid.innerHTML = html;
+}
+
+function openToolPage(page) {
+  window.location.href = page;
+}
+
+// --- PERMISSION MODAL FUNCTIONS ---
+function showPermissionModal() {
+    permissionModalOverlay.classList.add('show');
+    document.body.style.overflow = 'hidden';
+}
+
+function closePermissionModal() {
+    permissionModalOverlay.classList.remove('show');
+    document.body.style.overflow = '';
+}
+
+function openSettingsForPermission() {
+    closePermissionModal();
+    
+    if (typeof Android !== 'undefined' && Android.openSettings) {
+        Android.openSettings();
+    } else {
+        console.log("Ayarlar açılıyor...");
+        setTimeout(() => {
+            setTimeout(scanDeviceForPDFs, 2000);
+        }, 500);
+    }
+}
+
+function requestStoragePermission() {
+    showPermissionModal();
+}
+
+// --- STORAGE FUNCTIONS ---
+function saveRecentToStorage() {
+    localStorage.setItem('pdfRecentFiles', JSON.stringify(recentFiles));
+}
+
+function loadRecentFromStorage() {
+    const saved = localStorage.getItem('pdfRecentFiles');
+    if (saved) {
+        try {
+            recentFiles = JSON.parse(saved);
+        } catch(e) {
+            recentFiles = [];
+        }
+    }
+}
+
+function saveFavoritesToStorage() {
+    localStorage.setItem('pdfFavoriteFiles', JSON.stringify(favoriteFiles));
+}
+
+function loadFavoritesFromStorage() {
+    const saved = localStorage.getItem('pdfFavoriteFiles');
+    if (saved) {
+        try {
+            favoriteFiles = JSON.parse(saved);
+        } catch(e) {
+            favoriteFiles = [];
+        }
+    }
+}
+
+function addToRecentFiles(fileObj) {
+    const existingIndex = recentFiles.findIndex(f => f.id === fileObj.id);
+    if (existingIndex > -1) {
+        recentFiles.splice(existingIndex, 1);
+    }
+    
+    recentFiles.unshift(fileObj);
+    
+    if (recentFiles.length > 20) {
+        recentFiles = recentFiles.slice(0, 20);
+    }
+    
+    saveRecentToStorage();
+}
+
+function toggleFavoriteInStorage(fileId, isFavorite) {
+    [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
+        const fileIndex = fileList.findIndex(f => f.id === fileId);
+        if (fileIndex > -1) {
+            fileList[fileIndex].isFavorite = isFavorite;
+            fileList[fileIndex].favoriteDate = isFavorite ? new Date().toISOString() : null;
+        }
+    });
+
+    if (isFavorite) {
+        let fileToAdd = null;
+        [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
+            const file = fileList.find(f => f.id === fileId);
+            if (file && !fileToAdd) {
+                fileToAdd = {...file};
+            }
+        });
+        
+        if (fileToAdd) {
+            const existingIndex = favoriteFiles.findIndex(f => f.id === fileId);
+            if (existingIndex > -1) {
+                favoriteFiles.splice(existingIndex, 1);
+            }
+            
+            favoriteFiles.unshift(fileToAdd);
+        }
+    } else {
+        favoriteFiles = favoriteFiles.filter(f => f.id !== fileId);
+    }
+    
+    saveFavoritesToStorage();
+    saveRecentToStorage();
+    loadData();
+}
+
+function loadData() {
+  const sortedRecent = [...recentFiles].sort((a, b) => {
+      return new Date(b.lastOpened || b.openedDate || 0) - new Date(a.lastOpened || a.openedDate || 0);
+  });
+  renderList('recentList', sortedRecent, 'recent');
+  
+  const sortedFavorites = [...favoriteFiles].sort((a, b) => {
+      return new Date(b.favoriteDate || 0) - new Date(a.favoriteDate || 0);
+  });
+  renderList('favoritesList', sortedFavorites, 'favorites');
+  
+  const allDeviceFiles = [...devicePDFs, ...importedFiles.filter(f => !f.path || !f.path.startsWith('/'))];
+  renderList('deviceList', allDeviceFiles, 'device');
+  
+  checkPermissionAndUpdateUI();
+}
+
+function renderList(listId, files, listType) {
+    const list = document.getElementById(listId);
+    if (files.length === 0) {
+        let message = "Henüz dosya yok.";
+        if (listType === 'favorites') message = "Henüz favori dosya yok.";
+        if (listType === 'device') message = "Cihazda PDF bulunamadı.";
+        
+        list.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-icon material-symbols-rounded">${listType === 'favorites' ? 'star' : 'folder_open'}</div>
+            <p>${message}</p>
+        </div>`;
+    } else {
+        let html = '';
+        files.forEach(file => {
+            const metaText = getMetaText(file, listType);
+            html += createCard(file.name, file.size, metaText, file.isFavorite, file.id, listType);
+        });
+        list.innerHTML = html;
+        attachLongPressEvents();
+    }
+}
+
+function getMetaText(file, listType) {
+    if (listType === 'recent') {
+        if (file.lastOpened) {
+            const date = new Date(file.lastOpened);
+            const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
+            const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+            return `${file.size} • ${dateStr} • ${timeStr}`;
+        } else if (file.openedDate) {
+            const date = new Date(file.openedDate);
+            const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
+            const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+            return `${file.size} • ${dateStr} • ${timeStr}`;
+        }
+    }
+    
+    if (file.uploadDate) {
+        const date = new Date(file.uploadDate);
+        const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
+        return `${file.size} • ${dateStr}`;
+    }
+    
+    return `${file.size} • ${file.date || 'Bilinmeyen tarih'}`;
+}
+
+function createCard(name, size, meta, isFavorite, id, listType) {
+  const MAX_LENGTH = 30;
+  const truncatedName = name.length > MAX_LENGTH 
+      ? name.substring(0, MAX_LENGTH) + '...' 
+      : name;
+
+  const theme = document.documentElement.getAttribute('data-theme');
+  const bgColor = theme === 'dark' ? 'var(--pdf-color-bg)' : '#E53935';
+  const textColor = theme === 'dark' ? 'var(--pdf-color-text)' : '#E53935';
+  const fillStar = isFavorite ? 1 : 0;
+
+  const pdfIconSvg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 64 64">
+      <rect x="0" y="0" width="64" height="64" rx="10" fill="${bgColor}"/>
+      <path d="M18 12h22l10 10v30a4 4 0 0 1-4 4H18a4 4 0 0 1-4-4V16a4 4 0 0 1 4-4z"
+            fill="#FFFFFF"/>
+      <polygon points="40,12 50,22 40,22" fill="#F0F0F0"/>
+      <rect x="22" y="24" width="18" height="3" rx="1.5" fill="${textColor}"/>
+      <rect x="22" y="30" width="20" height="3" rx="1.5" fill="${textColor}"/>
+      <rect x="22" y="36" width="20" height="3" rx="1.5" fill="${textColor}"/>
+      <text x="50%" y="52" text-anchor="middle"
+            font-family="Segoe UI, Roboto, Arial, sans-serif"
+            font-weight="700" font-size="14" fill="${textColor}">
+        PDF
+      </text>
+    </svg>
+  `;
+
+  return `
+  <div class="card" 
+       data-name="${name}" 
+       data-size="${size}" 
+       data-meta="${meta}"
+       data-favorite="${isFavorite ? 'true' : 'false'}"
+       data-id="${id}"
+       data-list-type="${listType}"
+       onclick="handleCardClick(this, '${name}', ${id})">
+    
+    <div class="selection-checkbox" onclick="event.stopPropagation(); toggleCardSelection(${id})"></div>
+    
+    <div class="card-icon-svg-wrapper">
+        ${pdfIconSvg}
+    </div>
+    <div class="card-details">
+        <h3 class="card-title">${truncatedName}</h3>
+        <div class="card-meta">${meta}</div>
+    </div>
+    <div class="card-actions">
+        <button class="icon-button favorite-btn" 
+                data-fill="${fillStar}"
+                onclick="event.stopPropagation(); toggleFavorite(this, ${id})">
+            <span class="material-symbols-rounded" style="font-variation-settings: 'FILL' ${fillStar}, 'wght' 500, 'GRAD' 0, 'opsz' 24;">star</span>
+        </button>
+        <button class="icon-button more-btn" 
+                onclick="event.stopPropagation(); openContextMenu('${name}', '${size}', '${meta}', ${id})">
+            <span class="material-symbols-rounded">more_vert</span>
+        </button>
+    </div>
+  </div>`;
+}
+
+// --- ANDROID PERMISSION AND PDF SCANNING ---
+function checkAndroidPermission() {
+    try {
+        if (typeof Android !== 'undefined' && Android.checkPermission) {
+            return Android.checkPermission();
+        }
+        return false;
+    } catch (e) {
+        console.error('Permission check error:', e);
+        return false;
+    }
+}
+
+function checkPermissionAndUpdateUI() {
+    const hasPermission = checkAndroidPermission();
+    const permissionContainer = document.getElementById('permissionContainer');
+    const deviceList = document.getElementById('deviceList');
+    
+    if (!hasPermission) {
+        if (permissionContainer) permissionContainer.style.display = 'block';
+        if (deviceList) deviceList.style.display = 'none';
+    } else {
+        if (permissionContainer) permissionContainer.style.display = 'none';
+        if (deviceList) deviceList.style.display = 'grid';
+    }
+}
+
+function scanDeviceForPDFs() {
+    try {
+        if (!checkAndroidPermission()) {
+            checkPermissionAndUpdateUI();
+            return;
         }
         
-        saveFavoritesToStorage();
-        saveRecentToStorage();
+        let pdfPaths = [];
+        if (typeof Android !== 'undefined' && Android.listPDFs) {
+            const result = Android.listPDFs();
+            if (result && result.trim().length > 0 && result !== "PERMISSION_DENIED") {
+                pdfPaths = result.split('||').filter(p => p && p.trim().length > 0);
+            }
+        }
         
-        // UI'ı güncelle
+        devicePDFs = [];
+        let nextId = 1000;
+        
+        pdfPaths.forEach(path => {
+            const name = path.split('/').pop();
+            devicePDFs.push({
+                id: nextId++,
+                name: name,
+                size: getFileSizeFromPath(path),
+                date: getFileDateFromPath(path),
+                uploadDate: new Date().toISOString(),
+                isFavorite: false,
+                path: path,
+                fullPath: path,
+                source: 'device'
+            });
+        });
+        
+        checkPermissionAndUpdateUI();
+        loadData();
+        
+    } catch (e) {
+        console.error('Device scan error:', e);
+        checkPermissionAndUpdateUI();
+    }
+}
+
+function getFileSizeFromPath(path) {
+    const sizes = ["~500 KB", "~1.2 MB", "~2.5 MB", "~3.8 MB", "~5.1 MB"];
+    return sizes[Math.floor(Math.random() * sizes.length)];
+}
+
+function getFileDateFromPath(path) {
+    const now = new Date();
+    return `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+}
+
+// --- FILE HANDLING FUNCTIONS (OPFS VERSION) ---
+function handleFabAction(action) {
+  if (action === 'open_pdf') {
+      pdfFileInput.click();
+  }
+  fabMenu.classList.remove('show');
+}
+
+// OPFS ile dosya işleme
+async function handleFileSelect(event) {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (file.type !== 'application/pdf') {
+                console.log(`${file.name} bir PDF dosyası değil!`);
+                continue;
+            }
+            
+            const now = new Date();
+            const formattedDate = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+            
+            // OPFS'ye kaydet
+            const result = await pdfManager.savePdfToOPFS(file);
+            
+            if (result.success) {
+                // Dosya Objesi Oluşturma
+                const newFile = {
+                    name: result.name,
+                    size: formatBytes(file.size),
+                    date: formattedDate,
+                    uploadDate: now.toISOString(),
+                    isFavorite: false,
+                    id: Date.now() + i,
+                    source: 'imported',
+                    opfsSaved: true,
+                    method: result.method || 'opfs'
+                };
+
+                importedFiles.unshift(newFile);
+                
+                addToRecentFiles({
+                    ...newFile,
+                    openedDate: now.toISOString()
+                });
+                
+                if (currentNav !== 'home') {
+                    switchNav('home');
+                }
+                
+                switchTab('recent', true);
+                loadData();
+                
+                // Başarı mesajı
+                console.log(`PDF başarıyla ${result.method === 'opfs' ? 'OPFS' : 'base64'} olarak kaydedildi: ${result.name}`);
+            } else {
+                console.error("PDF kaydedilemedi:", result.error);
+            }
+        }
+        
+        pdfFileInput.value = '';
+    }
+}
+
+function formatBytes(bytes, decimals = 1) {
+    if (!+bytes) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
+// --- CARD CLICK HANDLER (OPFS VERSION) ---
+async function handleCardClick(element, name, cardId) {
+    if (isSelectionMode) {
+        toggleCardSelection(cardId);
+        return;
+    }
+    
+    if (!isLongPress) {
+        let fileData = recentFiles.find(f => f.id === cardId) || 
+                       importedFiles.find(f => f.id === cardId) || 
+                       devicePDFs.find(f => f.id === cardId);
+
+        if (fileData) {
+            fileData.lastOpened = new Date().toISOString();
+                
+            addToRecentFiles({
+                ...fileData,
+                openedDate: new Date().toISOString(),
+                lastOpened: new Date().toISOString()
+            });
+            
+            // PDF'i aç
+            await openPdfFile(fileData, name);
+        } else {
+            console.log("Dosya bulunamadı!");
+        }
+    }
+}
+
+async function openPdfFile(fileData, name) {
+    const pdfName = name || fileData.name || "belge.pdf";
+    
+    try {
+        // Imported file (OPFS veya base64)
+        if (fileData.source === 'imported') {
+            if (fileData.opfsSaved === true) {
+                // OPFS'den aç
+                const pdfUrl = await pdfManager.getCurrentPdfUrl();
+                if (pdfUrl) {
+                    if (pdfUrl.startsWith('blob:')) {
+                        // Blob URL
+                        sessionStorage.setItem('currentPdfBlobUrl', pdfUrl);
+                        sessionStorage.setItem('currentPdfName', pdfName);
+                        sessionStorage.setItem('usingOPFS', 'true');
+                        window.location.href = 'viewer.html';
+                    } else if (pdfUrl.startsWith('data:')) {
+                        // Base64 fallback
+                        sessionStorage.setItem('currentPdfData', pdfUrl);
+                        sessionStorage.setItem('currentPdfName', pdfName);
+                        sessionStorage.setItem('usingOPFS', 'false');
+                        window.location.href = 'viewer.html';
+                    }
+                }
+            } else if (fileData.base64) {
+                // Eski base64 dosyası
+                sessionStorage.setItem('currentPdfData', fileData.base64);
+                sessionStorage.setItem('currentPdfName', pdfName);
+                sessionStorage.setItem('usingOPFS', 'false');
+                window.location.href = 'viewer.html';
+            }
+        }
+        // Device file (Android)
+        else if (fileData.source === 'device' && fileData.fullPath) {
+            if (typeof Android !== 'undefined' && Android.getFileAsBase64) {
+                const base64Data = Android.getFileAsBase64(fileData.fullPath);
+                if (base64Data && base64Data.startsWith('data:')) {
+                    sessionStorage.setItem('currentPdfData', base64Data);
+                    sessionStorage.setItem('currentPdfName', pdfName);
+                    sessionStorage.setItem('usingOPFS', 'false');
+                    window.location.href = 'viewer.html';
+                } else {
+                    console.log("Dosya okunamadı!");
+                }
+            } else {
+                // Simülasyon
+                const simulatedBase64 = `data:application/pdf;base64,simulated_data_for_${fileData.id}`;
+                sessionStorage.setItem('currentPdfData', simulatedBase64);
+                sessionStorage.setItem('currentPdfName', pdfName);
+                sessionStorage.setItem('usingOPFS', 'false');
+                window.location.href = 'viewer.html';
+            }
+        }
+    } catch (error) {
+        console.error("PDF açma hatası:", error);
+        // Fallback
+        alert("PDF açılırken hata oluştu. Lütfen tekrar deneyin.");
+    }
+}
+
+// --- SELECTION MODE FUNCTIONS ---
+function enterSelectionMode() {
+    isSelectionMode = true;
+    document.body.classList.add('selection-mode');
+    updateSelectionCount();
+}
+
+function exitSelectionMode() {
+    isSelectionMode = false;
+    document.body.classList.remove('selection-mode');
+    selectedCards.clear();
+    document.querySelectorAll('.selection-checkbox').forEach(cb => {
+        cb.classList.remove('selected');
+    });
+    document.querySelectorAll('.card').forEach(card => {
+        card.classList.remove('selected');
+    });
+}
+
+function toggleCardSelection(cardId) {
+    if (!isSelectionMode) {
+        enterSelectionMode();
+    }
+    
+    const card = document.querySelector(`.card[data-id="${cardId}"]`);
+    const checkbox = card.querySelector('.selection-checkbox');
+    
+    if (selectedCards.has(cardId)) {
+        selectedCards.delete(cardId);
+        checkbox.classList.remove('selected');
+        card.classList.remove('selected');
+    } else {
+        selectedCards.add(cardId);
+        checkbox.classList.add('selected');
+        card.classList.add('selected');
+    }
+    
+    updateSelectionCount();
+    
+    if (selectedCards.size === 0) {
+        exitSelectionMode();
+    }
+}
+
+function selectAllCards() {
+    const allCards = document.querySelectorAll('.card:not(.hidden)');
+    allCards.forEach(card => {
+        const cardId = parseInt(card.dataset.id);
+        selectedCards.add(cardId);
+        const checkbox = card.querySelector('.selection-checkbox');
+        checkbox.classList.add('selected');
+        card.classList.add('selected');
+    });
+    updateSelectionCount();
+}
+
+function deselectAllCards() {
+    selectedCards.clear();
+    document.querySelectorAll('.selection-checkbox').forEach(cb => {
+        cb.classList.remove('selected');
+    });
+    document.querySelectorAll('.card').forEach(card => {
+        card.classList.remove('selected');
+    });
+    updateSelectionCount();
+}
+
+function shareSelectedCards() {
+    if (selectedCards.size === 0) {
+        console.log('Lütfen paylaşmak için öğe seçin.');
+        return;
+    }
+    
+    const selectedFiles = [];
+    selectedCards.forEach(cardId => {
+        let file = null;
+        [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
+            const found = fileList.find(f => f.id === cardId);
+            if (found && !file) file = found;
+        });
+        if (file) selectedFiles.push(file);
+    });
+    
+    if (selectedFiles.length > 0) {
+        if (typeof Android !== 'undefined' && Android.shareFiles) {
+            const fileData = selectedFiles.map(f => f.base64 || f.fullPath || '');
+            Android.shareFiles(fileData.join('||'));
+        } else {
+            console.log(`${selectedFiles.length} dosya paylaşım panosuna kopyalandı.`);
+        }
+    }
+}
+
+function printSelectedCards() {
+    if (selectedCards.size === 0) {
+        console.log('Lütfen yazdırmak için öğe seçin.');
+        return;
+    }
+    
+    const selectedFiles = [];
+    selectedCards.forEach(cardId => {
+        let file = null;
+        [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
+            const found = fileList.find(f => f.id === cardId);
+            if (found && !file) file = found;
+        });
+        if (file) selectedFiles.push(file);
+    });
+    
+    if (selectedFiles.length > 0) {
+        if (typeof Android !== 'undefined' && Android.printFiles) {
+            const fileData = selectedFiles.map(f => f.base64 || f.fullPath || '');
+            Android.printFiles(fileData.join('||'));
+        } else {
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<html><head><title>Yazdır</title></head><body>');
+            printWindow.document.write('<h1>Seçili PDF Dosyaları</h1>');
+            selectedFiles.forEach(file => {
+                printWindow.document.write(`<p><strong>${file.name}</strong> - ${file.size}</p>`);
+            });
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.print();
+        }
+    }
+}
+
+function deleteSelectedCards() {
+    if (selectedCards.size === 0) {
+        console.log('Lütfen silmek için öğe seçin.');
+        return;
+    }
+    
+    if (confirm(`${selectedCards.size} öğe silinecek. Emin misiniz?`)) {
+        selectedCards.forEach(cardId => {
+            recentFiles = recentFiles.filter(file => file.id !== cardId);
+            importedFiles = importedFiles.filter(file => file.id !== cardId);
+            devicePDFs = devicePDFs.filter(file => file.id !== cardId);
+            favoriteFiles = favoriteFiles.filter(file => file.id !== cardId);
+        });
+        
+        saveRecentToStorage();
+        saveFavoritesToStorage();
+        exitSelectionMode();
         loadData();
     }
+}
 
-    function loadData() {
-      // Son kullanılanlar - en son açılanlar en üstte
-      const sortedRecent = [...recentFiles].sort((a, b) => {
-          return new Date(b.lastOpened || b.openedDate || 0) - new Date(a.lastOpened || a.openedDate || 0);
-      });
-      renderList('recentList', sortedRecent, 'recent');
-      
-      // Favoriler - en son eklenen en üstte
-      const sortedFavorites = [...favoriteFiles].sort((a, b) => {
-          return new Date(b.favoriteDate || 0) - new Date(a.favoriteDate || 0);
-      });
-      renderList('favoritesList', sortedFavorites, 'favorites');
-      
-      // Cihaz PDF'lerini ve importedFiles'ı birleştir
-      const allDeviceFiles = [...devicePDFs, ...importedFiles.filter(f => !f.path || !f.path.startsWith('/'))];
-      renderList('deviceList', allDeviceFiles, 'device');
-      
-      // İzin kontrolü yap
-      checkPermissionAndUpdateUI();
-    }
+function updateSelectionCount() {
+    selectionCount.textContent = `${selectedCards.size} öğe seçildi`;
+}
 
-    // Listeleri render eden yardımcı fonksiyon
-    function renderList(listId, files, listType) {
-        const list = document.getElementById(listId);
-        if (files.length === 0) {
-            let message = "Henüz dosya yok.";
-            if (listType === 'favorites') message = "Henüz favori dosya yok.";
-            if (listType === 'device') message = "Cihazda PDF bulunamadı.";
-            
-            list.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon material-symbols-rounded">${listType === 'favorites' ? 'star' : 'folder_open'}</div>
-                <p>${message}</p>
-            </div>`;
-        } else {
-            let html = '';
-            files.forEach(file => {
-                const metaText = getMetaText(file, listType);
-                html += createCard(file.name, file.size, metaText, file.isFavorite, file.id, listType);
-            });
-            list.innerHTML = html;
-            attachLongPressEvents();
-        }
-    }
-
-    // Meta metni oluştur (listType'a göre farklı format)
-    function getMetaText(file, listType) {
-        if (listType === 'recent') {
-            // Son kullanılanlar: Boyut • Açılma Tarihi • Açılma Saati
-            if (file.lastOpened) {
-                const date = new Date(file.lastOpened);
-                const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
-                const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-                return `${file.size} • ${dateStr} • ${timeStr}`;
-            } else if (file.openedDate) {
-                const date = new Date(file.openedDate);
-                const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
-                const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-                return `${file.size} • ${dateStr} • ${timeStr}`;
-            }
-        }
-        
-        // Favoriler ve Cihazda: Boyut • Yükleme Tarihi
-        if (file.uploadDate) {
-            const date = new Date(file.uploadDate);
-            const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
-            return `${file.size} • ${dateStr}`;
-        }
-        
-        // Varsayılan
-        return `${file.size} • ${file.date || 'Bilinmeyen tarih'}`;
-    }
-
-    // KART OLUŞTURMA
-    function createCard(name, size, meta, isFavorite, id, listType) {
-      const MAX_LENGTH = 30;
-      const truncatedName = name.length > MAX_LENGTH 
-          ? name.substring(0, MAX_LENGTH) + '...' 
-          : name;
-
-      const theme = document.documentElement.getAttribute('data-theme');
-      const bgColor = theme === 'dark' ? 'var(--pdf-color-bg)' : '#E53935';
-      const textColor = theme === 'dark' ? 'var(--pdf-color-text)' : '#E53935';
-      const fillStar = isFavorite ? 1 : 0;
-
-      const pdfIconSvg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 64 64">
-          <rect x="0" y="0" width="64" height="64" rx="10" fill="${bgColor}"/>
-          <path d="M18 12h22l10 10v30a4 4 0 0 1-4 4H18a4 4 0 0 1-4-4V16a4 4 0 0 1 4-4z"
-                fill="#FFFFFF"/>
-          <polygon points="40,12 50,22 40,22" fill="#F0F0F0"/>
-          <rect x="22" y="24" width="18" height="3" rx="1.5" fill="${textColor}"/>
-          <rect x="22" y="30" width="20" height="3" rx="1.5" fill="${textColor}"/>
-          <rect x="22" y="36" width="20" height="3" rx="1.5" fill="${textColor}"/>
-          <text x="50%" y="52" text-anchor="middle"
-                font-family="Segoe UI, Roboto, Arial, sans-serif"
-                font-weight="700" font-size="14" fill="${textColor}">
-            PDF
-          </text>
-        </svg>
-      `;
-
-      return `
-      <div class="card" 
-           data-name="${name}" 
-           data-size="${size}" 
-           data-meta="${meta}"
-           data-favorite="${isFavorite ? 'true' : 'false'}"
-           data-id="${id}"
-           data-list-type="${listType}"
-           onclick="handleCardClick(this, '${name}', ${id})">
-        
-        <div class="selection-checkbox" onclick="event.stopPropagation(); toggleCardSelection(${id})"></div>
-        
-        <div class="card-icon-svg-wrapper">
-            ${pdfIconSvg}
-        </div>
-        <div class="card-details">
-            <h3 class="card-title">${truncatedName}</h3>
-            <div class="card-meta">${meta}</div>
-        </div>
-        <div class="card-actions">
-            <button class="icon-button favorite-btn" 
-                    data-fill="${fillStar}"
-                    onclick="event.stopPropagation(); toggleFavorite(this, ${id})">
-                <span class="material-symbols-rounded" style="font-variation-settings: 'FILL' ${fillStar}, 'wght' 500, 'GRAD' 0, 'opsz' 24;">star</span>
-            </button>
-            <button class="icon-button more-btn" 
-                    onclick="event.stopPropagation(); openContextMenu('${name}', '${size}', '${meta}', ${id})">
-                <span class="material-symbols-rounded">more_vert</span>
-            </button>
-        </div>
-      </div>`;
-    }
-
-    // --- ANDROID İZİN VE PDF TARAMA ---
-    
-    // Android'den izin kontrolü
-    function checkAndroidPermission() {
-        try {
-            if (typeof Android !== 'undefined' && Android.checkPermission) {
-                return Android.checkPermission();
-            }
-            return false;
-        } catch (e) {
-            console.error('Permission check error:', e);
-            return false;
-        }
+// --- FAVORITE FUNCTION ---
+function toggleFavorite(button, cardId) {
+    if (isSelectionMode) {
+        toggleCardSelection(cardId);
+        return;
     }
     
-    // İzin durumuna göre UI güncelle
-    function checkPermissionAndUpdateUI() {
-        const hasPermission = checkAndroidPermission();
-        const permissionContainer = document.getElementById('permissionContainer');
-        const deviceList = document.getElementById('deviceList');
-        
-        if (!hasPermission) {
-            // İzin yoksa banner göster, listeyi gizle
-            if (permissionContainer) permissionContainer.style.display = 'block';
-            if (deviceList) deviceList.style.display = 'none';
-        } else {
-            // İzin varsa banner gizle, listeyi göster
-            if (permissionContainer) permissionContainer.style.display = 'none';
-            if (deviceList) deviceList.style.display = 'grid';
-        }
-    }
+    const span = button.querySelector('.material-symbols-rounded');
+    const card = button.closest('.card');
+    let isFavorite = card.dataset.favorite === 'true';
 
-    // Cihaz PDF'lerini tarama
-    function scanDeviceForPDFs() {
-        try {
-            // Önce izin kontrolü
-            if (!checkAndroidPermission()) {
-                checkPermissionAndUpdateUI();
+    isFavorite = !isFavorite;
+    card.dataset.favorite = isFavorite;
+    
+    const fillValue = isFavorite ? 1 : 0;
+    span.style.fontVariationSettings = `'FILL' ${fillValue}, 'wght' 500, 'GRAD' 0, 'opsz' 24`;
+
+    toggleFavoriteInStorage(cardId, isFavorite);
+}
+
+// --- LONG PRESS EVENTS ---
+let longPressTimer;
+let isLongPress = false;
+
+function attachLongPressEvents() {
+    const cards = document.querySelectorAll('.card');
+    cards.forEach(card => {
+        card.addEventListener('touchstart', (e) => {
+            if (e.target.closest('.icon-button')) {
+                clearTimeout(longPressTimer);
                 return;
             }
             
-            // Android bridge'den PDF listesini al
-            let pdfPaths = [];
-            if (typeof Android !== 'undefined' && Android.listPDFs) {
-                const result = Android.listPDFs();
-                if (result && result.trim().length > 0 && result !== "PERMISSION_DENIED") {
-                    pdfPaths = result.split('||').filter(p => p && p.trim().length > 0);
-                }
-            }
-            
-            // PDF'leri devicePDFs dizisine ekle
-            devicePDFs = [];
-            let nextId = 1000; // Cihaz PDF'leri için yüksek ID'ler
-            
-            pdfPaths.forEach(path => {
-                const name = path.split('/').pop();
-                devicePDFs.push({
-                    id: nextId++,
-                    name: name,
-                    size: getFileSizeFromPath(path),
-                    date: getFileDateFromPath(path),
-                    uploadDate: new Date().toISOString(),
-                    isFavorite: false,
-                    path: path,
-                    fullPath: path,
-                    source: 'device'
-                });
-            });
-            
-            // UI'ı güncelle
-            checkPermissionAndUpdateUI();
-            loadData(); // Verileri yeniden yükle
-            
-        } catch (e) {
-            console.error('Device scan error:', e);
-            checkPermissionAndUpdateUI();
-        }
+            isLongPress = false;
+            longPressTimer = setTimeout(() => {
+                isLongPress = true;
+                if (navigator.vibrate) navigator.vibrate(50);
+                const cardId = parseInt(card.dataset.id);
+                toggleCardSelection(cardId);
+            }, 500);
+        }, {passive: true});
+
+        card.addEventListener('touchend', () => {
+            clearTimeout(longPressTimer);
+        });
+
+        card.addEventListener('touchmove', () => {
+            clearTimeout(longPressTimer);
+        });
+    });
+}
+
+// --- CONTEXT MENU FUNCTIONS ---
+function openContextMenu(name, size, meta, cardId) {
+    if (isSelectionMode) {
+        toggleCardSelection(cardId);
+        return;
     }
     
-    // Dosya boyutunu al (simüle)
-    function getFileSizeFromPath(path) {
-        const sizes = ["~500 KB", "~1.2 MB", "~2.5 MB", "~3.8 MB", "~5.1 MB"];
-        return sizes[Math.floor(Math.random() * sizes.length)];
-    }
+    currentContextFile = { name, cardId, size, meta };
+    contextTitle.textContent = name;
+    contextMeta.textContent = `${size} • ${meta.split(' • ')[1] || meta}`;
     
-    // Dosya tarihini al (simüle)
-    function getFileDateFromPath(path) {
-        const now = new Date();
-        return `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
-    }
+    contextOverlay.classList.add('show');
+    contextSheet.classList.add('show');
+}
 
-    // --- DOSYA YÜKLEME İŞLEMLERİ ---
-    
-    // FAB Action Handler
-    function handleFabAction(action) {
-      if (action === 'open_pdf') {
-          // Gizli inputu tetikle
-          pdfFileInput.click();
-      }
-      // Menüyü kapat
-      fabMenu.classList.remove('show');
-    }
+function closeContextMenu() {
+    contextOverlay.classList.remove('show');
+    contextSheet.classList.remove('show');
+}
 
-    // Dosya Seçim İşleyicisi (FileReader ile BASE64 dönüşümü)
-    function handleFileSelect(event) {
-        const files = event.target.files;
-        if (files && files.length > 0) {
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                if (file.type !== 'application/pdf') {
-                    console.log(`${file.name} bir PDF dosyası değil!`);
-                    continue;
-                }
-                
-                // Tarih Formatlama
-                const now = new Date();
-                const formattedDate = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
-                
-                // FileReader kullanarak dosyayı oku (Base64)
-                const reader = new FileReader();
-                
-                reader.onload = () => {
-                    const base64Data = reader.result;
-
-                    // Dosya Objesi Oluşturma
-                    const newFile = {
-                        name: file.name,
-                        size: formatBytes(file.size),
-                        date: formattedDate,
-                        uploadDate: now.toISOString(),
-                        isFavorite: false,
-                        id: Date.now() + i, // Her dosya için benzersiz ID
-                        base64: base64Data, // Base64 formatında saklıyoruz
-                        source: 'imported'
-                    };
-
-                    // importedFiles dizisine ekle
-                    importedFiles.unshift(newFile); 
-                    
-                    // Son kullanılanlara ekle
-                    addToRecentFiles({
-                        ...newFile,
-                        openedDate: now.toISOString()
+function handleContextAction(action) {
+    closeContextMenu();
+    setTimeout(() => {
+        const cardId = currentContextFile.cardId;
+        const name = currentContextFile.name;
+        
+        switch(action) {
+            case 'rename':
+                const newName = prompt(`"${name}" için yeni ad girin:`, name);
+                if (newName && newName.trim() && newName !== name) {
+                    [recentFiles, importedFiles, devicePDFs, favoriteFiles].forEach(fileList => {
+                        const fileIndex = fileList.findIndex(f => f.id === cardId);
+                        if (fileIndex > -1) {
+                            fileList[fileIndex].name = newName.trim();
+                        }
                     });
                     
-                    // Eğer Ana Sayfa'da değilsek ana sayfaya geç
-                    if (currentNav !== 'home') {
-                        switchNav('home');
-                    }
-                    
-                    // "Son Kullanılanlar" sekmesine geç
-                    switchTab('recent', true);
-                    
-                    // Listeyi yeniden çiz
+                    saveRecentToStorage();
+                    saveFavoritesToStorage();
                     loadData();
-                };
-
-                // Dosyayı Base64 DataURL olarak oku
-                reader.readAsDataURL(file);
-            }
-            
-            // Input değerini temizle
-            pdfFileInput.value = '';
+                }
+                break;
+                
+            case 'share':
+                let fileToShare = null;
+                [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
+                    const file = fileList.find(f => f.id === cardId);
+                    if (file && !fileToShare) fileToShare = file;
+                });
+                
+                if (fileToShare) {
+                    if (fileToShare.base64) {
+                        if (typeof Android !== 'undefined' && Android.shareFile) {
+                            Android.shareFile(fileToShare.base64, fileToShare.name);
+                        }
+                    } else if (fileToShare.fullPath) {
+                        if (typeof Android !== 'undefined' && Android.shareFileByPath) {
+                            Android.shareFileByPath(fileToShare.fullPath);
+                        }
+                    }
+                }
+                break;
+                
+            case 'print':
+                let fileToPrint = null;
+                [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
+                    const file = fileList.find(f => f.id === cardId);
+                    if (file && !fileToPrint) fileToPrint = file;
+                });
+                
+                if (fileToPrint) {
+                    if (typeof Android !== 'undefined' && Android.printFile) {
+                        if (fileToPrint.base64) {
+                            Android.printFile(fileToPrint.base64);
+                        } else if (fileToPrint.fullPath) {
+                            Android.printFileByPath(fileToPrint.fullPath);
+                        }
+                    }
+                }
+                break;
+                
+            case 'delete':
+                if(confirm(`"${name}" dosyasını silmek istediğinize emin misiniz?`)) {
+                    recentFiles = recentFiles.filter(f => f.id !== cardId);
+                    importedFiles = importedFiles.filter(f => f.id !== cardId);
+                    devicePDFs = devicePDFs.filter(f => f.id !== cardId);
+                    favoriteFiles = favoriteFiles.filter(f => f.id !== cardId);
+                    
+                    saveRecentToStorage();
+                    saveFavoritesToStorage();
+                    loadData();
+                }
+                break;
         }
-    }
+    }, 300);
+}
 
-    // Byte dönüştürücü
-    function formatBytes(bytes, decimals = 1) {
-        if (!+bytes) return '0 Bytes';
-        const k = 1024;
-        const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-    }
-
-    // --- SELECTION MODE FUNCTIONS ---
-
-    function enterSelectionMode() {
-        isSelectionMode = true;
-        document.body.classList.add('selection-mode');
-        updateSelectionCount();
-    }
+// --- SEARCH FUNCTIONS ---
+function triggerSearch() {
+    const query = searchInput.value.toLowerCase().trim();
+    const allCards = document.querySelectorAll('.card');
+    let visibleCount = 0;
     
-    function exitSelectionMode() {
-        isSelectionMode = false;
-        document.body.classList.remove('selection-mode');
-        selectedCards.clear();
-        document.querySelectorAll('.selection-checkbox').forEach(cb => {
-            cb.classList.remove('selected');
-        });
-        document.querySelectorAll('.card').forEach(card => {
-            card.classList.remove('selected');
-        });
-    }
-    
-    function toggleCardSelection(cardId) {
-        if (!isSelectionMode) {
-            enterSelectionMode();
-        }
+    allCards.forEach(card => {
+        const title = card.querySelector('.card-title').innerText.toLowerCase();
+        const meta = card.querySelector('.card-meta').innerText.toLowerCase();
         
-        const card = document.querySelector(`.card[data-id="${cardId}"]`);
-        const checkbox = card.querySelector('.selection-checkbox');
-        
-        if (selectedCards.has(cardId)) {
-            selectedCards.delete(cardId);
-            checkbox.classList.remove('selected');
-            card.classList.remove('selected');
+        if (query === '' || title.includes(query) || meta.includes(query)) {
+            card.classList.remove('hidden');
+            visibleCount++;
         } else {
-            selectedCards.add(cardId);
-            checkbox.classList.add('selected');
-            card.classList.add('selected');
+            card.classList.add('hidden');
+        }
+    });
+    
+    const activePanel = document.querySelector('.content-panel.active');
+    const existingEmptyState = activePanel.querySelector('.search-empty-state');
+    if (existingEmptyState) existingEmptyState.remove();
+    
+    if (visibleCount === 0 && query !== '') {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'empty-state search-empty-state';
+        emptyState.innerHTML = `
+            <div class="empty-icon material-symbols-rounded">search</div>
+            <p>"${query}" için sonuç bulunamadı</p>
+        `;
+        activePanel.appendChild(emptyState);
+    }
+}
+
+// --- EVENTS ---
+function attachEvents() {
+    
+    contextOverlay.addEventListener('click', closeContextMenu);
+    
+    permissionModalOverlay.addEventListener('click', function(e) {
+        if (e.target === permissionModalOverlay) {
+            closePermissionModal();
+        }
+    });
+
+    searchBtn.addEventListener('click', () => {
+        document.body.classList.add('is-searching');
+        
+        headerNormal.classList.add('hidden');
+        searchBar.classList.add('active');
+        searchInput.focus();
+
+        if (currentNav !== 'home') {
+            switchNav('home');
         }
         
-        updateSelectionCount();
+        triggerSearch();
+    });
+
+    closeSearchBtn.addEventListener('click', () => {
+        document.body.classList.remove('is-searching');
+
+        searchBar.classList.remove('active');
+        headerNormal.classList.remove('hidden');
+        searchInput.value = '';
         
-        if (selectedCards.size === 0) {
-            exitSelectionMode();
-        }
-    }
-    
-    function selectAllCards() {
-        const allCards = document.querySelectorAll('.card:not(.hidden)');
-        allCards.forEach(card => {
-            const cardId = parseInt(card.dataset.id);
-            selectedCards.add(cardId);
-            const checkbox = card.querySelector('.selection-checkbox');
-            checkbox.classList.add('selected');
-            card.classList.add('selected');
-        });
-        updateSelectionCount();
-    }
-    
-    function deselectAllCards() {
-        selectedCards.clear();
-        document.querySelectorAll('.selection-checkbox').forEach(cb => {
-            cb.classList.remove('selected');
-        });
         document.querySelectorAll('.card').forEach(card => {
-            card.classList.remove('selected');
-        });
-        updateSelectionCount();
-    }
-    
-    function shareSelectedCards() {
-        if (selectedCards.size === 0) {
-            console.log('Lütfen paylaşmak için öğe seçin.');
-            return;
-        }
-        
-        const fileCount = selectedCards.size;
-        
-        // Seçili dosyaları bul
-        const selectedFiles = [];
-        selectedCards.forEach(cardId => {
-            let file = null;
-            [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
-                const found = fileList.find(f => f.id === cardId);
-                if (found && !file) file = found;
-            });
-            if (file) selectedFiles.push(file);
+            card.classList.remove('hidden');
         });
         
-        // Paylaşım işlemi
-        if (selectedFiles.length > 0) {
-            // Android için
-            if (typeof Android !== 'undefined' && Android.shareFiles) {
-                // Dosya yollarını veya base64 verilerini Android'e gönder
-                const fileData = selectedFiles.map(f => f.base64 || f.fullPath || '');
-                Android.shareFiles(fileData.join('||'));
-            } else {
-                console.log(`${selectedFiles.length} dosya paylaşım panosuna kopyalandı.`);
-            }
-        }
-    }
-
-    function printSelectedCards() {
-        if (selectedCards.size === 0) {
-            console.log('Lütfen yazdırmak için öğe seçin.');
-            return;
-        }
+        document.querySelectorAll('.search-empty-state').forEach(el => el.remove());
         
-        // Seçili dosyaları bul
-        const selectedFiles = [];
-        selectedCards.forEach(cardId => {
-            let file = null;
-            [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
-                const found = fileList.find(f => f.id === cardId);
-                if (found && !file) file = found;
-            });
-            if (file) selectedFiles.push(file);
-        });
-        
-        // Yazdırma işlemi
-        if (selectedFiles.length > 0) {
-            // Android için
-            if (typeof Android !== 'undefined' && Android.printFiles) {
-                // Dosya yollarını veya base64 verilerini Android'e gönder
-                const fileData = selectedFiles.map(f => f.base64 || f.fullPath || '');
-                Android.printFiles(fileData.join('||'));
-            } else {
-                // Web için yazdırma dialog'u
-                const printWindow = window.open('', '_blank');
-                printWindow.document.write('<html><head><title>Yazdır</title></head><body>');
-                printWindow.document.write('<h1>Seçili PDF Dosyaları</h1>');
-                selectedFiles.forEach(file => {
-                    printWindow.document.write(`<p><strong>${file.name}</strong> - ${file.size}</p>`);
-                });
-                printWindow.document.write('</body></html>');
-                printWindow.document.close();
-                printWindow.print();
-            }
-        }
-    }
+        triggerSearch();
+    });
 
-    function deleteSelectedCards() {
-        if (selectedCards.size === 0) {
-            console.log('Lütfen silmek için öğe seçin.');
-            return;
-        }
-        
-        if (confirm(`${selectedCards.size} öğe silinecek. Emin misiniz?`)) {
-            // recentFiles, importedFiles, devicePDFs ve favoriteFiles dizilerinden sil
-            selectedCards.forEach(cardId => {
-                recentFiles = recentFiles.filter(file => file.id !== cardId);
-                importedFiles = importedFiles.filter(file => file.id !== cardId);
-                devicePDFs = devicePDFs.filter(file => file.id !== cardId);
-                favoriteFiles = favoriteFiles.filter(file => file.id !== cardId);
-            });
-            
-            saveRecentToStorage();
-            saveFavoritesToStorage();
-            exitSelectionMode();
-            loadData(); // Listeleri yenile
-        }
-    }
-    
-    function updateSelectionCount() {
-        selectionCount.textContent = `${selectedCards.size} öğe seçildi`;
-    }
+    searchInput.addEventListener('input', triggerSearch);
 
-    // --- FAVORİ İŞLEVİ ---
-    function toggleFavorite(button, cardId) {
-        if (isSelectionMode) {
-            toggleCardSelection(cardId);
-            return;
-        }
-        
-        const span = button.querySelector('.material-symbols-rounded');
-        const card = button.closest('.card');
-        let isFavorite = card.dataset.favorite === 'true';
-
-        isFavorite = !isFavorite;
-        card.dataset.favorite = isFavorite;
-        
-        const fillValue = isFavorite ? 1 : 0;
-        span.style.fontVariationSettings = `'FILL' ${fillValue}, 'wght' 500, 'GRAD' 0, 'opsz' 24`;
-
-        // Storage'da güncelle
-        toggleFavoriteInStorage(cardId, isFavorite);
-        
-        // UI'ı güncelle
-        loadData();
-    }
-
-    // --- LONG PRESS VE CLICK YÖNETİMİ ---
-    let longPressTimer;
-    let isLongPress = false;
-
-    function attachLongPressEvents() {
-        const cards = document.querySelectorAll('.card');
-        cards.forEach(card => {
-            card.addEventListener('touchstart', (e) => {
-                if (e.target.closest('.icon-button')) {
-                    clearTimeout(longPressTimer);
-                    return;
-                }
-                
-                isLongPress = false;
-                longPressTimer = setTimeout(() => {
-                    isLongPress = true;
-                    if (navigator.vibrate) navigator.vibrate(50);
-                    const cardId = parseInt(card.dataset.id);
-                    toggleCardSelection(cardId);
-                }, 500); 
-            }, {passive: true});
-
-            card.addEventListener('touchend', () => {
-                clearTimeout(longPressTimer);
-            });
-
-            card.addEventListener('touchmove', () => {
-                clearTimeout(longPressTimer); 
-            });
-        });
-    }
-
-    function handleCardClick(element, name, cardId) {
-        if (isSelectionMode) {
-            toggleCardSelection(cardId);
-            return;
-        }
-        
-        if (!isLongPress) {
-            // 1. Önce recentFiles'ta ara
-            let fileData = recentFiles.find(f => f.id === cardId);
-            
-            // 2. Sonra importedFiles'ta ara
-            if (!fileData) {
-                fileData = importedFiles.find(f => f.id === cardId);
-            }
-            
-            // 3. Sonra devicePDFs'te ara
-            if (!fileData) {
-                fileData = devicePDFs.find(f => f.id === cardId);
-            }
-
-            if (fileData) {
-                // Son açılma tarihini güncelle
-                fileData.lastOpened = new Date().toISOString();
-                
-              
-              
-                                       
-              
-                            
-                // Son kullanılanlara ekle/güncelle
-                addToRecentFiles({
-                    ...fileData,
-                    openedDate: new Date().toISOString(),
-                    lastOpened: new Date().toISOString()
-                });
-           
-           
-           
-           
-           
-                
-                // Base64 verisi varsa (importedFiles için)
-                if (fileData.base64) {
-                    // Verileri session storage'a kaydet
-                    sessionStorage.setItem("pdfData", fileData.base64);
-                    sessionStorage.setItem("pdfName", name);
-                    
-                    // İframe sayfasına yönlendir
-                    window.location.href = "iframe.html";
-                } 
-                // Full path varsa (devicePDFs için)
-                else if (fileData.fullPath) {
-                    // Android'den dosya içeriğini al
-                    if (typeof Android !== 'undefined' && Android.getFileAsBase64) {
-                        const base64Data = Android.getFileAsBase64(fileData.fullPath);
-                        if (base64Data && base64Data.startsWith('data:')) {
-                            sessionStorage.setItem("pdfData", base64Data);
-                            sessionStorage.setItem("pdfName", name);
-                            window.location.href = "iframe.html";
-                        } else {
-                            console.log("Dosya okunamadı!");
-                        }
-                    } else {
-                        // Simülasyon
-                        const simulatedBase64 = `data:application/pdf;base64,simulated_data_for_${fileData.id}`;
-                        sessionStorage.setItem("pdfData", simulatedBase64);
-                        sessionStorage.setItem("pdfName", name);
-                        window.location.href = "iframe.html";
-                    }
-                }
-                else {
-                    console.log("Dosya verisi bulunamadı!");
-                }
-            } else {
-                console.log("Dosya bulunamadı!");
-            }
-        }
-    }
-
-
-
-                                                                                    
-
-    // --- CONTEXT MENU FONKSİYONLARI ---
-    function openContextMenu(name, size, meta, cardId) {
-        if (isSelectionMode) {
-            toggleCardSelection(cardId);
-            return;
-        }
-        
-        currentContextFile = { name, cardId, size, meta };
-        contextTitle.textContent = name;
-        contextMeta.textContent = `${size} • ${meta.split(' • ')[1] || meta}`;
-        
-        contextOverlay.classList.add('show');
-        contextSheet.classList.add('show');
-    }
-
-    function closeContextMenu() {
-        contextOverlay.classList.remove('show');
-        contextSheet.classList.remove('show');
-    }
-
-    function handleContextAction(action) {
-        closeContextMenu();
-        setTimeout(() => {
-            const cardId = currentContextFile.cardId;
-            const name = currentContextFile.name;
-            
-            switch(action) {
-                case 'rename':
-                    const newName = prompt(`"${name}" için yeni ad girin:`, name);
-                    if (newName && newName.trim() && newName !== name) {
-                        // Tüm listelerde dosya adını güncelle
-                        [recentFiles, importedFiles, devicePDFs, favoriteFiles].forEach(fileList => {
-                            const fileIndex = fileList.findIndex(f => f.id === cardId);
-                            if (fileIndex > -1) {
-                                fileList[fileIndex].name = newName.trim();
-                            }
-                        });
-                        
-                        saveRecentToStorage();
-                        saveFavoritesToStorage();
-                        loadData();
-                    }
-                    break;
-                    
-                case 'share':
-                    // Paylaşım işlemi
-                    let fileToShare = null;
-                    [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
-                        const file = fileList.find(f => f.id === cardId);
-                        if (file && !fileToShare) fileToShare = file;
-                    });
-                    
-                    if (fileToShare) {
-                        if (fileToShare.base64) {
-                            // Base64 verisini paylaş
-                            if (typeof Android !== 'undefined' && Android.shareFile) {
-                                Android.shareFile(fileToShare.base64, fileToShare.name);
-                            }
-                        } else if (fileToShare.fullPath) {
-                            // Dosya yolunu paylaş
-                            if (typeof Android !== 'undefined' && Android.shareFileByPath) {
-                                Android.shareFileByPath(fileToShare.fullPath);
-                            }
-                        }
-                    }
-                    break;
-                    
-                case 'print':
-                    // Yazdırma işlemi
-                    let fileToPrint = null;
-                    [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
-                        const file = fileList.find(f => f.id === cardId);
-                        if (file && !fileToPrint) fileToPrint = file;
-                    });
-                    
-                    if (fileToPrint) {
-                        if (typeof Android !== 'undefined' && Android.printFile) {
-                            if (fileToPrint.base64) {
-                                Android.printFile(fileToPrint.base64);
-                            } else if (fileToPrint.fullPath) {
-                                Android.printFileByPath(fileToPrint.fullPath);
-                            }
-                        }
-                    }
-                    break;
-                    
-                case 'delete':
-                    if(confirm(`"${name}" dosyasını silmek istediğinize emin misiniz?`)) {
-                        // Dosyayı ilgili dizilerden sil
-                        recentFiles = recentFiles.filter(f => f.id !== cardId);
-                        importedFiles = importedFiles.filter(f => f.id !== cardId);
-                        devicePDFs = devicePDFs.filter(f => f.id !== cardId);
-                        favoriteFiles = favoriteFiles.filter(f => f.id !== cardId);
-                        
-                        saveRecentToStorage();
-                        saveFavoritesToStorage();
-                        loadData();
-                    }
-                    break;
-            }
-        }, 300); 
-    }
-
-    // --- SEARCH FUNCTIONS ---
-    function triggerSearch() {
-        const query = searchInput.value.toLowerCase().trim();
-        const allCards = document.querySelectorAll('.card');
-        let visibleCount = 0;
-        
-        allCards.forEach(card => {
-            const title = card.querySelector('.card-title').innerText.toLowerCase();
-            const meta = card.querySelector('.card-meta').innerText.toLowerCase();
-            
-            if (query === '' || title.includes(query) || meta.includes(query)) {
-                card.classList.remove('hidden');
-                visibleCount++;
-            } else {
-                card.classList.add('hidden');
-            }
-        });
-        
-        // Eğer hiç sonuç yoksa mesaj göster
-        const activePanel = document.querySelector('.content-panel.active');
-        const existingEmptyState = activePanel.querySelector('.search-empty-state');
-        if (existingEmptyState) existingEmptyState.remove();
-        
-        if (visibleCount === 0 && query !== '') {
-            const emptyState = document.createElement('div');
-            emptyState.className = 'empty-state search-empty-state';
-            emptyState.innerHTML = `
-                <div class="empty-icon material-symbols-rounded">search</div>
-                <p>"${query}" için sonuç bulunamadı</p>
-            `;
-            activePanel.appendChild(emptyState);
-        }
-    }
-
-    // --- EVENTS ---
-    function attachEvents() {
-        
-      contextOverlay.addEventListener('click', closeContextMenu);
-      
-      // Permission modal overlay click handler
-      permissionModalOverlay.addEventListener('click', function(e) {
-          if (e.target === permissionModalOverlay) {
-              closePermissionModal();
-          }
-      });
-
-      searchBtn.addEventListener('click', () => {
-          document.body.classList.add('is-searching'); 
-          
-          headerNormal.classList.add('hidden');
-          searchBar.classList.add('active');
-          searchInput.focus();
-
-          if (currentNav !== 'home') {
-              switchNav('home');
-          }
-          
-          // Arama modunda tüm kartları göster
-          triggerSearch();
-      });
-
-      closeSearchBtn.addEventListener('click', () => {
-          document.body.classList.remove('is-searching');
-
-          searchBar.classList.remove('active');
-          headerNormal.classList.remove('hidden');
-          searchInput.value = '';
-          
-          // Arama sonuçlarını temizle
-          document.querySelectorAll('.card').forEach(card => {
-              card.classList.remove('hidden');
-          });
-          
-          // Arama boş durum mesajını kaldır
-          document.querySelectorAll('.search-empty-state').forEach(el => el.remove());
-          
-          triggerSearch();
-      });
-
-      searchInput.addEventListener('input', triggerSearch);
-
-      // SCROLL
-      panels.forEach(panel => {
+    // SCROLL
+    panels.forEach(panel => {
         panel.addEventListener('scroll', (e) => {
-          if (document.body.classList.contains('is-searching')) return;
+            if (document.body.classList.contains('is-searching')) return;
 
-          if(currentNav !== 'home' || !panel.classList.contains('active')) return;
-          const currentY = e.target.scrollTop;
-          const direction = currentY > lastScrollY ? 'down' : 'up';
-          
-          if(currentY > 10 && direction === 'down') {
-            topBar.style.transform = `translateY(-${headerHeight}px)`;
-          } else if (direction === 'up') {
-            topBar.style.transform = 'translateY(0)';
-          }
-          lastScrollY = currentY;
+            if(currentNav !== 'home' || !panel.classList.contains('active')) return;
+            const currentY = e.target.scrollTop;
+            const direction = currentY > lastScrollY ? 'down' : 'up';
+            
+            if(currentY > 10 && direction === 'down') {
+                topBar.style.transform = `translateY(-${headerHeight}px)`;
+            } else if (direction === 'up') {
+                topBar.style.transform = 'translateY(0)';
+            }
+            lastScrollY = currentY;
         });
-      });
+    });
 
-      // SWIPE
-      panels.forEach(panel => {
+    // SWIPE
+    panels.forEach(panel => {
         panel.addEventListener('touchstart', e => {
             if (document.body.classList.contains('is-searching')) return;
 
             if(currentNav !== 'home' || !panel.classList.contains('active')) return;
             startX = e.touches[0].clientX;
             startY = e.touches[0].clientY;
-            isSwiping = false; 
+            isSwiping = false;
             isVerticalScroll = false;
         }, {passive: false});
 
@@ -2658,14 +2808,14 @@
             const moveThreshold = 10;
             
             if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > moveThreshold) {
-                e.preventDefault(); 
+                e.preventDefault();
                 isSwiping = true;
                 isVerticalScroll = false;
             } else if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > moveThreshold) {
                 isSwiping = false;
                 isVerticalScroll = true;
             }
-        }, {passive: false}); 
+        }, {passive: false});
 
         panel.addEventListener('touchend', e => {
             if (document.body.classList.contains('is-searching')) return;
@@ -2673,7 +2823,7 @@
             if(currentNav !== 'home' || !panel.classList.contains('active')) return;
             const endX = e.changedTouches[0].clientX;
             const diffX = endX - startX;
-            const swipeThreshold = 50; 
+            const swipeThreshold = 50;
 
             if (isSwiping && Math.abs(diffX) > swipeThreshold) {
                 changeTab(diffX < 0 ? 1 : -1);
@@ -2681,355 +2831,266 @@
             isSwiping = false;
             isVerticalScroll = false;
         });
-      });
-      
-      tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab, true)));
-      navItems.forEach(n => n.addEventListener('click', () => switchNav(n.dataset.nav)));
-      
-      fabButton.addEventListener('click', (e) => {
+    });
+    
+    tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab, true)));
+    navItems.forEach(n => n.addEventListener('click', () => switchNav(n.dataset.nav)));
+    
+    fabButton.addEventListener('click', (e) => {
         e.stopPropagation();
         fabMenu.classList.toggle('show');
-      });
-      document.addEventListener('click', () => fabMenu.classList.remove('show'));
-      
-      document.getElementById('menuBtn').addEventListener('click', () => {
+    });
+    document.addEventListener('click', () => fabMenu.classList.remove('show'));
+    
+    document.getElementById('menuBtn').addEventListener('click', () => {
         drawer.classList.add('open');
         overlay.classList.add('show');
-      });
-      overlay.addEventListener('click', () => {
+    });
+    overlay.addEventListener('click', () => {
         drawer.classList.remove('open');
         overlay.classList.remove('show');
-      });
-      
-      drawerItems.forEach(item => {
-          item.addEventListener('click', () => {
-              const targetId = `accordion-${item.dataset.accordion}`;
-              const targetContent = document.getElementById(targetId);
-              document.querySelectorAll('.drawer-accordion-content.open').forEach(content => {
-                  if (content !== targetContent) {
-                      content.classList.remove('open');
-                  }
-              });
-              targetContent.classList.toggle('open');
-          });
-      });
+    });
+    
+    drawerItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const targetId = `accordion-${item.dataset.accordion}`;
+            const targetContent = document.getElementById(targetId);
+            document.querySelectorAll('.drawer-accordion-content.open').forEach(content => {
+                if (content !== targetContent) {
+                    content.classList.remove('open');
+                }
+            });
+            targetContent.classList.toggle('open');
+        });
+    });
 
-      settingsTabs.forEach(tab => {
-          tab.addEventListener('click', () => {
-              const targetTab = tab.dataset.tab;
-              settingsTabs.forEach(t => t.classList.remove('active'));
-              document.querySelectorAll('.setting-panel').forEach(p => p.classList.remove('active'));
-              tab.classList.add('active');
-              document.querySelector(`.setting-panel[data-panel="${targetTab}"]`).classList.add('active');
-          });
-      });
-    }
+    settingsTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const targetTab = tab.dataset.tab;
+            settingsTabs.forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.setting-panel').forEach(p => p.classList.remove('active'));
+            tab.classList.add('active');
+            document.querySelector(`.setting-panel[data-panel="${targetTab}"]`).classList.add('active');
+        });
+    });
+}
 
-    // --- NAVIGATION ---
-    function switchTab(id, isClickOrNav = false) {
-      tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === id));
-      
-      document.querySelectorAll('#recentPanel, #favoritesPanel, #devicePanel').forEach(p => {
+// --- NAVIGATION ---
+function switchTab(id, isClickOrNav = false) {
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+    
+    document.querySelectorAll('#recentPanel, #favoritesPanel, #devicePanel').forEach(p => {
         p.classList.toggle('active', p.id === `${id}Panel`);
         if(p.id === `${id}Panel`) {
             if(isClickOrNav) {
                 p.scrollTop = 0;
-                topBar.style.transform = 'translateY(0)'; 
+                topBar.style.transform = 'translateY(0)';
                 lastScrollY = 0;
             } else {
                 const currentTransform = topBar.style.transform;
                 if (currentTransform === `translateY(-${headerHeight}px)`) {
-                     p.scrollTop = headerHeight + 1; 
-                     lastScrollY = headerHeight + 1; 
+                     p.scrollTop = headerHeight + 1;
+                     lastScrollY = headerHeight + 1;
                 } else {
                     p.scrollTop = 0;
                     lastScrollY = 0;
                 }
             }
         }
-      });
-      
-      // Cihaz sekmesine geçildiğinde PDF'leri tara
-      if (id === 'device') {
-          scanDeviceForPDFs();
-      }
+    });
+    
+    if (id === 'device') {
+        scanDeviceForPDFs();
     }
+}
 
-    function changeTab(dir) {
-      const active = document.querySelector('.tab.active').dataset.tab;
-      const idx = tabOrder.indexOf(active);
-      const nextIdx = idx + dir;
-      if(nextIdx >= 0 && nextIdx < tabOrder.length) {
-          switchTab(tabOrder[nextIdx], false); 
-      }
+function changeTab(dir) {
+    const active = document.querySelector('.tab.active').dataset.tab;
+    const idx = tabOrder.indexOf(active);
+    const nextIdx = idx + dir;
+    if(nextIdx >= 0 && nextIdx < tabOrder.length) {
+        switchTab(tabOrder[nextIdx], false);
     }
+}
 
-    function switchNav(id) {
-      if (isSelectionMode) {
-          exitSelectionMode();
-      }
-      
-      // Arama modundan çık
-      if (document.body.classList.contains('is-searching')) {
-          document.body.classList.remove('is-searching');
-          searchBar.classList.remove('active');
-          headerNormal.classList.remove('hidden');
-          searchInput.value = '';
-          triggerSearch();
-      }
-      
-      navItems.forEach(n => n.classList.toggle('active', n.dataset.nav === id));
-      currentNav = id;
-      
-      panels.forEach(p => p.classList.remove('active'));
-      topBar.style.transform = 'translateY(0)';
-      lastScrollY = 0;
-      fabButton.style.display = id === 'home' ? 'flex' : 'none';
+function switchNav(id) {
+    if (isSelectionMode) {
+        exitSelectionMode();
+    }
+    
+    if (document.body.classList.contains('is-searching')) {
+        document.body.classList.remove('is-searching');
+        searchBar.classList.remove('active');
+        headerNormal.classList.remove('hidden');
+        searchInput.value = '';
+        triggerSearch();
+    }
+    
+    navItems.forEach(n => n.classList.toggle('active', n.dataset.nav === id));
+    currentNav = id;
+    
+    panels.forEach(p => p.classList.remove('active'));
+    topBar.style.transform = 'translateY(0)';
+    lastScrollY = 0;
+    fabButton.style.display = id === 'home' ? 'flex' : 'none';
 
-      if(id === 'home') {
+    if(id === 'home') {
         topBar.classList.remove('tabs-hidden');
         mainContent.style.paddingTop = 'var(--top-bar-total)';
-        switchTab('recent', true); 
-      } else {
+        switchTab('recent', true);
+    } else {
         topBar.classList.add('tabs-hidden');
-        mainContent.style.paddingTop = `calc(${headerHeight}px + 16px)`; 
+        mainContent.style.paddingTop = `calc(${headerHeight}px + 16px)`;
         const targetPanel = document.getElementById(`${id}Panel`);
         if (targetPanel) {
-          targetPanel.classList.add('active');
-          targetPanel.scrollTop = 0;
-        }
-      }
-    }
-
-    function handleFileSource(source) {
-        if (source === 'device') {
-            scanDeviceForPDFs();
-            switchNav('home'); 
-            switchTab('device', true);
-        } else if (source === 'browse_more') {
-            // Android için dosya yöneticisini aç
-            if (typeof Android !== 'undefined' && Android.openFileManager) {
-                Android.openFileManager();
-            }
-        } else {
-            // Cloud servisleri için bağlantı
-            if (typeof Android !== 'undefined') {
-                switch(source) {
-                    case 'gdrive':
-                        Android.connectGoogleDrive();
-                        break;
-                    case 'onedrive':
-                        Android.connectOneDrive();
-                        break;
-                    case 'dropbox':
-                        Android.connectDropbox();
-                        break;
-                    case 'gmail':
-                        Android.connectGmail();
-                        break;
-                }
-            }
-        }
-    }
-    
-    function sendHelpEmail(e) {
-        e.preventDefault();
-        const email = document.getElementById('helpEmail').value;
-        const subject = document.getElementById('helpSubject').value;
-        const issue = document.getElementById('helpIssue').value;
-        const recipient = "devsoftawaremail@gmail.com";
-        const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent("Gönderen: " + email + "\n\nSorun:\n" + issue)}`;
-        window.location.href = mailtoLink;
-        document.querySelector('.help-form').reset();
-    }
-
-    // Android'den döndüğünde çağrılacak
-    function onAndroidResume() {
-        try {
-            // İzin durumunu kontrol et
-            checkPermissionAndUpdateUI();
-            
-            // Eğer cihaz sekmesindeyse PDF'leri yeniden tara
-            if (currentNav === 'home') {
-                const activeTab = document.querySelector('.tab.active').dataset.tab;
-                if (activeTab === 'device') {
-                    scanDeviceForPDFs();
-                }
-            }
-        } catch (e) {
-            console.warn('onAndroidResume error', e);
-        }
-    }
-
-    // Geri tuşu için global değişken
-    let backPressedTime = 0;
-
-    // Android geri tuşu fonksiyonu (MainActivity'den çağrılacak)
-    window.androidBackPressed = function() {
-        // Permission modal açıksa kapat
-        if (permissionModalOverlay.classList.contains('show')) {
-            closePermissionModal();
-            return false;
-        }
-        
-        // Mevcut sayfanın viewer.html olup olmadığını kontrol et
-        if (window.location.href.includes('viewer.html') || window.location.href.includes('iframe.html')) {
-            // Viewer'dan index.html'ye dön
-            window.location.href = 'index.html';
-            return true;
-        }
-        
-        // Eğer selection modundaysa çık
-        if (isSelectionMode) {
-            exitSelectionMode();
-            return false;
-        }
-        
-        // Eğer arama modundaysa çık
-        if (document.body.classList.contains('is-searching')) {
-            closeSearchBtn.click();
-            return false;
-        }
-        
-        // Eğer drawer açıksa kapat
-        if (drawer.classList.contains('open')) {
-            drawer.classList.remove('open');
-            overlay.classList.remove('show');
-            return false;
-        }
-        
-        // Eğer context menu açıksa kapat
-        if (contextSheet.classList.contains('show')) {
-            closeContextMenu();
-            return false;
-        }
-        
-        // Eğer FAB menu açıksa kapat
-        if (fabMenu.classList.contains('show')) {
-            fabMenu.classList.remove('show');
-            return false;
-        }
-        
-        // Ana sayfada değilsek ana sayfaya dön
-        if (currentNav !== 'home') {
-            switchNav('home');
-            return false;
-        }
-        
-        // Ana sayfadaysak çıkış kontrolü
-        const now = Date.now();
-        if (backPressedTime + 2000 > now) {
-            // Çift tıklama ile çık (Android tarafında işlenecek)
-            return 'exit_check';
-        } else {
-            backPressedTime = now;
-            return false;
-        }
-    };
-
-    // Global fonksiyonlar
-    window.sendHelpEmail = sendHelpEmail;
-    window.handleFileSource = handleFileSource;
-    window.handleFabAction = handleFabAction;
-    window.triggerSearch = triggerSearch;
-    window.openContextMenu = openContextMenu;
-    window.handleContextAction = handleContextAction;
-    window.handleCardClick = handleCardClick;
-    window.toggleFavorite = toggleFavorite;
-    window.enterSelectionMode = enterSelectionMode;
-    window.exitSelectionMode = exitSelectionMode;
-    window.toggleCardSelection = toggleCardSelection;
-    window.selectAllCards = selectAllCards;
-    window.deselectAllCards = deselectAllCards;
-    window.deleteSelectedCards = deleteSelectedCards;
-    window.shareSelectedCards = shareSelectedCards; 
-    window.printSelectedCards = printSelectedCards;
-    window.handleFileSelect = handleFileSelect;
-    window.scanDeviceForPDFs = scanDeviceForPDFs;
-    window.onAndroidResume = onAndroidResume;
-    window.openToolPage = openToolPage;
-    window.requestStoragePermission = requestStoragePermission;
-    window.showPermissionModal = showPermissionModal;
-    window.closePermissionModal = closePermissionModal;
-    window.openSettingsForPermission = openSettingsForPermission;
-    
-    
-    
-    
-    
-function handleCardClick(element, name, cardId) {
-    if (isSelectionMode) {
-        toggleCardSelection(cardId);
-        return;
-    }
-    
-    if (!isLongPress) {
-        // Dosyayı bul
-        let fileData = recentFiles.find(f => f.id === cardId) || 
-                       importedFiles.find(f => f.id === cardId) || 
-                       devicePDFs.find(f => f.id === cardId);
-
-        if (fileData) {
-            // Son açılma tarihini güncelle
-            fileData.lastOpened = new Date().toISOString();
-                
-            // Son kullanılanlara ekle/güncelle
-            addToRecentFiles({
-                ...fileData,
-                openedDate: new Date().toISOString(),
-                lastOpened: new Date().toISOString()
-            });
-            
-            // FLUTTER'a mesaj gönder
-            sendToFlutter(fileData, name);
-        } else {
-            console.log("Dosya bulunamadı!");
+            targetPanel.classList.add('active');
+            targetPanel.scrollTop = 0;
         }
     }
 }
 
-// Flutter'a mesaj gönderen fonksiyon
-function sendToFlutter(fileData, name) {
-    const pdfName = name || fileData.name || "belge.pdf";
-    let base64ToSend = null;
-
-    // Base64 verisi varsa
-    if (fileData.base64) {
-        base64ToSend = fileData.base64;
-    } 
-    // Full path varsa (Android Bridge)
-    else if (fileData.fullPath) {
-        if (typeof Android !== 'undefined' && Android.getFileAsBase64) {
-            base64ToSend = Android.getFileAsBase64(fileData.fullPath);
-        } else {
-            // Test için simülasyon
-            base64ToSend = `data:application/pdf;base64,simulated_data_for_${fileData.id}`;
-        }
-    }
-
-    if (base64ToSend) {
-        try {
-            // FLUTTER JavaScript Channel'ı çağır
-            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-                window.flutter_inappwebview.callHandler('openPdfViewer', base64ToSend, pdfName);
-            } else {
-                // Fallback: eski yöntem (sessionStorage + redirect)
-                console.warn('Flutter channel not found, using fallback');
-                sessionStorage.setItem('currentPdfData', base64ToSend);
-                sessionStorage.setItem('currentPdfName', pdfName);
-                window.location.href = 'viewer.html';
-            }
-        } catch (e) {
-            console.error("Flutter communication error:", e);
-            // Fallback
-            sessionStorage.setItem('currentPdfData', base64ToSend);
-            sessionStorage.setItem('currentPdfName', pdfName);
-            window.location.href = 'viewer.html';
+function handleFileSource(source) {
+    if (source === 'device') {
+        scanDeviceForPDFs();
+        switchNav('home');
+        switchTab('device', true);
+    } else if (source === 'browse_more') {
+        if (typeof Android !== 'undefined' && Android.openFileManager) {
+            Android.openFileManager();
         }
     } else {
-        console.log("PDF verisi oluşturulamadı!");
+        if (typeof Android !== 'undefined') {
+            switch(source) {
+                case 'gdrive':
+                    Android.connectGoogleDrive();
+                    break;
+                case 'onedrive':
+                    Android.connectOneDrive();
+                    break;
+                case 'dropbox':
+                    Android.connectDropbox();
+                    break;
+                case 'gmail':
+                    Android.connectGmail();
+                    break;
+            }
+        }
     }
 }
+
+function sendHelpEmail(e) {
+    e.preventDefault();
+    const email = document.getElementById('helpEmail').value;
+    const subject = document.getElementById('helpSubject').value;
+    const issue = document.getElementById('helpIssue').value;
+    const recipient = "devsoftawaremail@gmail.com";
+    const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent("Gönderen: " + email + "\n\nSorun:\n" + issue)}`;
+    window.location.href = mailtoLink;
+    document.querySelector('.help-form').reset();
+}
+
+// Android resume handler
+function onAndroidResume() {
+    try {
+        checkPermissionAndUpdateUI();
+        
+        if (currentNav === 'home') {
+            const activeTab = document.querySelector('.tab.active').dataset.tab;
+            if (activeTab === 'device') {
+                scanDeviceForPDFs();
+            }
+        }
+    } catch (e) {
+        console.warn('onAndroidResume error', e);
+    }
+}
+
+// Android back button
+let backPressedTime = 0;
+
+window.androidBackPressed = function() {
+    if (permissionModalOverlay.classList.contains('show')) {
+        closePermissionModal();
+        return false;
+    }
+    
+    if (window.location.href.includes('viewer.html') || window.location.href.includes('iframe.html')) {
+        window.location.href = 'index.html';
+        return true;
+    }
+    
+    if (isSelectionMode) {
+        exitSelectionMode();
+        return false;
+    }
+    
+    if (document.body.classList.contains('is-searching')) {
+        closeSearchBtn.click();
+        return false;
+    }
+    
+    if (drawer.classList.contains('open')) {
+        drawer.classList.remove('open');
+        overlay.classList.remove('show');
+        return false;
+    }
+    
+    if (contextSheet.classList.contains('show')) {
+        closeContextMenu();
+        return false;
+    }
+    
+    if (fabMenu.classList.contains('show')) {
+        fabMenu.classList.remove('show');
+        return false;
+    }
+    
+    if (currentNav !== 'home') {
+        switchNav('home');
+        return false;
+    }
+    
+    const now = Date.now();
+    if (backPressedTime + 2000 > now) {
+        return 'exit_check';
+    } else {
+        backPressedTime = now;
+        return false;
+    }
+};
+
+// Global functions
+window.sendHelpEmail = sendHelpEmail;
+window.handleFileSource = handleFileSource;
+window.handleFabAction = handleFabAction;
+window.triggerSearch = triggerSearch;
+window.openContextMenu = openContextMenu;
+window.handleContextAction = handleContextAction;
+window.handleCardClick = handleCardClick;
+window.toggleFavorite = toggleFavorite;
+window.enterSelectionMode = enterSelectionMode;
+window.exitSelectionMode = exitSelectionMode;
+window.toggleCardSelection = toggleCardSelection;
+window.selectAllCards = selectAllCards;
+window.deselectAllCards = deselectAllCards;
+window.deleteSelectedCards = deleteSelectedCards;
+window.shareSelectedCards = shareSelectedCards;
+window.printSelectedCards = printSelectedCards;
+window.handleFileSelect = handleFileSelect;
+window.scanDeviceForPDFs = scanDeviceForPDFs;
+window.onAndroidResume = onAndroidResume;
+window.openToolPage = openToolPage;
+window.requestStoragePermission = requestStoragePermission;
+window.showPermissionModal = showPermissionModal;
+window.closePermissionModal = closePermissionModal;
+window.openSettingsForPermission = openSettingsForPermission;
+
+// OPFS cleanup on unload (optional)
+window.addEventListener('beforeunload', async () => {
+    // Temizlik yapılabilir, isteğe bağlı
+    // await pdfManager.cleanup();
+});
+
 
   </script>
 </body>
