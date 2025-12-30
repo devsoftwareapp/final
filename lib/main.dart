@@ -8,7 +8,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:printing/printing.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,64 +56,8 @@ class _WebViewPageState extends State<WebViewPage> {
     return base64Decode(base64String);
   }
 
-  // EN KESİN ÇÖZÜM: DOĞRUDAN "TÜM DOSYALARA ERİŞİM" SAYFASINA YÖNLENDİR
-  Future<void> _openAllFilesAccessSettings() async {
-    if (Platform.isAndroid) {
-      try {
-        // Android 11+ (API 30+) için
-        if (await canLaunchUrl(Uri.parse('package:com.devsoftware.pdfreader'))) {
-          // İlk yöntem: MANAGE_APP_ALL_FILES_ACCESS_PERMISSION
-          try {
-            await launchUrl(
-              Uri.parse('package:com.devsoftware.pdfreader'),
-              mode: LaunchMode.externalApplication,
-            );
-            return;
-          } catch (e) {
-            debugPrint("Yöntem 1 hatası: $e");
-          }
-          
-          // İkinci yöntem: doğrudan intent string'i
-          try {
-            const intentUrl = 'intent://com.devsoftware.pdfreader#Intent;action=android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION;package=com.devsoftware.pdfreader;end';
-            if (await canLaunchUrl(Uri.parse(intentUrl))) {
-              await launchUrl(
-                Uri.parse(intentUrl),
-                mode: LaunchMode.externalApplication,
-              );
-              return;
-            }
-          } catch (e) {
-            debugPrint("Yöntem 2 hatası: $e");
-          }
-          
-          // Üçüncü yöntem: uygulama detay sayfasına git
-          try {
-            const settingsUrl = 'package:com.devsoftware.pdfreader';
-            await launchUrl(
-              Uri.parse(settingsUrl),
-              mode: LaunchMode.externalApplication,
-            );
-            return;
-          } catch (e) {
-            debugPrint("Yöntem 3 hatası: $e");
-          }
-        }
-        
-        // Son çare: normal ayarlara yönlendir
-        await openAppSettings();
-        
-      } catch (e) {
-        debugPrint("Tüm yöntemler başarısız: $e");
-        await openAppSettings();
-      }
-    } else {
-      await openAppSettings();
-    }
-  }
-
   // GÖRSELDEKİ İZİN TASARIMINI GÖSTEREN FONKSİYON
-  void _showPermissionDialog({String? base64Data, String? originalName, required String dialogContext}) {
+  void _showPermissionDialog(String base64Data, String originalName) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -171,9 +114,10 @@ class _WebViewPageState extends State<WebViewPage> {
                     ),
                     onPressed: () async {
                       Navigator.pop(context);
-                      
-                      // DOĞRUDAN "TÜM DOSYALARA ERİŞİM" SAYFASINA YÖNLENDİR
-                      await _openAllFilesAccessSettings();
+                      // Görseldeki "Tüm dosyalara erişim" sayfasına yönlendirir
+                      if (await Permission.manageExternalStorage.request().isPermanentlyDenied) {
+                        openAppSettings();
+                      }
                     },
                     child: const Text("Ayarlara Gidin"),
                   ),
@@ -184,70 +128,6 @@ class _WebViewPageState extends State<WebViewPage> {
         ),
       ),
     );
-  }
-
-  // FAB İÇİN İZİN KONTROL FONKSİYONU
-  Future<bool> _checkPermissionForFab() async {
-    debugPrint("FAB için izin kontrolü başlatılıyor");
-    
-    try {
-      // Android 11+ için MANAGE_EXTERNAL_STORAGE kontrolü
-      if (Platform.isAndroid) {
-        final manageStatus = await Permission.manageExternalStorage.status;
-        debugPrint("ManageExternalStorage durumu: $manageStatus");
-        
-        if (manageStatus.isGranted) {
-          debugPrint("MANAGE_EXTERNAL_STORAGE izni VERİLMİŞ");
-          return true;
-        }
-      }
-      
-      // Storage iznini kontrol et
-      PermissionStatus storageStatus = await Permission.storage.status;
-      debugPrint("Storage izni durumu: $storageStatus");
-
-      // Eğer izin verilmişse true dön
-      if (storageStatus.isGranted) {
-        debugPrint("İzin ZATEN VERİLMİŞ");
-        return true;
-      }
-
-      // İzin iste
-      debugPrint("İzin isteniyor...");
-      PermissionStatus result = await Permission.storage.request();
-      
-      debugPrint("İzin sonucu: $result");
-      
-      if (result.isGranted) {
-        debugPrint("İzin VERİLDİ");
-        return true;
-      } else {
-        debugPrint("İzin REDDEDİLDİ");
-        return false;
-      }
-    } catch (e) {
-      debugPrint("İzin hatası: $e");
-      return false;
-    }
-  }
-
-  // FAB - PDF AÇ İÇİN İZİN KONTROLLÜ FONKSİYON
-  Future<void> _handleFabOpenPdf() async {
-    bool hasPermission = await _checkPermissionForFab();
-    
-    if (!hasPermission) {
-      // İzin yoksa diyalog göster
-      _showPermissionDialog(dialogContext: "fab_open_pdf");
-      return;
-    }
-
-    // İzin varsa JavaScript'i çalıştır (HTML'deki file input'u tetikle)
-    if (webViewController != null) {
-      await webViewController!.evaluateJavascript(source: """
-        // HTML'deki file input'u tetikle
-        document.getElementById('pdfFileInput').click();
-      """);
-    }
   }
 
   // Dosyayı diske yazan ana fonksiyon
@@ -265,7 +145,7 @@ class _WebViewPageState extends State<WebViewPage> {
 
     // Eğer izin yoksa görsel diyaloğu göster ve dur
     if (!status.isGranted) {
-      _showPermissionDialog(base64Data: base64Data, originalName: originalName, dialogContext: "viewer_download");
+      _showPermissionDialog(base64Data, originalName);
       return;
     }
 
@@ -537,14 +417,6 @@ class _WebViewPageState extends State<WebViewPage> {
                   final String base64Data = args[0];
                   final String originalName = args[1];
                   _savePdfToFile(base64Data, originalName);
-                },
-              );
-
-              // YENİ: FAB - PDF AÇ handler'ı
-              controller.addJavaScriptHandler(
-                handlerName: 'openFabPdf',
-                callback: (args) async {
-                  await _handleFabOpenPdf();
                 },
               );
 
