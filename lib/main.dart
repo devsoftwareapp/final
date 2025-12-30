@@ -9,7 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:printing/printing.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:android_intent_plus/android_intent.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,55 +62,33 @@ class _WebViewPageState extends State<WebViewPage> {
   Future<void> _openAllFilesAccessSettings() async {
     if (Platform.isAndroid) {
       try {
-        // YÖNTEM 1: MANAGE_APP_ALL_FILES_ACCESS_PERMISSION (Android 11+)
+        // Android 11+ için doğrudan ayarlara yönlendir
+        // MANAGE_APP_ALL_FILES_ACCESS_PERMISSION intent'ini kullan
+        const platform = MethodChannel('com.devsoftware.pdfreader/settings');
+        
         try {
-          final intent1 = AndroidIntent(
-            action: 'android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION',
-            data: 'package:com.devsoftware.pdfreader',
-          );
-          await intent1.launch();
+          await platform.invokeMethod('openAllFilesAccessSettings');
           return;
         } catch (e) {
-          debugPrint("Yöntem 1 hatası: $e");
+          debugPrint("Native method hatası: $e");
         }
-
-        // YÖNTEM 2: MANAGE_ALL_FILES_ACCESS_PERMISSION
+        
+        // URL ile açmayı dene
         try {
-          final intent2 = AndroidIntent(
-            action: 'android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION',
-          );
-          await intent2.launch();
-          return;
+          const url = 'package:com.devsoftware.pdfreader';
+          if (await canLaunchUrl(Uri.parse(url))) {
+            await launchUrl(Uri.parse(url));
+            return;
+          }
         } catch (e) {
-          debugPrint("Yöntem 2 hatası: $e");
+          debugPrint("URL açma hatası: $e");
         }
-
-        // YÖNTEM 3: Uygulama detay sayfasına git
-        try {
-          final intent3 = AndroidIntent(
-            action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
-            data: 'package:com.devsoftware.pdfreader',
-          );
-          await intent3.launch();
-          return;
-        } catch (e) {
-          debugPrint("Yöntem 3 hatası: $e");
-        }
-
-        // YÖNTEM 4: App info sayfasına git
-        try {
-          const platform = MethodChannel('com.devsoftware.pdfreader/channel');
-          await platform.invokeMethod('openAppSettings');
-        } catch (e) {
-          debugPrint("Yöntem 4 hatası: $e");
-        }
-
-        // SON ÇARE: Normal ayarlar
+        
+        // Son çare: normal ayarlara yönlendir
         await openAppSettings();
         
       } catch (e) {
-        debugPrint("Tüm yöntemler başarısız: $e");
-        // Fallback
+        debugPrint("Ayarlar açma hatası: $e");
         await openAppSettings();
       }
     } else {
