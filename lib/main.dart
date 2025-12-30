@@ -56,10 +56,10 @@ class _WebViewPageState extends State<WebViewPage> {
     return base64Decode(base64String);
   }
 
-  // GÖRSELDEKİ İZİN TASARIMINI GÖSTEREN FONKSİYON (DÜZELTİLDİ)
+  // GÖRSELDEKİ İZİN TASARIMINI GÖSTEREN FONKSİYON
   void _showPermissionDialog({String? base64Data, String? originalName, required String dialogContext}) {
     showDialog(
-      context: context, // BU SATIR DÜZELTİLDİ
+      context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
@@ -114,8 +114,17 @@ class _WebViewPageState extends State<WebViewPage> {
                     ),
                     onPressed: () async {
                       Navigator.pop(context);
-                      // Ayarlara yönlendir
-                      await openAppSettings();
+                      
+                      // GÖRSELDEKİ AYARLAR SAYFASINA YÖNLENDİR
+                      try {
+                        // Android'in dosya erişim izinleri sayfasına yönlendir
+                        await openAppSettings();
+                        
+                        // Alternatif olarak doğrudan uygulama izinleri sayfasına
+                        // await openAppSettings();
+                      } catch (e) {
+                        debugPrint("Ayarlar açma hatası: $e");
+                      }
                     },
                     child: const Text("Ayarlara Gidin"),
                   ),
