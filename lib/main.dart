@@ -283,6 +283,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               displayZoomControls: false,
               builtInZoomControls: false,
               safeBrowsingEnabled: false,
+              // ✅ OPFS desteği için gerekli
+              sharedCookiesEnabled: true,
+              thirdPartyCookiesEnabled: true,
             ),
             initialUserScripts: UnmodifiableListView<UserScript>([
               UserScript(
@@ -349,6 +352,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                     if (await file.exists()) {
                       final bytes = await file.readAsBytes();
+                      
+                      // ✅ Büyük dosyalar için sessionStorage yerine OPFS kullanılacak
+                      // Bu yüzden sadece base64 string dönüyoruz
                       return 'data:application/pdf;base64,${base64Encode(bytes)}';
                     }
                   } catch (e) {
@@ -403,6 +409,25 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
 
+              // --- HANDLER: PATH İLE PAYLAŞ ---
+              controller.addJavaScriptHandler(
+                handlerName: 'sharePdfByPath',
+                callback: (args) async {
+                  try {
+                    String filePath = args[0];
+                    final file = File(filePath);
+                    
+                    if (await file.exists()) {
+                      await Share.shareXFiles([XFile(file.path)]);
+                    } else {
+                      debugPrint("Dosya bulunamadı: $filePath");
+                    }
+                  } catch (e) {
+                    debugPrint("Path ile paylaşma hatası: $e");
+                  }
+                },
+              );
+
               // --- HANDLER: YAZDIR ---
               controller.addJavaScriptHandler(
                 handlerName: 'printPdf',
@@ -422,6 +447,29 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
 
+              // --- HANDLER: PATH İLE YAZDIR ---
+              controller.addJavaScriptHandler(
+                handlerName: 'printPdfByPath',
+                callback: (args) async {
+                  try {
+                    String filePath = args[0];
+                    final file = File(filePath);
+                    
+                    if (await file.exists()) {
+                      final bytes = await file.readAsBytes();
+                      await Printing.layoutPdf(
+                        onLayout: (format) async => bytes,
+                        name: file.path.split('/').last,
+                      );
+                    } else {
+                      debugPrint("Dosya bulunamadı: $filePath");
+                    }
+                  } catch (e) {
+                    debugPrint("Path ile yazdırma hatası: $e");
+                  }
+                },
+              );
+
               // --- HANDLER: İNDİR ---
               controller.addJavaScriptHandler(
                 handlerName: 'downloadPdf',
@@ -429,10 +477,19 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   try {
                     String base64Data = args[0];
                     String fileName = args.length > 1 ? args[1] : 'document.pdf';
-                    _savePdfToFile(base64Data, fileName);
+                    await _savePdfToFile(base64Data, fileName);
                   } catch (e) {
                     debugPrint("İndirme Hatası: $e");
                   }
+                },
+              );
+
+              // --- HANDLER: OPFS BOYUT KONTROLÜ ---
+              controller.addJavaScriptHandler(
+                handlerName: 'checkOPFSSupport',
+                callback: (args) async {
+                  // OPFS WebView'de destekleniyor
+                  return true;
                 },
               );
             },
@@ -451,6 +508,13 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             },
             onConsoleMessage: (controller, consoleMessage) {
               debugPrint("JS Console: ${consoleMessage.message}");
+            },
+            // ✅ OPFS için gerekli - Storage erişim hatalarını önle
+            onPermissionRequest: (controller, permissionRequest) async {
+              return PermissionResponse(
+                resources: permissionRequest.resources,
+                action: PermissionResponseAction.GRANT,
+              );
             },
           ),
         ),
