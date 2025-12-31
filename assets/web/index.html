@@ -2176,35 +2176,55 @@ function checkPermissionAndUpdateUI() {
     }
 }
 
-function scanDeviceForPDFs() {
+
+
+
+
+
+// Güncellenmiş scanDeviceForPDFs fonksiyonu - ASYNC
+async function scanDeviceForPDFs() {
     try {
-        if (!checkAndroidPermission()) {
+        // İzin kontrolü - async olarak
+        const hasPermission = await checkAndroidPermission();
+        
+        if (!hasPermission) {
             checkPermissionAndUpdateUI();
             return;
         }
         
-        let pdfPaths = [];
-        if (typeof Android !== 'undefined' && Android.listPDFs) {
-            const result = Android.listPDFs();
-            if (result && result.trim().length > 0 && result !== "PERMISSION_DENIED") {
-                pdfPaths = result.split('||').filter(p => p && p.trim().length > 0);
+        // PDF dosyalarını listele - async olarak Flutter'dan
+        let pdfFiles = [];
+        if (typeof window.flutter_inappwebview !== 'undefined') {
+            try {
+                const jsonResult = await window.flutter_inappwebview.callHandler('listPdfFiles');
+                if (jsonResult) {
+                    pdfFiles = JSON.parse(jsonResult);
+                }
+            } catch (e) {
+                console.error('PDF listesi alınamadı:', e);
             }
         }
         
         devicePDFs = [];
         let nextId = 1000;
         
-        pdfPaths.forEach(path => {
-            const name = path.split('/').pop();
+        pdfFiles.forEach(fileInfo => {
+            // Dosya boyutunu formatla
+            const sizeFormatted = fileInfo.size ? formatBytes(fileInfo.size) : '0 KB';
+            
+            // Tarihi formatla
+            const date = new Date(fileInfo.modified);
+            const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
+            
             devicePDFs.push({
                 id: nextId++,
-                name: name,
-                size: getFileSizeFromPath(path),
-                date: getFileDateFromPath(path),
+                name: fileInfo.name,
+                size: sizeFormatted,
+                date: dateStr,
                 uploadDate: new Date().toISOString(),
                 isFavorite: false,
-                path: path,
-                fullPath: path,
+                path: fileInfo.path,
+                fullPath: fileInfo.path,
                 source: 'device'
             });
         });
@@ -2218,6 +2238,35 @@ function scanDeviceForPDFs() {
     }
 }
 
+// checkAndroidPermission fonksiyonunu ASYNC yap
+async function checkAndroidPermission() {
+    try {
+        if (typeof window.flutter_inappwebview !== 'undefined') {
+            return await window.flutter_inappwebview.callHandler('checkStoragePermission');
+        }
+        return false;
+    } catch (e) {
+        console.error('Permission check error:', e);
+        return false;
+    }
+}
+
+// checkPermissionAndUpdateUI fonksiyonunu ASYNC yap
+async function checkPermissionAndUpdateUI() {
+    const hasPermission = await checkAndroidPermission();
+    const permissionContainer = document.getElementById('permissionContainer');
+    const deviceList = document.getElementById('deviceList');
+    
+    if (!hasPermission) {
+        if (permissionContainer) permissionContainer.style.display = 'block';
+        if (deviceList) deviceList.style.display = 'none';
+    } else {
+        if (permissionContainer) permissionContainer.style.display = 'none';
+        if (deviceList) deviceList.style.display = 'grid';
+    }
+}
+
+// Bu fonksiyonlar artık gerekli değil, ama uyumluluk için bırakılabilir
 function getFileSizeFromPath(path) {
     const sizes = ["~500 KB", "~1.2 MB", "~2.5 MB", "~3.8 MB", "~5.1 MB"];
     return sizes[Math.floor(Math.random() * sizes.length)];
@@ -2330,6 +2379,7 @@ async function handleCardClick(element, name, cardId) {
     }
 }
 
+// openPdfFile fonksiyonu - Flutter bridge ile güncellendi
 async function openPdfFile(fileData, name) {
     const pdfName = name || fileData.name || "belge.pdf";
     
@@ -2362,33 +2412,43 @@ async function openPdfFile(fileData, name) {
                 window.location.href = 'viewer.html';
             }
         }
-        // Device file (Android)
+        // Device file (Flutter bridge ile)
         else if (fileData.source === 'device' && fileData.fullPath) {
-            if (typeof Android !== 'undefined' && Android.getFileAsBase64) {
-                const base64Data = Android.getFileAsBase64(fileData.fullPath);
-                if (base64Data && base64Data.startsWith('data:')) {
-                    sessionStorage.setItem('currentPdfData', base64Data);
-                    sessionStorage.setItem('currentPdfName', pdfName);
-                    sessionStorage.setItem('usingOPFS', 'false');
-                    window.location.href = 'viewer.html';
-                } else {
-                    console.log("Dosya okunamadı!");
+            if (typeof window.flutter_inappwebview !== 'undefined') {
+                try {
+                    // Flutter'dan dosya içeriğini base64 olarak al
+                    const base64Data = await window.flutter_inappwebview.callHandler('getFileAsBase64', fileData.fullPath);
+                    
+                    if (base64Data && base64Data.startsWith('data:')) {
+                        sessionStorage.setItem('currentPdfData', base64Data);
+                        sessionStorage.setItem('currentPdfName', pdfName);
+                        sessionStorage.setItem('usingOPFS', 'false');
+                        window.location.href = 'viewer.html';
+                    } else {
+                        console.log("Dosya okunamadı!");
+                        alert("PDF dosyası açılamadı. Lütfen tekrar deneyin.");
+                    }
+                } catch (e) {
+                    console.error("Dosya okuma hatası:", e);
+                    alert("PDF açılırken hata oluştu: " + e.message);
                 }
             } else {
-                // Simülasyon
-                const simulatedBase64 = `data:application/pdf;base64,simulated_data_for_${fileData.id}`;
-                sessionStorage.setItem('currentPdfData', simulatedBase64);
-                sessionStorage.setItem('currentPdfName', pdfName);
-                sessionStorage.setItem('usingOPFS', 'false');
-                window.location.href = 'viewer.html';
+                console.log("Flutter bridge bulunamadı!");
+                alert("Flutter bridge mevcut değil.");
             }
         }
     } catch (error) {
         console.error("PDF açma hatası:", error);
-        // Fallback
         alert("PDF açılırken hata oluştu. Lütfen tekrar deneyin.");
     }
 }
+
+
+
+
+
+
+
 
 // --- SELECTION MODE FUNCTIONS ---
 function enterSelectionMode() {
