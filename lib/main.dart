@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:async';
+import 'dart:collection'; // UnmodifiableListView için eklendi
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -54,12 +55,18 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   DateTime? _lastBackPressTime;
   final Map<String, List<int>> _fileChunks = {};
   final Map<String, int> _fileSizes = {};
+  late PackageInfo _packageInfo; // PackageInfo için değişken eklendi
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _initPackageInfo();
     debugPrint("🚀 PDF Reader başlatıldı");
+  }
+
+  Future<void> _initPackageInfo() async {
+    _packageInfo = await PackageInfo.fromPlatform();
   }
 
   @override
@@ -316,7 +323,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint("❌ Dosya kaydetme hatası: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnakcBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Dosya kaydedilemedi: ${e.toString()}'),
             backgroundColor: Colors.red,
@@ -579,8 +586,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   debugPrint("⚙️ Ayarlar açılıyor...");
                   if (Platform.isAndroid) {
                     try {
-                      final packageInfo = await PackageInfo.fromPlatform();
-                      final packageName = packageInfo.packageName;
+                      final packageName = _packageInfo.packageName;
 
                       final intent = AndroidIntent(
                         action: 'android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION',
@@ -594,6 +600,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       
                       // Fallback intent
                       try {
+                        final packageName = _packageInfo.packageName;
                         final intent = AndroidIntent(
                           action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
                           data: 'package:$packageName',
