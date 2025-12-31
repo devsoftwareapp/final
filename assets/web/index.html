@@ -1521,324 +1521,152 @@
   </div>
 
 
-<!-- script kismi -->
+
+<!-- Script kismi -->
 
 
 
 
-<script>
-    
-    
-    
-    
-    // --- OPFS PDF MANAGER (BÜYÜK DOSYA DESTEKLİ GELİŞMİŞ VERSİYON) ---
+  <script>
+
+// --- OPFS PDF MANAGER ---
 class OPFSPdfManager {
     constructor() {
         this.root = null;
         this.currentPdfHandle = null;
         this.currentPdfName = '';
         this.isInitialized = false;
-        this.chunkSize = 1024 * 1024 * 5; // 5MB chunk size
-        this.maxBase64Size = 10 * 1024 * 1024; // 10MB base64 limit
     }
 
     async init() {
         try {
             if (!navigator.storage || !navigator.storage.getDirectory) {
-                console.warn("⚠️ OPFS desteklenmiyor, indexedDB'ye fallback yapılıyor");
-                return await this.initIndexedDB();
+                console.warn("OPFS desteklenmiyor, localStorage'a fallback yapılıyor");
+                return false;
             }
             this.root = await navigator.storage.getDirectory();
             this.isInitialized = true;
-            console.log("✅ OPFS başarıyla başlatıldı");
+            console.log("OPFS başarıyla başlatıldı");
             return true;
         } catch (e) {
-            console.error("❌ OPFS başlatma hatası:", e);
-            return await this.initIndexedDB();
+            console.error("OPFS başlatma hatası:", e);
+            return false;
         }
-    }
-
-    async initIndexedDB() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('pdfStorageDB', 1);
-            
-            request.onerror = () => {
-                console.error("❌ IndexedDB açılamadı");
-                resolve(false);
-            };
-            
-            request.onsuccess = (event) => {
-                this.db = event.target.result;
-                console.log("✅ IndexedDB başlatıldı");
-                resolve(true);
-            };
-            
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('pdfs')) {
-                    db.createObjectStore('pdfs', { keyPath: 'id' });
-                }
-            };
-        });
     }
 
     async savePdfToOPFS(file, fileName = null) {
         try {
-            const pdfName = fileName || file.name || `document_${Date.now()}.pdf`;
-            const fileSizeInMB = file.size / (1024 * 1024);
-            
-            console.log(`📄 PDF kaydediliyor: ${pdfName} (${fileSizeInMB.toFixed(2)} MB)`);
-            
-            // 2MB'dan büyükse OPFS veya IndexedDB kullan
-            if (fileSizeInMB > 2) {
-                console.log("📦 Büyük dosya tespit edildi, OPFS/IndexedDB kullanılıyor...");
-                
-                if (this.isInitialized) {
-                    return await this.saveToOPFS(file, pdfName);
-                } else if (this.db) {
-                    return await this.saveToIndexedDB(file, pdfName);
-                } else {
-                    return await this.saveToChunkedStorage(file, pdfName);
-                }
-            } else {
-                // Küçük dosyalar için base64
-                return await this.saveToBase64(file, pdfName);
+            if (!this.isInitialized) {
+                await this.init();
             }
-            
-        } catch (error) {
-            console.error("❌ PDF kaydetme hatası:", error);
-            return await this.saveToBase64(file, fileName);
-        }
-    }
 
-    async saveToOPFS(file, pdfName) {
-        try {
-            const arrayBuffer = await file.arrayBuffer();
+            const pdfName = fileName || file.name || `document_${Date.now()}.pdf`;
             
-            // 'pdfs' klasörünü oluştur
+            // 'pdfs' klasörünü oluştur veya al
             let pdfDir;
             try {
                 pdfDir = await this.root.getDirectoryHandle('pdfs', { create: true });
             } catch (e) {
+                console.log("pdfs klasörü oluşturulamadı, yeniden deniyor...");
                 await this.init();
                 pdfDir = await this.root.getDirectoryHandle('pdfs', { create: true });
             }
 
-            // Dosyayı kaydet
+            // Mevcut PDF'leri temizle (isteğe bağlı)
+            try {
+                const entries = await pdfDir.keys();
+                for await (const entry of entries) {
+                    if (entry === 'current.pdf' || entry === pdfName) {
+                        await pdfDir.removeEntry(entry);
+                    }
+                }
+            } catch (e) {
+                // Temizleme hatası görmezden gel
+            }
+
+            // Dosyayı ArrayBuffer olarak oku
+            const arrayBuffer = await file.arrayBuffer();
+            
+            // OPFS'ye kaydet
             const fileHandle = await pdfDir.getFileHandle(pdfName, { create: true });
             const writable = await fileHandle.createWritable();
             await writable.write(arrayBuffer);
             await writable.close();
 
-            // Meta verileri kaydet
+            // Ayrıca current.pdf olarak da kaydet (hızlı erişim için)
+            const currentHandle = await pdfDir.getFileHandle('current.pdf', { create: true });
+            const currentWritable = await currentHandle.createWritable();
+            await currentWritable.write(arrayBuffer);
+            await currentWritable.close();
+
+            this.currentPdfHandle = fileHandle;
+            this.currentPdfName = pdfName;
+
+            // Dosya bilgilerini localStorage'a kaydet (meta veri için)
             const fileInfo = {
                 name: pdfName,
                 size: file.size,
                 lastModified: file.lastModified,
                 uploaded: new Date().toISOString(),
-                opfsSaved: true,
-                method: 'opfs'
+                opfsSaved: true
             };
             
             localStorage.setItem('lastPdfInfo', JSON.stringify(fileInfo));
             sessionStorage.setItem('currentPdfName', pdfName);
             sessionStorage.setItem('usingOPFS', 'true');
 
-            console.log(`✅ PDF OPFS'ye kaydedildi: ${pdfName}`);
-            return { success: true, name: pdfName, size: arrayBuffer.byteLength, method: 'opfs' };
+            console.log(`PDF OPFS'ye kaydedildi: ${pdfName} (${arrayBuffer.byteLength} bytes)`);
+            return { success: true, name: pdfName, size: arrayBuffer.byteLength };
             
         } catch (error) {
-            console.error("❌ OPFS kayıt hatası:", error);
-            throw error;
+            console.error("PDF OPFS'ye kaydedilirken hata:", error);
+            
+            // Fallback: base64 olarak sessionStorage'a kaydet
+            return await this.fallbackToBase64(file, fileName);
         }
     }
 
-    async saveToIndexedDB(file, pdfName) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const arrayBuffer = e.target.result;
-                    const transaction = this.db.transaction(['pdfs'], 'readwrite');
-                    const store = transaction.objectStore('pdfs');
-                    
-                    const fileData = {
-                        id: pdfName,
-                        name: pdfName,
-                        data: arrayBuffer,
-                        size: file.size,
-                        timestamp: Date.now()
-                    };
-                    
-                    const request = store.put(fileData);
-                    
-                    request.onsuccess = () => {
-                        const fileInfo = {
-                            name: pdfName,
-                            size: file.size,
-                            uploaded: new Date().toISOString(),
-                            indexedDBSaved: true,
-                            method: 'indexeddb'
-                        };
-                        
-                        localStorage.setItem('lastPdfInfo', JSON.stringify(fileInfo));
-                        sessionStorage.setItem('currentPdfName', pdfName);
-                        sessionStorage.setItem('usingIndexedDB', 'true');
-                        
-                        console.log(`✅ PDF IndexedDB'ye kaydedildi: ${pdfName}`);
-                        resolve({ success: true, name: pdfName, size: file.size, method: 'indexeddb' });
-                    };
-                    
-                    request.onerror = () => {
-                        console.error("❌ IndexedDB kayıt hatası");
-                        reject(new Error("IndexedDB kayıt hatası"));
-                    };
-                } catch (error) {
-                    reject(error);
-                }
-            };
-            reader.onerror = reject;
-            reader.readAsArrayBuffer(file);
-        });
-    }
-
-    async saveToChunkedStorage(file, pdfName) {
+    async fallbackToBase64(file, fileName = null) {
         try {
-            const chunks = [];
-            const chunkSize = this.chunkSize;
-            const totalChunks = Math.ceil(file.size / chunkSize);
-            
-            console.log(`📦 PDF chunk'lara ayrılıyor: ${totalChunks} chunk`);
-            
-            for (let i = 0; i < totalChunks; i++) {
-                const start = i * chunkSize;
-                const end = Math.min(start + chunkSize, file.size);
-                const chunk = file.slice(start, end);
-                const chunkArrayBuffer = await chunk.arrayBuffer();
-                
-                // Chunk'ları localStorage'a kaydet
-                const chunkKey = `pdf_${pdfName}_chunk_${i}`;
-                const chunkData = {
-                    data: this.arrayBufferToBase64(chunkArrayBuffer),
-                    index: i,
-                    total: totalChunks
-                };
-                
-                try {
-                    localStorage.setItem(chunkKey, JSON.stringify(chunkData));
-                    chunks.push(chunkKey);
-                } catch (e) {
-                    console.error(`❌ Chunk ${i} kaydedilemedi:`, e);
-                    // Eski chunk'ları temizle
-                    chunks.forEach(key => localStorage.removeItem(key));
-                    throw new Error("LocalStorage doldu");
-                }
-            }
-            
-            // Chunk bilgilerini kaydet
-            const chunkInfo = {
-                name: pdfName,
-                size: file.size,
-                totalChunks: totalChunks,
-                chunks: chunks,
-                uploaded: new Date().toISOString(),
-                method: 'chunked'
-            };
-            
-            localStorage.setItem(`pdf_${pdfName}_info`, JSON.stringify(chunkInfo));
-            localStorage.setItem('lastPdfInfo', JSON.stringify({
-                name: pdfName,
-                size: file.size,
-                uploaded: new Date().toISOString(),
-                chunked: true
-            }));
-            
-            sessionStorage.setItem('currentPdfName', pdfName);
-            sessionStorage.setItem('usingChunks', 'true');
-            
-            console.log(`✅ PDF chunk'lara ayrılarak kaydedildi: ${pdfName} (${totalChunks} chunk)`);
-            return { success: true, name: pdfName, size: file.size, method: 'chunked', totalChunks: totalChunks };
-            
-        } catch (error) {
-            console.error("❌ Chunk kaydetme hatası:", error);
-            throw error;
-        }
-    }
-
-    async saveToBase64(file, pdfName) {
-        return new Promise((resolve, reject) => {
-            const fileSizeInMB = file.size / (1024 * 1024);
-            
-            // 10MB üzeri base64 engelle
-            if (fileSizeInMB > 10) {
-                console.error("❌ Dosya base64 için çok büyük:", fileSizeInMB.toFixed(2), "MB");
-                reject(new Error("Dosya çok büyük (max 10MB)"));
-                return;
-            }
-            
-            console.log("📦 Base64'e dönüştürülüyor...");
-            
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const base64Data = e.target.result;
-                
-                try {
+            const pdfName = fileName || file.name || `document_${Date.now()}.pdf`;
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const base64Data = e.target.result;
                     sessionStorage.setItem('currentPdfData', base64Data);
                     sessionStorage.setItem('currentPdfName', pdfName);
                     sessionStorage.setItem('usingOPFS', 'false');
                     
-                    console.log(`✅ PDF base64 olarak kaydedildi: ${pdfName}`);
+                    console.log(`PDF base64 olarak kaydedildi: ${pdfName}`);
                     resolve({ 
                         success: true, 
                         name: pdfName, 
                         size: file.size,
                         method: 'base64' 
                     });
-                } catch (storageError) {
-                    console.error("❌ Storage hatası:", storageError);
-                    reject(storageError);
-                }
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
-    }
-
-    arrayBufferToBase64(arrayBuffer) {
-        let binary = '';
-        const bytes = new Uint8Array(arrayBuffer);
-        const chunkSize = 0x8000; // 32KB chunks
-        
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-            const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-            binary += String.fromCharCode.apply(null, chunk);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        } catch (e) {
+            console.error("Base64 fallback hatası:", e);
+            return { success: false, error: e.message };
         }
-        
-        return btoa(binary);
-    }
-
-    base64ToArrayBuffer(base64) {
-        const binaryString = atob(base64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-        return bytes.buffer;
     }
 
     async getCurrentPdfUrl() {
         try {
+            if (!this.isInitialized) {
+                await this.init();
+            }
+
             const usingOPFS = sessionStorage.getItem('usingOPFS') === 'true';
-            const usingIndexedDB = sessionStorage.getItem('usingIndexedDB') === 'true';
-            const usingChunks = sessionStorage.getItem('usingChunks') === 'true';
-            const pdfName = sessionStorage.getItem('currentPdfName') || "belge.pdf";
             
             if (usingOPFS && this.isInitialized) {
-                return await this.getFromOPFS(pdfName);
-            } else if (usingIndexedDB && this.db) {
-                return await this.getFromIndexedDB(pdfName);
-            } else if (usingChunks) {
-                return await this.getFromChunks(pdfName);
+                const pdfDir = await this.root.getDirectoryHandle('pdfs', { create: false });
+                const fileHandle = await pdfDir.getFileHandle('current.pdf', { create: false });
+                const file = await fileHandle.getFile();
+                return URL.createObjectURL(file);
             } else {
                 // Base64 fallback
                 const base64Data = sessionStorage.getItem('currentPdfData');
@@ -1849,209 +1677,60 @@ class OPFSPdfManager {
             
             return null;
         } catch (error) {
-            console.error("❌ PDF URL alınırken hata:", error);
+            console.error("PDF URL alınırken hata:", error);
             return null;
-        }
-    }
-
-    async getFromOPFS(pdfName) {
-        try {
-            const pdfDir = await this.root.getDirectoryHandle('pdfs', { create: false });
-            
-            // Önce current.pdf'i dene
-            try {
-                const fileHandle = await pdfDir.getFileHandle('current.pdf', { create: false });
-                const file = await fileHandle.getFile();
-                return URL.createObjectURL(file);
-            } catch (e) {
-                // current.pdf yoksa, dosya adıyla ara
-                const fileHandle = await pdfDir.getFileHandle(pdfName, { create: false });
-                const file = await fileHandle.getFile();
-                return URL.createObjectURL(file);
-            }
-        } catch (error) {
-            console.error("❌ OPFS'den okuma hatası:", error);
-            throw error;
-        }
-    }
-
-    async getFromIndexedDB(pdfName) {
-        return new Promise((resolve, reject) => {
-            const transaction = this.db.transaction(['pdfs'], 'readonly');
-            const store = transaction.objectStore('pdfs');
-            const request = store.get(pdfName);
-            
-            request.onsuccess = (e) => {
-                const result = e.target.result;
-                if (result && result.data) {
-                    const blob = new Blob([result.data], { type: 'application/pdf' });
-                    const url = URL.createObjectURL(blob);
-                    resolve(url);
-                } else {
-                    reject(new Error("PDF IndexedDB'de bulunamadı"));
-                }
-            };
-            
-            request.onerror = () => {
-                reject(new Error("IndexedDB okuma hatası"));
-            };
-        });
-    }
-
-    async getFromChunks(pdfName) {
-        try {
-            const chunkInfoStr = localStorage.getItem(`pdf_${pdfName}_info`);
-            if (!chunkInfoStr) {
-                throw new Error("Chunk bilgisi bulunamadı");
-            }
-            
-            const chunkInfo = JSON.parse(chunkInfoStr);
-            const chunks = [];
-            
-            // Tüm chunk'ları topla
-            for (let i = 0; i < chunkInfo.totalChunks; i++) {
-                const chunkKey = `pdf_${pdfName}_chunk_${i}`;
-                const chunkDataStr = localStorage.getItem(chunkKey);
-                
-                if (!chunkDataStr) {
-                    throw new Error(`Chunk ${i} bulunamadı`);
-                }
-                
-                const chunkData = JSON.parse(chunkDataStr);
-                const chunkArrayBuffer = this.base64ToArrayBuffer(chunkData.data);
-                chunks.push(chunkArrayBuffer);
-            }
-            
-            // Chunk'ları birleştir
-            const totalSize = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-            const combinedArray = new Uint8Array(totalSize);
-            let offset = 0;
-            
-            chunks.forEach(chunk => {
-                combinedArray.set(new Uint8Array(chunk), offset);
-                offset += chunk.byteLength;
-            });
-            
-            const blob = new Blob([combinedArray], { type: 'application/pdf' });
-            return URL.createObjectURL(blob);
-            
-        } catch (error) {
-            console.error("❌ Chunk birleştirme hatası:", error);
-            throw error;
         }
     }
 
     async cleanup() {
         try {
-            // OPFS temizleme
             if (this.isInitialized) {
-                try {
-                    const pdfDir = await this.root.getDirectoryHandle('pdfs', { create: false });
-                    const entries = await pdfDir.keys();
-                    
-                    for await (const entry of entries) {
-                        await pdfDir.removeEntry(entry);
-                    }
-                    
-                    await this.root.removeEntry('pdfs', { recursive: true });
-                } catch (e) {
-                    // OPFS temizleme hatası görmezden gel
-                }
-            }
-            
-            // IndexedDB temizleme
-            if (this.db) {
-                const transaction = this.db.transaction(['pdfs'], 'readwrite');
-                const store = transaction.objectStore('pdfs');
-                const clearRequest = store.clear();
+                const pdfDir = await this.root.getDirectoryHandle('pdfs', { create: false });
+                const entries = await pdfDir.keys();
                 
-                clearRequest.onsuccess = () => {
-                    console.log("✅ IndexedDB temizlendi");
-                };
+                for await (const entry of entries) {
+                    await pdfDir.removeEntry(entry);
+                }
+                
+                await this.root.removeEntry('pdfs', { recursive: true });
+                console.log("OPFS temizlendi");
             }
-            
-            // LocalStorage chunk temizleme
-            this.cleanupLocalStorageChunks();
             
             // SessionStorage'ı temizle
             sessionStorage.removeItem('currentPdfData');
             sessionStorage.removeItem('currentPdfName');
             sessionStorage.removeItem('usingOPFS');
-            sessionStorage.removeItem('usingIndexedDB');
-            sessionStorage.removeItem('usingChunks');
-            sessionStorage.removeItem('currentPdfBlobUrl');
-            
         } catch (e) {
-            console.error("❌ Temizleme hatası:", e);
+            console.error("Temizleme hatası:", e);
         }
     }
 
-    cleanupLocalStorageChunks() {
-        const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith('pdf_') && (key.includes('_chunk_') || key.includes('_info'))) {
-                keysToRemove.push(key);
-            }
-        }
-        
-        keysToRemove.forEach(key => localStorage.removeItem(key));
-        console.log(`🗑️ ${keysToRemove.length} chunk temizlendi`);
-    }
-
-    async getPdfFilesFromStorage() {
-        const files = [];
-        
+    async getPdfFilesFromOPFS() {
         try {
-            // OPFS'den al
-            if (this.isInitialized) {
-                try {
-                    const pdfDir = await this.root.getDirectoryHandle('pdfs', { create: false });
-                    
-                    for await (const entry of pdfDir.values()) {
-                        if (entry.kind === 'file' && entry.name.endsWith('.pdf')) {
-                            const file = await entry.getFile();
-                            files.push({
-                                name: entry.name,
-                                size: file.size,
-                                lastModified: file.lastModified,
-                                source: 'opfs'
-                            });
-                        }
-                    }
-                } catch (e) {
-                    // OPFS okuma hatası
+            if (!this.isInitialized) {
+                await this.init();
+            }
+            
+            const pdfDir = await this.root.getDirectoryHandle('pdfs', { create: false });
+            const files = [];
+            
+            for await (const entry of pdfDir.values()) {
+                if (entry.kind === 'file' && entry.name.endsWith('.pdf')) {
+                    const file = await entry.getFile();
+                    files.push({
+                        name: entry.name,
+                        size: file.size,
+                        lastModified: file.lastModified,
+                        file: file
+                    });
                 }
             }
             
-            // IndexedDB'den al
-            if (this.db) {
-                const transaction = this.db.transaction(['pdfs'], 'readonly');
-                const store = transaction.objectStore('pdfs');
-                const request = store.getAll();
-                
-                await new Promise((resolve) => {
-                    request.onsuccess = (e) => {
-                        const results = e.target.result;
-                        results.forEach(item => {
-                            files.push({
-                                name: item.name,
-                                size: item.size,
-                                lastModified: new Date(item.timestamp),
-                                source: 'indexeddb'
-                            });
-                        });
-                        resolve();
-                    };
-                    request.onerror = resolve;
-                });
-            }
-            
+            return files;
         } catch (e) {
-            console.error("❌ Depodan PDF listesi alınırken hata:", e);
+            console.error("OPFS'den PDF listesi alınırken hata:", e);
+            return [];
         }
-        
-        return files;
     }
 }
 
@@ -2065,12 +1744,14 @@ function initTheme() {
     document.documentElement.setAttribute('data-theme', themeToSet);
 }
 
+// Theme change listener
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
     const newTheme = e.matches ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', newTheme);
     if (typeof loadData === "function") loadData(); 
 });
 
+// Initialize theme on page load
 initTheme();
 
 // --- VARIABLES ---
@@ -2196,8 +1877,6 @@ const toolsData = [
 
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log("🚀 Uygulama başlatılıyor...");
-  
   // OPFS'yi başlat
   await pdfManager.init();
   
@@ -2217,8 +1896,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       scanDeviceForPDFs();
     }
   }, 1000);
-  
-  console.log("✅ Uygulama hazır");
 });
 
 // --- TOOLS LOADING ---
@@ -2262,7 +1939,7 @@ function openSettingsForPermission() {
     if (typeof Android !== 'undefined' && Android.openSettings) {
         Android.openSettings();
     } else {
-        console.log("⚙️ Ayarlar açılıyor...");
+        console.log("Ayarlar açılıyor...");
         setTimeout(() => {
             setTimeout(scanDeviceForPDFs, 2000);
         }, 500);
@@ -2480,20 +2157,20 @@ function createCard(name, size, meta, isFavorite, id, listType) {
 }
 
 // --- ANDROID PERMISSION AND PDF SCANNING ---
-async function checkAndroidPermission() {
+function checkAndroidPermission() {
     try {
-        if (typeof window.flutter_inappwebview !== 'undefined') {
-            return await window.flutter_inappwebview.callHandler('checkStoragePermission');
+        if (typeof Android !== 'undefined' && Android.checkPermission) {
+            return Android.checkPermission();
         }
         return false;
     } catch (e) {
-        console.error('❌ Permission check error:', e);
+        console.error('Permission check error:', e);
         return false;
     }
 }
 
-async function checkPermissionAndUpdateUI() {
-    const hasPermission = await checkAndroidPermission();
+function checkPermissionAndUpdateUI() {
+    const hasPermission = checkAndroidPermission();
     const permissionContainer = document.getElementById('permissionContainer');
     const deviceList = document.getElementById('deviceList');
     
@@ -2506,28 +2183,32 @@ async function checkPermissionAndUpdateUI() {
     }
 }
 
+
+
+
+
+
+// Güncellenmiş scanDeviceForPDFs fonksiyonu - ASYNC
 async function scanDeviceForPDFs() {
     try {
-        console.log("📱 Cihaz PDF'leri taranıyor...");
-        
+        // İzin kontrolü - async olarak
         const hasPermission = await checkAndroidPermission();
         
         if (!hasPermission) {
-            console.log("⚠️ Depolama izni yok");
             checkPermissionAndUpdateUI();
             return;
         }
         
+        // PDF dosyalarını listele - async olarak Flutter'dan
         let pdfFiles = [];
         if (typeof window.flutter_inappwebview !== 'undefined') {
             try {
                 const jsonResult = await window.flutter_inappwebview.callHandler('listPdfFiles');
                 if (jsonResult) {
                     pdfFiles = JSON.parse(jsonResult);
-                    console.log(`✅ ${pdfFiles.length} PDF dosyası bulundu`);
                 }
             } catch (e) {
-                console.error('❌ PDF listesi alınamadı:', e);
+                console.error('PDF listesi alınamadı:', e);
             }
         }
         
@@ -2535,7 +2216,10 @@ async function scanDeviceForPDFs() {
         let nextId = 1000;
         
         pdfFiles.forEach(fileInfo => {
+            // Dosya boyutunu formatla
             const sizeFormatted = fileInfo.size ? formatBytes(fileInfo.size) : '0 KB';
+            
+            // Tarihi formatla
             const date = new Date(fileInfo.modified);
             const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
             
@@ -2556,12 +2240,51 @@ async function scanDeviceForPDFs() {
         loadData();
         
     } catch (e) {
-        console.error('❌ Device scan error:', e);
+        console.error('Device scan error:', e);
         checkPermissionAndUpdateUI();
     }
 }
 
-// --- FILE HANDLING FUNCTIONS ---
+// checkAndroidPermission fonksiyonunu ASYNC yap
+async function checkAndroidPermission() {
+    try {
+        if (typeof window.flutter_inappwebview !== 'undefined') {
+            return await window.flutter_inappwebview.callHandler('checkStoragePermission');
+        }
+        return false;
+    } catch (e) {
+        console.error('Permission check error:', e);
+        return false;
+    }
+}
+
+// checkPermissionAndUpdateUI fonksiyonunu ASYNC yap
+async function checkPermissionAndUpdateUI() {
+    const hasPermission = await checkAndroidPermission();
+    const permissionContainer = document.getElementById('permissionContainer');
+    const deviceList = document.getElementById('deviceList');
+    
+    if (!hasPermission) {
+        if (permissionContainer) permissionContainer.style.display = 'block';
+        if (deviceList) deviceList.style.display = 'none';
+    } else {
+        if (permissionContainer) permissionContainer.style.display = 'none';
+        if (deviceList) deviceList.style.display = 'grid';
+    }
+}
+
+// Bu fonksiyonlar artık gerekli değil, ama uyumluluk için bırakılabilir
+function getFileSizeFromPath(path) {
+    const sizes = ["~500 KB", "~1.2 MB", "~2.5 MB", "~3.8 MB", "~5.1 MB"];
+    return sizes[Math.floor(Math.random() * sizes.length)];
+}
+
+function getFileDateFromPath(path) {
+    const now = new Date();
+    return `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+}
+
+// --- FILE HANDLING FUNCTIONS (OPFS VERSION) ---
 function handleFabAction(action) {
   if (action === 'open_pdf') {
       pdfFileInput.click();
@@ -2569,26 +2292,25 @@ function handleFabAction(action) {
   fabMenu.classList.remove('show');
 }
 
+// OPFS ile dosya işleme
 async function handleFileSelect(event) {
     const files = event.target.files;
     if (files && files.length > 0) {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             if (file.type !== 'application/pdf') {
-                console.log(`⚠️ ${file.name} bir PDF dosyası değil!`);
+                console.log(`${file.name} bir PDF dosyası değil!`);
                 continue;
             }
-            
-            const fileSizeInMB = file.size / (1024 * 1024);
-            console.log(`📄 Dosya seçildi: ${file.name} (${fileSizeInMB.toFixed(2)} MB)`);
             
             const now = new Date();
             const formattedDate = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
             
-            // OPFS'ye kaydet (büyük dosyalar için otomatik)
+            // OPFS'ye kaydet
             const result = await pdfManager.savePdfToOPFS(file);
             
             if (result.success) {
+                // Dosya Objesi Oluşturma
                 const newFile = {
                     name: result.name,
                     size: formatBytes(file.size),
@@ -2597,7 +2319,8 @@ async function handleFileSelect(event) {
                     isFavorite: false,
                     id: Date.now() + i,
                     source: 'imported',
-                    method: result.method
+                    opfsSaved: true,
+                    method: result.method || 'opfs'
                 };
 
                 importedFiles.unshift(newFile);
@@ -2614,10 +2337,10 @@ async function handleFileSelect(event) {
                 switchTab('recent', true);
                 loadData();
                 
-                console.log(`✅ PDF başarıyla kaydedildi (${result.method}): ${result.name}`);
+                // Başarı mesajı
+                console.log(`PDF başarıyla ${result.method === 'opfs' ? 'OPFS' : 'base64'} olarak kaydedildi: ${result.name}`);
             } else {
-                console.error("❌ PDF kaydedilemedi:", result.error);
-                alert(`PDF kaydedilemedi: ${result.error}`);
+                console.error("PDF kaydedilemedi:", result.error);
             }
         }
         
@@ -2634,7 +2357,7 @@ function formatBytes(bytes, decimals = 1) {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 }
 
-// --- CARD CLICK HANDLER ---
+// --- CARD CLICK HANDLER (OPFS VERSION) ---
 async function handleCardClick(element, name, cardId) {
     if (isSelectionMode) {
         toggleCardSelection(cardId);
@@ -2655,46 +2378,52 @@ async function handleCardClick(element, name, cardId) {
                 lastOpened: new Date().toISOString()
             });
             
-            console.log("📂 PDF açılıyor:", name);
+            // PDF'i aç
             await openPdfFile(fileData, name);
         } else {
-            console.log("❌ Dosya bulunamadı!");
+            console.log("Dosya bulunamadı!");
         }
     }
 }
 
+// openPdfFile fonksiyonu - Flutter bridge ile güncellendi
 async function openPdfFile(fileData, name) {
     const pdfName = name || fileData.name || "belge.pdf";
     
     try {
-        // Imported file
+        // Imported file (OPFS veya base64)
         if (fileData.source === 'imported') {
-            const pdfUrl = await pdfManager.getCurrentPdfUrl();
-            
-            if (pdfUrl) {
-                if (pdfUrl.startsWith('blob:')) {
-                    sessionStorage.setItem('currentPdfBlobUrl', pdfUrl);
-                    sessionStorage.setItem('currentPdfName', pdfName);
-                    sessionStorage.setItem('usingOPFS', 'true');
-                    window.location.href = 'viewer.html';
-                } else if (pdfUrl.startsWith('data:')) {
-                    sessionStorage.setItem('currentPdfData', pdfUrl);
-                    sessionStorage.setItem('currentPdfName', pdfName);
-                    sessionStorage.setItem('usingOPFS', 'false');
-                    window.location.href = 'viewer.html';
-                } else {
-                    sessionStorage.setItem('currentPdfData', pdfUrl);
-                    sessionStorage.setItem('currentPdfName', pdfName);
-                    sessionStorage.setItem('usingOPFS', 'false');
-                    window.location.href = 'viewer.html';
+            if (fileData.opfsSaved === true) {
+                // OPFS'den aç
+                const pdfUrl = await pdfManager.getCurrentPdfUrl();
+                if (pdfUrl) {
+                    if (pdfUrl.startsWith('blob:')) {
+                        // Blob URL
+                        sessionStorage.setItem('currentPdfBlobUrl', pdfUrl);
+                        sessionStorage.setItem('currentPdfName', pdfName);
+                        sessionStorage.setItem('usingOPFS', 'true');
+                        window.location.href = 'viewer.html';
+                    } else if (pdfUrl.startsWith('data:')) {
+                        // Base64 fallback
+                        sessionStorage.setItem('currentPdfData', pdfUrl);
+                        sessionStorage.setItem('currentPdfName', pdfName);
+                        sessionStorage.setItem('usingOPFS', 'false');
+                        window.location.href = 'viewer.html';
+                    }
                 }
+            } else if (fileData.base64) {
+                // Eski base64 dosyası
+                sessionStorage.setItem('currentPdfData', fileData.base64);
+                sessionStorage.setItem('currentPdfName', pdfName);
+                sessionStorage.setItem('usingOPFS', 'false');
+                window.location.href = 'viewer.html';
             }
         }
         // Device file (Flutter bridge ile)
         else if (fileData.source === 'device' && fileData.fullPath) {
             if (typeof window.flutter_inappwebview !== 'undefined') {
                 try {
-                    console.log("📱 Cihazdan yükleniyor:", fileData.fullPath);
+                    // Flutter'dan dosya içeriğini base64 olarak al
                     const base64Data = await window.flutter_inappwebview.callHandler('getFileAsBase64', fileData.fullPath);
                     
                     if (base64Data && base64Data.startsWith('data:')) {
@@ -2703,23 +2432,30 @@ async function openPdfFile(fileData, name) {
                         sessionStorage.setItem('usingOPFS', 'false');
                         window.location.href = 'viewer.html';
                     } else {
-                        console.log("❌ Dosya okunamadı!");
+                        console.log("Dosya okunamadı!");
                         alert("PDF dosyası açılamadı. Lütfen tekrar deneyin.");
                     }
                 } catch (e) {
-                    console.error("❌ Dosya okuma hatası:", e);
+                    console.error("Dosya okuma hatası:", e);
                     alert("PDF açılırken hata oluştu: " + e.message);
                 }
             } else {
-                console.log("❌ Flutter bridge bulunamadı!");
+                console.log("Flutter bridge bulunamadı!");
                 alert("Flutter bridge mevcut değil.");
             }
         }
     } catch (error) {
-        console.error("❌ PDF açma hatası:", error);
+        console.error("PDF açma hatası:", error);
         alert("PDF açılırken hata oluştu. Lütfen tekrar deneyin.");
     }
 }
+
+
+
+
+
+
+
 
 // --- SELECTION MODE FUNCTIONS ---
 function enterSelectionMode() {
@@ -2790,7 +2526,7 @@ function deselectAllCards() {
 
 function shareSelectedCards() {
     if (selectedCards.size === 0) {
-        console.log('⚠️ Lütfen paylaşmak için öğe seçin.');
+        console.log('Lütfen paylaşmak için öğe seçin.');
         return;
     }
     
@@ -2809,14 +2545,14 @@ function shareSelectedCards() {
             const fileData = selectedFiles.map(f => f.base64 || f.fullPath || '');
             Android.shareFiles(fileData.join('||'));
         } else {
-            console.log(`📤 ${selectedFiles.length} dosya paylaşım panosuna kopyalandı.`);
+            console.log(`${selectedFiles.length} dosya paylaşım panosuna kopyalandı.`);
         }
     }
 }
 
 function printSelectedCards() {
     if (selectedCards.size === 0) {
-        console.log('⚠️ Lütfen yazdırmak için öğe seçin.');
+        console.log('Lütfen yazdırmak için öğe seçin.');
         return;
     }
     
@@ -2850,7 +2586,7 @@ function printSelectedCards() {
 
 function deleteSelectedCards() {
     if (selectedCards.size === 0) {
-        console.log('⚠️ Lütfen silmek için öğe seçin.');
+        console.log('Lütfen silmek için öğe seçin.');
         return;
     }
     
@@ -3057,6 +2793,7 @@ function triggerSearch() {
 
 // --- EVENTS ---
 function attachEvents() {
+    
     contextOverlay.addEventListener('click', closeContextMenu);
     
     permissionModalOverlay.addEventListener('click', function(e) {
@@ -3067,24 +2804,31 @@ function attachEvents() {
 
     searchBtn.addEventListener('click', () => {
         document.body.classList.add('is-searching');
+        
         headerNormal.classList.add('hidden');
         searchBar.classList.add('active');
         searchInput.focus();
+
         if (currentNav !== 'home') {
             switchNav('home');
         }
+        
         triggerSearch();
     });
 
     closeSearchBtn.addEventListener('click', () => {
         document.body.classList.remove('is-searching');
+
         searchBar.classList.remove('active');
         headerNormal.classList.remove('hidden');
         searchInput.value = '';
+        
         document.querySelectorAll('.card').forEach(card => {
             card.classList.remove('hidden');
         });
+        
         document.querySelectorAll('.search-empty-state').forEach(el => el.remove());
+        
         triggerSearch();
     });
 
@@ -3094,6 +2838,7 @@ function attachEvents() {
     panels.forEach(panel => {
         panel.addEventListener('scroll', (e) => {
             if (document.body.classList.contains('is-searching')) return;
+
             if(currentNav !== 'home' || !panel.classList.contains('active')) return;
             const currentY = e.target.scrollTop;
             const direction = currentY > lastScrollY ? 'down' : 'up';
@@ -3111,6 +2856,7 @@ function attachEvents() {
     panels.forEach(panel => {
         panel.addEventListener('touchstart', e => {
             if (document.body.classList.contains('is-searching')) return;
+
             if(currentNav !== 'home' || !panel.classList.contains('active')) return;
             startX = e.touches[0].clientX;
             startY = e.touches[0].clientY;
@@ -3120,6 +2866,7 @@ function attachEvents() {
 
         panel.addEventListener('touchmove', e => {
             if (document.body.classList.contains('is-searching')) return;
+
             if(currentNav !== 'home' || !panel.classList.contains('active')) return;
             const currentX = e.touches[0].clientX;
             const currentY = e.touches[0].clientY;
@@ -3139,6 +2886,7 @@ function attachEvents() {
 
         panel.addEventListener('touchend', e => {
             if (document.body.classList.contains('is-searching')) return;
+
             if(currentNav !== 'home' || !panel.classList.contains('active')) return;
             const endX = e.changedTouches[0].clientX;
             const diffX = endX - startX;
@@ -3311,7 +3059,6 @@ function sendHelpEmail(e) {
 // Android resume handler
 function onAndroidResume() {
     try {
-        console.log("📱 Android resume");
         checkPermissionAndUpdateUI();
         
         if (currentNav === 'home') {
@@ -3321,7 +3068,7 @@ function onAndroidResume() {
             }
         }
     } catch (e) {
-        console.warn('⚠️ onAndroidResume error', e);
+        console.warn('onAndroidResume error', e);
     }
 }
 
@@ -3405,21 +3152,13 @@ window.showPermissionModal = showPermissionModal;
 window.closePermissionModal = closePermissionModal;
 window.openSettingsForPermission = openSettingsForPermission;
 
-// OPFS cleanup on unload
+// OPFS cleanup on unload (optional)
 window.addEventListener('beforeunload', async () => {
-    await pdfManager.cleanup();
+    // Temizlik yapılabilir, isteğe bağlı
+    // await pdfManager.cleanup();
 });
-    
-    
-    
-</script>
 
 
-
-
-
-
-
-<!-- scrip kismi -->
+  </script>
 </body>
 </html>
