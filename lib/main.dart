@@ -11,8 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:printing/printing.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:android_intent_plus/android_intent.dart';
-import 'package:android_intent_plus/flag.dart';
+import 'package:app_settings/app_settings.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 void main() async {
@@ -126,6 +125,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   // Storage izin kontrolü
   Future<bool> _checkStoragePermission() async {
     if (Platform.isAndroid) {
+      // Android 13+ için
       final android13Permissions = await Future.wait([
         Permission.photos.status,
         Permission.videos.status,
@@ -136,13 +136,49 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         return true;
       }
       
+      // Android 11-12 için manageExternalStorage
       final manageStorageStatus = await Permission.manageExternalStorage.status;
       if (manageStorageStatus.isGranted) {
         return true;
       }
       
+      // Android 10 ve altı için storage
       final storageStatus = await Permission.storage.status;
       if (storageStatus.isGranted) {
+        return true;
+      }
+      
+      return false;
+    }
+    return true;
+  }
+
+  // İzin iste
+  Future<bool> _requestStoragePermission() async {
+    if (Platform.isAndroid) {
+      // Android sürümüne göre uygun izni iste
+      if (await Permission.manageExternalStorage.status.isDenied) {
+        final result = await Permission.manageExternalStorage.request();
+        if (result.isGranted) {
+          return true;
+        }
+      }
+      
+      if (await Permission.storage.status.isDenied) {
+        final result = await Permission.storage.request();
+        if (result.isGranted) {
+          return true;
+        }
+      }
+      
+      // Android 13+ için
+      final results = await [
+        Permission.photos,
+        Permission.videos,
+        Permission.audio,
+      ].request();
+      
+      if (results.values.any((status) => status.isGranted)) {
         return true;
       }
       
@@ -453,7 +489,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               displayZoomControls: false,
               builtInZoomControls: false,
               safeBrowsingEnabled: false,
-              // OPFS desteği için kritik
               sharedCookiesEnabled: true,
               thirdPartyCookiesEnabled: true,
               cacheEnabled: true,
@@ -463,7 +498,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               disableHorizontalScroll: false,
               hardwareAcceleration: true,
               mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-              // Büyük dosyalar için ek ayarlar
               transparentBackground: false,
               disableContextMenu: false,
               incognito: false,
@@ -506,6 +540,17 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   final hasPermission = await _checkStoragePermission();
                   debugPrint("🔒 İzin kontrolü: $hasPermission");
                   return hasPermission;
+                },
+              );
+
+              // ==================== HANDLER: İZİN İSTE ====================
+              controller.addJavaScriptHandler(
+                handlerName: 'requestStoragePermission',
+                callback: (args) async {
+                  debugPrint("🔒 İzin isteniyor...");
+                  final granted = await _requestStoragePermission();
+                  debugPrint("🔒 İzin sonucu: $granted");
+                  return granted;
                 },
               );
 
@@ -587,7 +632,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       final sizeInMB = bytes.length / (1024 * 1024);
                       debugPrint("✅ PDF okundu: ${sizeInMB.toStringAsFixed(2)} MB");
                       
-                      // Uint8List olarak döndür (OPFS için)
                       return bytes;
                     } else {
                       debugPrint("❌ Dosya bulunamadı: $filePath");
@@ -605,18 +649,14 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 handlerName: 'openSettingsForPermission',
                 callback: (args) async {
                   debugPrint("⚙️ Ayarlar açılıyor...");
-                  if (Platform.isAndroid) {
-                    try {
-                      final packageName = _packageInfo.packageName;
-                      final intent = AndroidIntent(
-                        action: 'android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION',
-                        data: 'package:$packageName',
-                        flags: [Flag.FLAG_ACTIVITY_NEW_TASK],
-                      );
-                      await intent.launch();
-                    } catch (e) {
-                      await openAppSettings();
-                    }
+                  try {
+                    await AppSettings.openAppSettings(
+                      type: AppSettingsType.settings,
+                      asAnotherTask: true,
+                    );
+                    debugPrint("✅ Ayarlar açıldı");
+                  } catch (e) {
+                    debugPrint("❌ Ayarlar açma hatası: $e");
                   }
                 },
               );
@@ -768,6 +808,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     'tempDir': (await getTemporaryDirectory()).path,
                     'appDir': (await getApplicationDocumentsDirectory()).path,
                     'opfsSupported': true,
+                    'packageName': _packageInfo.packageName,
+                    'appVersion': _packageInfo.version,
                   });
                 },
               );
@@ -867,5 +909,3 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     );
   }
 }
-
-
