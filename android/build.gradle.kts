@@ -2,7 +2,8 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("https://plugins.gradle.org/m2/") }
+        gradlePluginPortal()
+        maven { url = uri("https://jitpack.io") }
     }
 }
 
@@ -17,11 +18,11 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 
-// HATALI KISIM BURASIYDI - DÜZELTİLDİ:
 subprojects {
-    // Sadece 'app' dışındaki alt projelerin 'app'e bakmasını sağlar, döngüyü kırar.
-    if (project.name != "app") {
-        evaluationDependsOn(":app")
+    afterEvaluate {
+        if (project.name != "app") {
+            project.evaluationDependsOn(":app")
+        }
     }
 }
 
