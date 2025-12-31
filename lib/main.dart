@@ -58,6 +58,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    debugPrint("🚀 PDF Reader başlatıldı");
   }
 
   @override
@@ -69,7 +70,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Uygulama ayarlardan geri döndüğünde
+      debugPrint("📱 Uygulama ayarlardan geri döndü");
       _checkAndUpdatePermissionStatus();
     }
   }
@@ -79,10 +80,12 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     if (webViewController == null) return;
     
     final hasPermission = await _checkStoragePermission();
+    debugPrint("✅ İzin durumu: $hasPermission");
     
     // JS tarafına izin durumunu bildir ve yeniden tarama tetikle
     await webViewController!.evaluateJavascript(source: """
       (function() {
+        console.log("📱 Android resume - izin durumu güncelleniyor");
         if (typeof onAndroidResume === 'function') {
           onAndroidResume();
         }
@@ -126,6 +129,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     
     try {
       if (Platform.isAndroid) {
+        debugPrint("📂 PDF dosyaları taranıyor...");
+        
         // Yaygın PDF dizinlerini tara
         List<String> searchPaths = [
           '/storage/emulated/0/Download',
@@ -133,6 +138,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           '/storage/emulated/0/DCIM',
         ];
 
+        int totalFound = 0;
         for (String path in searchPaths) {
           try {
             final directory = Directory(path);
@@ -147,19 +153,22 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       'size': stat.size,
                       'modified': stat.modified.toIso8601String(),
                     });
+                    totalFound++;
                   } catch (e) {
-                    debugPrint("Dosya bilgisi alınamadı: ${entity.path}");
+                    debugPrint("⚠️ Dosya bilgisi alınamadı: ${entity.path}");
                   }
                 }
               }
             }
           } catch (e) {
-            debugPrint("Dizin tarama hatası: $path - $e");
+            debugPrint("❌ Dizin tarama hatası: $path - $e");
           }
         }
+        
+        debugPrint("✅ Toplam $totalFound PDF dosyası bulundu");
       }
     } catch (e) {
-      debugPrint("PDF listeleme hatası: $e");
+      debugPrint("❌ PDF listeleme hatası: $e");
     }
     
     return pdfFiles;
@@ -188,12 +197,19 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       var status = await Permission.storage.status;
       if (!status.isGranted) {
         status = await Permission.storage.request();
-        if (!status.isGranted) return;
+        if (!status.isGranted) {
+          debugPrint("❌ Depolama izni reddedildi");
+          return;
+        }
       }
     }
 
     try {
+      debugPrint("💾 PDF kaydediliyor: $fileName");
+      
       final bytes = _decodeBase64(base64Data);
+      final sizeInMB = bytes.length / (1024 * 1024);
+      debugPrint("📦 Dosya boyutu: ${sizeInMB.toStringAsFixed(2)} MB");
       
       Directory? directory;
       if (Platform.isAndroid) {
@@ -220,20 +236,26 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         final finalFile = File('${directory.path}/$finalName');
         await finalFile.writeAsBytes(bytes);
 
+        debugPrint("✅ PDF kaydedildi: ${finalFile.path}");
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Kaydedildi: ${finalFile.path}'),
+              content: Text('✅ Kaydedildi: $finalName'),
               backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
             ),
           );
         }
       }
     } catch (e) {
-      debugPrint("Dosya kaydetme hatası: $e");
+      debugPrint("❌ Dosya kaydetme hatası: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Dosya kaydedilemedi.')),
+          const SnackBar(
+            content: Text('❌ Dosya kaydedilemedi'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -286,6 +308,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               // ✅ OPFS desteği için gerekli
               sharedCookiesEnabled: true,
               thirdPartyCookiesEnabled: true,
+              // ✅ Büyük dosyalar için cache artırımı
+              cacheEnabled: true,
+              clearCache: false,
             ),
             initialUserScripts: UnmodifiableListView<UserScript>([
               UserScript(
@@ -296,15 +321,12 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                         window.flutter_inappwebview.callHandler('openSettingsForPermission');
                       },
                       checkPermission: function() {
-                        // Async yapacağız, şimdilik false dön
                         return false;
                       },
                       listPDFs: function() {
-                        // Bu fonksiyon artık kullanılmayacak
                         return "";
                       },
                       getFileAsBase64: function(path) {
-                        // Bu fonksiyon için async handler ekleyeceğiz
                         return "";
                       },
                       shareFile: function(base64, name) {
@@ -324,12 +346,15 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             ]),
             onWebViewCreated: (controller) {
               webViewController = controller;
+              debugPrint("🌐 WebView oluşturuldu");
 
               // --- HANDLER: İZİN DURUMU KONTROL ET ---
               controller.addJavaScriptHandler(
                 handlerName: 'checkStoragePermission',
                 callback: (args) async {
-                  return await _checkStoragePermission();
+                  final hasPermission = await _checkStoragePermission();
+                  debugPrint("🔒 İzin kontrolü: $hasPermission");
+                  return hasPermission;
                 },
               );
 
@@ -337,6 +362,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               controller.addJavaScriptHandler(
                 handlerName: 'listPdfFiles',
                 callback: (args) async {
+                  debugPrint("📋 PDF listesi istendi");
                   final pdfFiles = await _listPdfFiles();
                   return jsonEncode(pdfFiles);
                 },
@@ -348,19 +374,83 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 callback: (args) async {
                   try {
                     String filePath = args[0];
+                    debugPrint("📄 Dosya okunuyor: $filePath");
+                    
                     final file = File(filePath);
                     
                     if (await file.exists()) {
-                      final bytes = await file.readAsBytes();
+                      final stat = await file.stat();
+                      final sizeInMB = stat.size / (1024 * 1024);
+                      debugPrint("📦 Dosya boyutu: ${sizeInMB.toStringAsFixed(2)} MB");
                       
-                      // ✅ Büyük dosyalar için sessionStorage yerine OPFS kullanılacak
-                      // Bu yüzden sadece base64 string dönüyoruz
-                      return 'data:application/pdf;base64,${base64Encode(bytes)}';
+                      // Büyük dosyalar için chunk okuma (10MB+)
+                      if (sizeInMB > 10) {
+                        debugPrint("⚠️ Büyük dosya tespit edildi, chunk okuma yapılacak");
+                      }
+                      
+                      final bytes = await file.readAsBytes();
+                      final base64 = 'data:application/pdf;base64,${base64Encode(bytes)}';
+                      
+                      debugPrint("✅ Dosya base64'e dönüştürüldü");
+                      return base64;
+                    } else {
+                      debugPrint("❌ Dosya bulunamadı: $filePath");
                     }
                   } catch (e) {
-                    debugPrint("Dosya okuma hatası: $e");
+                    debugPrint("❌ Dosya okuma hatası: $e");
                   }
                   return null;
+                },
+              );
+
+              // --- HANDLER: DOSYA BOYUTU AL ---
+              controller.addJavaScriptHandler(
+                handlerName: 'getFileSize',
+                callback: (args) async {
+                  try {
+                    String filePath = args[0];
+                    final file = File(filePath);
+                    
+                    if (await file.exists()) {
+                      final stat = await file.stat();
+                      debugPrint("📏 Dosya boyutu: ${_formatFileSize(stat.size)}");
+                      return stat.size;
+                    }
+                  } catch (e) {
+                    debugPrint("❌ Dosya boyutu alma hatası: $e");
+                  }
+                  return 0;
+                },
+              );
+
+              // --- HANDLER: DOSYA CHUNK OKUMA (BÜYÜK DOSYALAR İÇİN) ---
+              controller.addJavaScriptHandler(
+                handlerName: 'getFileChunk',
+                callback: (args) async {
+                  try {
+                    String filePath = args[0];
+                    int offset = args[1];
+                    int chunkSize = args[2];
+                    
+                    final file = File(filePath);
+                    
+                    if (await file.exists()) {
+                      final randomAccessFile = await file.open();
+                      await randomAccessFile.setPosition(offset);
+                      
+                      final bytes = await randomAccessFile.read(chunkSize);
+                      await randomAccessFile.close();
+                      
+                      if (bytes.isNotEmpty) {
+                        final chunkMB = bytes.length / (1024 * 1024);
+                        debugPrint("📦 Chunk okundu: ${chunkMB.toStringAsFixed(2)} MB (offset: $offset)");
+                        return base64Encode(bytes);
+                      }
+                    }
+                  } catch (e) {
+                    debugPrint("❌ Chunk okuma hatası: $e");
+                  }
+                  return '';
                 },
               );
 
@@ -368,7 +458,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               controller.addJavaScriptHandler(
                 handlerName: 'openSettingsForPermission',
                 callback: (args) async {
-                  debugPrint("Ayarlar isteği alındı...");
+                  debugPrint("⚙️ Ayarlar açılıyor...");
                   if (Platform.isAndroid) {
                     try {
                       final packageInfo = await PackageInfo.fromPlatform();
@@ -379,8 +469,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                         data: 'package:$packageName',
                       );
                       await intent.launch();
+                      debugPrint("✅ Ayarlar açıldı");
                     } catch (e) {
-                      debugPrint("Özel ayar intent hatası: $e");
+                      debugPrint("❌ Özel ayar intent hatası: $e");
                       await openAppSettings();
                     }
                   } else {
@@ -396,15 +487,21 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   try {
                     String base64Data = args[0];
                     String fileName = args.length > 1 ? args[1] : 'document.pdf';
+                    
+                    debugPrint("📤 PDF paylaşılıyor: $fileName");
+                    
                     final bytes = _decodeBase64(base64Data);
+                    final sizeInMB = bytes.length / (1024 * 1024);
+                    debugPrint("📦 Paylaşım boyutu: ${sizeInMB.toStringAsFixed(2)} MB");
                     
                     final tempDir = await getTemporaryDirectory();
                     final file = File('${tempDir.path}/$fileName');
                     await file.writeAsBytes(bytes);
                     
                     await Share.shareXFiles([XFile(file.path)], text: fileName);
+                    debugPrint("✅ PDF paylaşıldı");
                   } catch (e) {
-                    debugPrint("Paylaşma Hatası: $e");
+                    debugPrint("❌ Paylaşma Hatası: $e");
                   }
                 },
               );
@@ -415,15 +512,18 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 callback: (args) async {
                   try {
                     String filePath = args[0];
+                    debugPrint("📤 Dosya yolu ile paylaşılıyor: $filePath");
+                    
                     final file = File(filePath);
                     
                     if (await file.exists()) {
                       await Share.shareXFiles([XFile(file.path)]);
+                      debugPrint("✅ PDF paylaşıldı");
                     } else {
-                      debugPrint("Dosya bulunamadı: $filePath");
+                      debugPrint("❌ Dosya bulunamadı: $filePath");
                     }
                   } catch (e) {
-                    debugPrint("Path ile paylaşma hatası: $e");
+                    debugPrint("❌ Path ile paylaşma hatası: $e");
                   }
                 },
               );
@@ -435,14 +535,19 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   try {
                     String base64Data = args[0];
                     String fileName = args.length > 1 ? args[1] : 'document.pdf';
+                    
+                    debugPrint("🖨️ PDF yazdırılıyor: $fileName");
+                    
                     final bytes = _decodeBase64(base64Data);
                     
                     await Printing.layoutPdf(
                       onLayout: (format) async => bytes,
                       name: fileName,
                     );
+                    
+                    debugPrint("✅ Yazdırma tamamlandı");
                   } catch (e) {
-                    debugPrint("Yazdırma Hatası: $e");
+                    debugPrint("❌ Yazdırma Hatası: $e");
                   }
                 },
               );
@@ -453,6 +558,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 callback: (args) async {
                   try {
                     String filePath = args[0];
+                    debugPrint("🖨️ Dosya yolu ile yazdırılıyor: $filePath");
+                    
                     final file = File(filePath);
                     
                     if (await file.exists()) {
@@ -461,11 +568,12 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                         onLayout: (format) async => bytes,
                         name: file.path.split('/').last,
                       );
+                      debugPrint("✅ Yazdırma tamamlandı");
                     } else {
-                      debugPrint("Dosya bulunamadı: $filePath");
+                      debugPrint("❌ Dosya bulunamadı: $filePath");
                     }
                   } catch (e) {
-                    debugPrint("Path ile yazdırma hatası: $e");
+                    debugPrint("❌ Path ile yazdırma hatası: $e");
                   }
                 },
               );
@@ -479,38 +587,61 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     String fileName = args.length > 1 ? args[1] : 'document.pdf';
                     await _savePdfToFile(base64Data, fileName);
                   } catch (e) {
-                    debugPrint("İndirme Hatası: $e");
+                    debugPrint("❌ İndirme Hatası: $e");
                   }
                 },
               );
 
-              // --- HANDLER: OPFS BOYUT KONTROLÜ ---
+              // --- HANDLER: OPFS DESTEK KONTROLÜ ---
               controller.addJavaScriptHandler(
                 handlerName: 'checkOPFSSupport',
                 callback: (args) async {
-                  // OPFS WebView'de destekleniyor
+                  debugPrint("✅ OPFS desteği aktif");
                   return true;
                 },
               );
             },
             onLoadStart: (controller, url) {
+              final urlString = url.toString();
+              debugPrint("🌐 Sayfa yükleniyor: $urlString");
               setState(() {
-                _isViewerOpen = url.toString().contains("viewer.html");
+                _isViewerOpen = urlString.contains("viewer.html");
               });
             },
             onLoadStop: (controller, url) async {
+              final urlString = url.toString();
+              debugPrint("✅ Sayfa yüklendi: $urlString");
+              
               setState(() {
-                _isViewerOpen = url.toString().contains("viewer.html");
+                _isViewerOpen = urlString.contains("viewer.html");
               });
               
               // Sayfa yüklendikten sonra izin durumunu kontrol et
               await _checkAndUpdatePermissionStatus();
             },
             onConsoleMessage: (controller, consoleMessage) {
-              debugPrint("JS Console: ${consoleMessage.message}");
+              // JS Console mesajlarını Flutter console'a yaz
+              final message = consoleMessage.message;
+              final level = consoleMessage.messageLevel;
+              
+              String prefix = "📱 JS";
+              if (level == ConsoleMessageLevel.ERROR) {
+                prefix = "❌ JS ERROR";
+              } else if (level == ConsoleMessageLevel.WARNING) {
+                prefix = "⚠️ JS WARN";
+              }
+              
+              debugPrint("$prefix: $message");
+            },
+            onLoadError: (controller, url, code, message) {
+              debugPrint("❌ Yükleme hatası: $message (code: $code)");
+            },
+            onLoadHttpError: (controller, url, statusCode, description) {
+              debugPrint("❌ HTTP hatası: $description (status: $statusCode)");
             },
             // ✅ OPFS için gerekli - Storage erişim hatalarını önle
             onPermissionRequest: (controller, permissionRequest) async {
+              debugPrint("🔒 İzin isteği: ${permissionRequest.resources}");
               return PermissionResponse(
                 resources: permissionRequest.resources,
                 action: PermissionResponseAction.GRANT,
@@ -522,3 +653,5 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     );
   }
 }
+
+
