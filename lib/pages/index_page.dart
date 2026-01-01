@@ -1,8 +1,10 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+
 import '../services/pdf_service.dart';
 import '../services/permission_service.dart';
-import 'dart:collection';
 
 class IndexPage extends StatefulWidget {
   const IndexPage({super.key});
@@ -11,19 +13,22 @@ class IndexPage extends StatefulWidget {
   State<IndexPage> createState() => _IndexPageState();
 }
 
-class _IndexPageState extends State<IndexPage> with WidgetsBindingObserver {
+class _IndexPageState extends State<IndexPage>
+    with WidgetsBindingObserver {
   InAppWebViewController? webViewController;
   DateTime? _lastBackPressTime;
-  
-  late PDFService _pdfService;
-  late PermissionService _permissionService;
+
+  late final PDFService _pdfService;
+  late final PermissionService _permissionService;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
     _pdfService = PDFService();
     _permissionService = PermissionService();
+
     debugPrint("🏠 Index Page başlatıldı");
   }
 
@@ -44,11 +49,9 @@ class _IndexPageState extends State<IndexPage> with WidgetsBindingObserver {
 
   Future<void> _checkAndUpdatePermissionStatus() async {
     if (webViewController == null) return;
-    
-    final hasPermission = await _permissionService.checkStoragePermission();
-    
-    await webViewController!.evaluateJavascript(source: """
-      (function() {
+
+    await webViewController!.evaluateJavascript(source: '''
+      (function () {
         console.log("📱 Index: İzin durumu güncelleniyor");
         if (typeof onAndroidResume === 'function') {
           onAndroidResume();
@@ -57,55 +60,54 @@ class _IndexPageState extends State<IndexPage> with WidgetsBindingObserver {
           setTimeout(() => scanDeviceForPDFs(), 500);
         }
       })();
-    """);
+    ''');
   }
 
   Future<void> _navigateToViewer(String pdfName) async {
     debugPrint("🔄 Viewer'a geçiş yapılıyor: $pdfName");
-    
-    if (mounted) {
-      await Navigator.pushNamed(context, '/viewer');
-      
-      // Viewer'dan dönüldüğünde
-      debugPrint("🔙 Viewer'dan geri dönüldü, index yenileniyor");
-      _checkAndUpdatePermissionStatus();
-    }
+
+    if (!mounted) return;
+
+    await Navigator.pushNamed(context, '/viewer');
+
+    debugPrint("🔙 Viewer'dan geri dönüldü, index yenileniyor");
+    _checkAndUpdatePermissionStatus();
   }
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        if (webViewController != null) {
-          final result = await webViewController!.evaluateJavascript(
-            source: "window.androidBackPressed ? window.androidBackPressed() : false;"
-          );
-          
-          if (result == 'exit_check') {
-            final now = DateTime.now();
-            if (_lastBackPressTime == null || 
-                now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
-              _lastBackPressTime = now;
-              
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Çıkmak için tekrar basın'),
-                    duration: Duration(seconds: 2),
-                    backgroundColor: Colors.black87,
-                  ),
-                );
-              }
-              
-              return false;
+        if (webViewController == null) return true;
+
+        final result = await webViewController!.evaluateJavascript(
+          source:
+              "window.androidBackPressed ? window.androidBackPressed() : false;",
+        );
+
+        if (result == 'exit_check') {
+          final now = DateTime.now();
+
+          if (_lastBackPressTime == null ||
+              now.difference(_lastBackPressTime!) >
+                  const Duration(seconds: 2)) {
+            _lastBackPressTime = now;
+
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Çıkmak için tekrar basın'),
+                  duration: Duration(seconds: 2),
+                  backgroundColor: Colors.black87,
+                ),
+              );
             }
-            
-            return true;
+            return false;
           }
-          
-          return false;
+          return true;
         }
-        return true;
+
+        return false;
       },
       child: Scaffold(
         backgroundColor: Colors.white,
@@ -113,7 +115,9 @@ class _IndexPageState extends State<IndexPage> with WidgetsBindingObserver {
           bottom: false,
           child: InAppWebView(
             initialUrlRequest: URLRequest(
-              url: WebUri("file:///android_asset/flutter_assets/assets/web/index.html"),
+              url: WebUri(
+                "file:///android_asset/flutter_assets/assets/web/index.html",
+              ),
             ),
             initialSettings: InAppWebViewSettings(
               javaScriptEnabled: true,
@@ -126,127 +130,130 @@ class _IndexPageState extends State<IndexPage> with WidgetsBindingObserver {
               cacheEnabled: true,
               hardwareAcceleration: true,
             ),
-            initialUserScripts: UnmodifiableListView<UserScript>([
+            initialUserScripts:
+                UnmodifiableListView<UserScript>([
               UserScript(
-                source: """
+                source: '''
                   console.log("🏠 Index Page - IndexedDB Mode");
                   window.activeBlobUrls = window.activeBlobUrls || [];
-                  
-                  // Viewer'a geçiş için
-                  window.navigateToViewer = function(pdfName) {
+
+                  window.navigateToViewer = function (pdfName) {
                     console.log("📄 Viewer'a geçiliyor:", pdfName);
-                    window.flutter_inappwebview.callHandler('navigateToViewer', pdfName);
+                    window.flutter_inappwebview
+                      .callHandler('navigateToViewer', pdfName);
                   };
-                """,
-                injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+                ''',
+                injectionTime:
+                    UserScriptInjectionTime.AT_DOCUMENT_START,
               ),
             ]),
             onWebViewCreated: (controller) {
               webViewController = controller;
               debugPrint("🌐 Index WebView oluşturuldu");
 
-              // Viewer'a geçiş
               controller.addJavaScriptHandler(
                 handlerName: 'navigateToViewer',
                 callback: (args) async {
-                  String pdfName = args.isNotEmpty ? args[0] : "belge.pdf";
+                  final pdfName =
+                      args.isNotEmpty ? args[0] : "belge.pdf";
                   await _navigateToViewer(pdfName);
                 },
               );
 
-              // İzin kontrolü
               controller.addJavaScriptHandler(
                 handlerName: 'checkStoragePermission',
-                callback: (args) async {
-                  return await _permissionService.checkStoragePermission();
-                },
+                callback: (_) =>
+                    _permissionService.checkStoragePermission(),
               );
 
-              // İzin iste
               controller.addJavaScriptHandler(
                 handlerName: 'requestStoragePermission',
-                callback: (args) async {
-                  return await _permissionService.requestStoragePermission();
-                },
+                callback: (_) =>
+                    _permissionService.requestStoragePermission(),
               );
 
-              // PDF listesi
               controller.addJavaScriptHandler(
                 handlerName: 'listPdfFiles',
-                callback: (args) async {
-                  return await _pdfService.listPdfFiles();
-                },
+                callback: (_) => _pdfService.listPdfFiles(),
               );
 
-              // PDF path al
               controller.addJavaScriptHandler(
                 handlerName: 'getPdfPath',
-                callback: (args) async {
-                  String sourcePath = args[0];
-                  String fileName = args.length > 1 ? args[1] : sourcePath.split('/').last;
-                  return await _pdfService.getPdfPath(sourcePath, fileName);
+                callback: (args) {
+                  final sourcePath = args[0];
+                  final fileName = args.length > 1
+                      ? args[1]
+                      : sourcePath.split('/').last;
+                  return _pdfService.getPdfPath(
+                    sourcePath,
+                    fileName,
+                  );
                 },
               );
 
-              // Dosya oku
               controller.addJavaScriptHandler(
                 handlerName: 'readPdfFile',
-                callback: (args) async {
-                  return await _pdfService.readPdfFile(args[0]);
-                },
+                callback: (args) =>
+                    _pdfService.readPdfFile(args[0]),
               );
 
-              // Ayarları aç
               controller.addJavaScriptHandler(
                 handlerName: 'openSettingsForPermission',
-                callback: (args) async {
-                  await _permissionService.openAppSettings();
-                },
+                callback: (_) =>
+                    _permissionService.openAppSettings(),
               );
 
-              // Paylaş
               controller.addJavaScriptHandler(
                 handlerName: 'sharePdf',
-                callback: (args) async {
-                  await _pdfService.sharePdf(args[0], args.length > 1 ? args[1] : null);
-                },
+                callback: (args) =>
+                    _pdfService.sharePdf(
+                      args[0],
+                      args.length > 1 ? args[1] : null,
+                    ),
               );
 
-              // Yazdır
               controller.addJavaScriptHandler(
                 handlerName: 'printPdf',
-                callback: (args) async {
-                  await _pdfService.printPdf(context, args[0], args.length > 1 ? args[1] : null);
-                },
+                callback: (args) =>
+                    _pdfService.printPdf(
+                      context,
+                      args[0],
+                      args.length > 1 ? args[1] : null,
+                    ),
               );
 
-              // İndir
               controller.addJavaScriptHandler(
                 handlerName: 'downloadPdf',
-                callback: (args) async {
-                  await _pdfService.downloadPdf(context, args[0], args.length > 1 ? args[1] : null);
-                },
+                callback: (args) =>
+                    _pdfService.downloadPdf(
+                      context,
+                      args[0],
+                      args.length > 1 ? args[1] : null,
+                    ),
               );
             },
-            onLoadStop: (controller, url) async {
+            onLoadStop: (controller, _) async {
               await _checkAndUpdatePermissionStatus();
-              
-              // IndexedDB başlat
-              await controller.evaluateJavascript(source: """
-                (async function() {
+
+              await controller.evaluateJavascript(source: '''
+                (async function () {
                   try {
-                    if (typeof pdfManager !== 'undefined' && pdfManager.init) {
+                    if (typeof pdfManager !== 'undefined' &&
+                        pdfManager.init) {
                       await pdfManager.init();
                       console.log("✅ Index: IndexedDB başlatıldı");
                     }
                   } catch (e) {
-                    console.error("❌ Index: IndexedDB hatası:", e);
+                    console.error(
+                      "❌ Index: IndexedDB hatası:",
+                      e
+                    );
                   }
                 })();
-              """);
+              ''');
             },
-            onConsoleMessage: (controller, consoleMessage) {
-              debugPrint("🏠 INDEX JS: ${consoleMessage.message}");
+            onConsoleMessage: (_, message) {
+              debugPrint("🏠 INDEX JS: ${message.message}");
             },
           ),
         ),
