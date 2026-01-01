@@ -24,7 +24,7 @@ plugins {
     id("com.android.application") version "8.9.1" apply false
 
     // 🔴 Kotlin 2.x KALDIRILDI
-    id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+    id("org.jetbrains.kotlin.android") version "2.2.10" apply false
 }
 
 include(":app")
