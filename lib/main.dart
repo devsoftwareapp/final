@@ -156,22 +156,34 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   // İzin iste
   Future<bool> _requestStoragePermission() async {
     if (Platform.isAndroid) {
-      // Android sürümüne göre uygun izni iste
+      // İlk olarak manageExternalStorage'ı dene
       if (await Permission.manageExternalStorage.status.isDenied) {
         final result = await Permission.manageExternalStorage.request();
         if (result.isGranted) {
           return true;
         }
+        
+        // İzin reddedildiyse ayarlara yönlendir
+        if (result.isPermanentlyDenied) {
+          await _openAppSettings();
+          return false;
+        }
       }
       
+      // Normal storage iznini dene
       if (await Permission.storage.status.isDenied) {
         final result = await Permission.storage.request();
         if (result.isGranted) {
           return true;
         }
+        
+        if (result.isPermanentlyDenied) {
+          await _openAppSettings();
+          return false;
+        }
       }
       
-      // Android 13+ için
+      // Android 13+ için media izinlerini dene
       final results = await [
         Permission.photos,
         Permission.videos,
@@ -182,9 +194,38 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         return true;
       }
       
+      // Hiçbir izin alınamazsa ayarlara yönlendir
+      if (results.values.any((status) => status.isPermanentlyDenied)) {
+        await _openAppSettings();
+      }
+      
       return false;
     }
     return true;
+  }
+
+  // Ayarları aç
+  Future<void> _openAppSettings() async {
+    debugPrint("⚙️ Ayarlar açılıyor...");
+    try {
+      // Android için özel izin ayarları
+      if (Platform.isAndroid) {
+        await AppSettings.openAppSettings(type: AppSettingsType.settings);
+      } else {
+        await AppSettings.openAppSettings();
+      }
+      debugPrint("✅ Ayarlar açıldı");
+    } catch (e) {
+      debugPrint("❌ Ayarlar açma hatası: $e");
+      
+      // Fallback: permission_handler'ın openAppSettings'ini kullan
+      try {
+        await openAppSettings();
+        debugPrint("✅ Ayarlar açıldı (fallback)");
+      } catch (e2) {
+        debugPrint("❌ Fallback ayarlar açma hatası: $e2");
+      }
+    }
   }
 
   // Cihazdan PDF dosyalarını listele
@@ -648,16 +689,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               controller.addJavaScriptHandler(
                 handlerName: 'openSettingsForPermission',
                 callback: (args) async {
-                  debugPrint("⚙️ Ayarlar açılıyor...");
-                  try {
-                    await AppSettings.openAppSettings(
-                      type: AppSettingsType.settings,
-                      asAnotherTask: true,
-                    );
-                    debugPrint("✅ Ayarlar açıldı");
-                  } catch (e) {
-                    debugPrint("❌ Ayarlar açma hatası: $e");
-                  }
+                  await _openAppSettings();
                 },
               );
 
@@ -909,3 +941,5 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     );
   }
 }
+
+
