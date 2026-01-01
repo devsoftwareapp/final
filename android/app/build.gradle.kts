@@ -3,7 +3,7 @@ import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
+    id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -15,7 +15,10 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.devsoftware.pdfreader"
-    compileSdk = 35
+
+    // 🔴 GÜNCELLENDİ
+    compileSdk = 36
+
     ndkVersion = "27.2.12479018"
 
     compileOptions {
@@ -64,5 +67,6 @@ flutter {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
+    // ❌ kotlin-stdlib 2.1.0 KALDIRILDI
+    // Flutter + AGP + Kotlin sürümü settings.gradle.kts üzerinden gelir
 }
