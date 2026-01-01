@@ -1,60 +1,77 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
 
 class PermissionService {
-  
+  /* --------------------------------------------------------
+   * CHECK
+   * ------------------------------------------------------*/
   Future<bool> checkStoragePermission() async {
-    if (Platform.isAndroid) {
-      final android13 = await Future.wait([
-        Permission.photos.status,
-        Permission.videos.status,
-        Permission.audio.status,
-      ]);
-      
-      if (android13.any((status) => status.isGranted)) return true;
-      
-      if ((await Permission.manageExternalStorage.status).isGranted) return true;
-      if ((await Permission.storage.status).isGranted) return true;
-      
-      return false;
+    if (!Platform.isAndroid) return true;
+
+    // Android 13+ medya izinleri
+    final mediaStatuses = await Future.wait([
+      Permission.photos.status,
+      Permission.videos.status,
+      Permission.audio.status,
+    ]);
+
+    if (mediaStatuses.any((s) => s.isGranted)) {
+      return true;
     }
-    return true;
+
+    // Android 11–12
+    if (await Permission.manageExternalStorage.isGranted) {
+      return true;
+    }
+
+    if (await Permission.storage.isGranted) {
+      return true;
+    }
+
+    return false;
   }
 
+  /* --------------------------------------------------------
+   * REQUEST
+   * ------------------------------------------------------*/
   Future<bool> requestStoragePermission() async {
-    if (Platform.isAndroid) {
-      if (await Permission.manageExternalStorage.status.isDenied) {
-        final result = await Permission.manageExternalStorage.request();
-        if (result.isGranted) return true;
-        if (result.isPermanentlyDenied) {
-          await openAppSettings();
-          return false;
-        }
+    if (!Platform.isAndroid) return true;
+
+    // Android 11+ full access
+    if (await Permission.manageExternalStorage.isDenied) {
+      final result =
+          await Permission.manageExternalStorage.request();
+
+      if (result.isGranted) return true;
+
+      if (result.isPermanentlyDenied) {
+        await openAppSettings();
+        return false;
       }
-      
-      if (await Permission.storage.status.isDenied) {
-        final result = await Permission.storage.request();
-        if (result.isGranted) return true;
-      }
-      
-      return false;
     }
-    return true;
+
+    // Legacy
+    if (await Permission.storage.isDenied) {
+      final result = await Permission.storage.request();
+      if (result.isGranted) return true;
+    }
+
+    return false;
   }
 
+  /* --------------------------------------------------------
+   * OPEN SETTINGS
+   * ------------------------------------------------------*/
   Future<void> openAppSettings() async {
     try {
-      if (Platform.isAndroid) {
-        await AppSettings.openAppSettings(type: AppSettingsType.settings);
-      } else {
-        await AppSettings.openAppSettings();
-      }
+      await AppSettings.openAppSettings(
+        type: AppSettingsType.settings,
+      );
     } catch (e) {
-      debugPrint("❌ Ayarlar açma hatası: $e");
+      debugPrint("❌ Ayarlar açılamadı: $e");
     }
   }
 }
-
-
