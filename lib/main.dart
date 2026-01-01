@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-import 'pages/index_page.dart';
+import 'pages/index_pages.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
