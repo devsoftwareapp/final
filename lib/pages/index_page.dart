@@ -1,26 +1,14 @@
+import 'dart:collection';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:path_provider/path_provider.dart';
+
 import '../services/pdf_service.dart';
 import '../services/permission_service.dart';
 import 'viewer_page.dart';
-import 'dart:collection';
-import 'dart:io';  // ✅ EKLENDI (File için)
-import 'dart:convert';  // ✅ EKLENDI (jsonEncode için)
-import 'package:path_provider/path_provider.dart';  // ✅ EKLENDI (getTemporaryDirectory için)
-
-// ... geri kalan kod aynı kalacak
-```
-
-**index_page.dart'ın tamamı:**
-import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import '../services/pdf_service.dart';
-import '../services/permission_service.dart';
-import 'viewer_page.dart';
-import 'dart:collection';
-import 'dart:io';  // ✅ EKLENDI
-import 'dart:convert';  // ✅ EKLENDI
-import 'package:path_provider/path_provider.dart';  // ✅ EKLENDI
 
 class IndexPage extends StatefulWidget {
   const IndexPage({super.key});
