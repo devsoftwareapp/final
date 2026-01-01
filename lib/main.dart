@@ -1,11 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -55,15 +53,15 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   late PackageInfo _packageInfo;
   String _currentUrl = '';
   
-  // OPFS için geçici dosya takibi
-  final Map<String, String> _tempFiles = {}; // PDF name -> temp path
+  // Temp dosya takibi
+  final Map<String, String> _tempFiles = {};
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initPackageInfo();
-    debugPrint("🚀 PDF Reader başlatıldı - FULL OPFS MODE");
+    debugPrint("🚀 PDF Reader başlatıldı - IndexedDB ArrayBuffer Mode");
   }
 
   Future<void> _initPackageInfo() async {
@@ -85,7 +83,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // Temp dosyaları temizle
   Future<void> _cleanupTempFiles() async {
     for (var path in _tempFiles.values) {
       try {
@@ -100,7 +97,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     _tempFiles.clear();
   }
 
-  // İzin durumunu kontrol et ve JS'e bildir
   Future<void> _checkAndUpdatePermissionStatus() async {
     if (webViewController == null) return;
     
@@ -122,7 +118,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     """);
   }
 
-  // Storage izin kontrolü
   Future<bool> _checkStoragePermission() async {
     if (Platform.isAndroid) {
       // Android 13+ için
@@ -153,17 +148,15 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return true;
   }
 
-  // İzin iste
   Future<bool> _requestStoragePermission() async {
     if (Platform.isAndroid) {
-      // İlk olarak manageExternalStorage'ı dene
+      // manageExternalStorage'ı dene
       if (await Permission.manageExternalStorage.status.isDenied) {
         final result = await Permission.manageExternalStorage.request();
         if (result.isGranted) {
           return true;
         }
         
-        // İzin reddedildiyse ayarlara yönlendir
         if (result.isPermanentlyDenied) {
           await _openAppSettings();
           return false;
@@ -194,7 +187,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         return true;
       }
       
-      // Hiçbir izin alınamazsa ayarlara yönlendir
       if (results.values.any((status) => status.isPermanentlyDenied)) {
         await _openAppSettings();
       }
@@ -204,11 +196,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return true;
   }
 
-  // Ayarları aç
   Future<void> _openAppSettings() async {
     debugPrint("⚙️ Ayarlar açılıyor...");
     try {
-      // Android için özel izin ayarları
       if (Platform.isAndroid) {
         await AppSettings.openAppSettings(type: AppSettingsType.settings);
       } else {
@@ -218,7 +208,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint("❌ Ayarlar açma hatası: $e");
       
-      // Fallback: permission_handler'ın openAppSettings'ini kullan
       try {
         await openAppSettings();
         debugPrint("✅ Ayarlar açıldı (fallback)");
@@ -228,7 +217,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // Cihazdan PDF dosyalarını listele
   Future<List<Map<String, dynamic>>> _listPdfFiles() async {
     List<Map<String, dynamic>> pdfFiles = [];
     
@@ -271,7 +259,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return pdfFiles;
   }
 
-  // Dizini recursive olarak tara
   Future<void> _scanDirectoryRecursive(
     Directory directory, 
     List<Map<String, dynamic>> pdfFiles
@@ -285,8 +272,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             final stat = await entity.stat();
             final sizeInMB = stat.size / (1024 * 1024);
             
-            if (sizeInMB > 500) {
-              debugPrint("⚠️ Çok büyük dosya atlandı: ${entity.path} (${sizeInMB.toStringAsFixed(2)} MB)");
+            // IndexedDB için boyut limiti (100MB)
+            if (sizeInMB > 100) {
+              debugPrint("⚠️ Büyük dosya atlandı: ${entity.path} (${sizeInMB.toStringAsFixed(2)} MB) - IndexedDB limiti");
               continue;
             }
             
@@ -316,7 +304,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // Dosya boyutunu formatla
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
@@ -324,7 +311,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
-  // PDF'i geçici dizine kopyala ve path döndür (OPFS için)
   Future<String?> _copyPdfToTemp(String sourcePath, String fileName) async {
     try {
       debugPrint("📋 PDF temp'e kopyalanıyor: $fileName");
@@ -339,7 +325,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       final tempPath = '${tempDir.path}/$fileName';
       final tempFile = File(tempPath);
       
-      // Eğer temp'te varsa ve güncel ise tekrar kopyalama
       if (await tempFile.exists()) {
         final sourceStat = await sourceFile.stat();
         final tempStat = await tempFile.stat();
@@ -352,7 +337,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         }
       }
       
-      // Dosyayı kopyala
       await sourceFile.copy(tempPath);
       _tempFiles[fileName] = tempPath;
       
@@ -365,37 +349,38 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // Viewer'ı tamamen resetle ve index.html'e dön
   Future<void> _resetViewerAndGoBack() async {
     if (webViewController == null) return;
     
-    debugPrint("🔄 Viewer resetleniyor...");
+    debugPrint("🔄 Viewer resetleniyor (IndexedDB cleanup)...");
     
     try {
-      // 1. OPFS ve tüm storage'ı temizle
+      // IndexedDB ve storage temizliği
       await webViewController!.evaluateJavascript(source: """
         (async function() {
           try {
-            console.log("🗑️ Viewer tamamen temizleniyor...");
+            console.log("🗑️ Viewer IndexedDB temizleniyor...");
             
-            // OPFS cleanup
+            // IndexedDB cleanup
             if (typeof viewerPdfManager !== 'undefined' && viewerPdfManager.cleanup) {
               await viewerPdfManager.cleanup();
-              console.log("✅ OPFS temizlendi");
+              console.log("✅ IndexedDB Manager temizlendi");
             }
             
             // Session storage temizle
             sessionStorage.clear();
+            console.log("✅ Session storage temizlendi");
             
             // Local storage'daki PDF verilerini temizle
             const keysToRemove = [];
             for (let i = 0; i < localStorage.length; i++) {
               const key = localStorage.key(i);
-              if (key && (key.startsWith('pdf_') || key.includes('chunk'))) {
+              if (key && (key.startsWith('last') || key.includes('Pdf') || key.includes('Blob'))) {
                 keysToRemove.push(key);
               }
             }
             keysToRemove.forEach(key => localStorage.removeItem(key));
+            console.log("✅ Local storage temizlendi:", keysToRemove.length, "anahtar");
             
             // Tüm Blob URL'leri temizle
             if (typeof window.activeBlobUrls !== 'undefined') {
@@ -405,6 +390,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 } catch (e) {}
               });
               window.activeBlobUrls = [];
+              console.log("✅ Blob URL'ler temizlendi");
             }
             
             // PDFViewerApplication'ı kapat
@@ -412,16 +398,18 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               try {
                 if (PDFViewerApplication.pdfDocument) {
                   await PDFViewerApplication.pdfDocument.destroy();
+                  console.log("✅ PDF Document destroy edildi");
                 }
                 if (PDFViewerApplication.close) {
                   await PDFViewerApplication.close();
+                  console.log("✅ PDF Viewer kapatıldı");
                 }
               } catch (e) {
                 console.log("⚠️ PDF Viewer kapatma hatası:", e);
               }
             }
             
-            console.log("✅ Viewer tamamen temizlendi ve resetlendi");
+            console.log("✅ Viewer tamamen temizlendi (IndexedDB mode)");
             return true;
           } catch (e) {
             console.error("❌ Viewer temizleme hatası:", e);
@@ -430,17 +418,16 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         })();
       """);
       
-      // 2. Flutter tarafındaki temp dosyaları temizle
+      // Flutter tarafındaki temp dosyaları temizle
       await _cleanupTempFiles();
       
-      // 3. index.html'e geri dön
+      // index.html'e geri dön
       await webViewController!.loadUrl(
         urlRequest: URLRequest(
           url: WebUri("file:///android_asset/flutter_assets/assets/web/index.html"),
         ),
       );
       
-      // 4. State'i güncelle
       setState(() {
         _isViewerOpen = false;
         _currentUrl = 'index.html';
@@ -448,13 +435,13 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       
       debugPrint("✅ index.html'e geri dönüldü ve viewer resetlendi");
       
-      // 5. PDF listesini yeniden yükle
+      // PDF listesini yeniden yükle
       await Future.delayed(const Duration(milliseconds: 500), () async {
         await webViewController!.evaluateJavascript(source: """
           (function() {
+            console.log("🔄 PDF listesi yenileniyor...");
             if (typeof scanDeviceForPDFs === 'function') {
               scanDeviceForPDFs();
-              console.log("🔄 PDF listesi yenilendi");
             }
           })();
         """);
@@ -470,17 +457,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return WillPopScope(
       onWillPop: () async {
         if (webViewController != null) {
-          // Viewer açıksa
           if (_isViewerOpen) {
             debugPrint("⬅️ Viewer'dan geri dönülüyor...");
-            
-            // Viewer'ı resetle ve index.html'e dön
             await _resetViewerAndGoBack();
-            
             return false;
-          } 
-          // Index.html'de isek
-          else {
+          } else {
             final result = await webViewController!.evaluateJavascript(
               source: "window.androidBackPressed ? window.androidBackPressed() : false;"
             );
@@ -527,6 +508,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               allowUniversalAccessFromFileURLs: true,
               useHybridComposition: true,
               domStorageEnabled: true,
+              databaseEnabled: true, // IndexedDB için
               displayZoomControls: false,
               builtInZoomControls: false,
               safeBrowsingEnabled: false,
@@ -546,16 +528,17 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             initialUserScripts: UnmodifiableListView<UserScript>([
               UserScript(
                 source: """
-                  console.log("🚀 Flutter WebView başlatılıyor - FULL OPFS MODE");
+                  console.log("🚀 Flutter WebView başlatılıyor - IndexedDB ArrayBuffer Mode");
+                  console.log("📦 IndexedDB durumu:", typeof indexedDB !== 'undefined' ? 'Destekleniyor' : 'Desteklenmiyor');
                   
                   // Blob URL takibi
                   window.activeBlobUrls = window.activeBlobUrls || [];
                   
-                  // OPFS desteği kontrolü
-                  if (typeof navigator.storage !== 'undefined' && navigator.storage.getDirectory) {
-                    console.log("✅ OPFS destekleniyor - Native OPFS kullanılacak");
+                  // IndexedDB kullanılabilirlik kontrolü
+                  if (typeof indexedDB === 'undefined') {
+                    console.error("❌ IndexedDB desteklenmiyor!");
                   } else {
-                    console.log("❌ OPFS desteklenmiyor - IndexedDB fallback");
+                    console.log("✅ IndexedDB hazır");
                   }
                   
                   // Android interface mock (eski kod ile uyumluluk için)
@@ -572,7 +555,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             ]),
             onWebViewCreated: (controller) {
               webViewController = controller;
-              debugPrint("🌐 WebView oluşturuldu - OPFS aktif");
+              debugPrint("🌐 WebView oluşturuldu - IndexedDB Mode");
 
               // ==================== HANDLER: İZİN DURUMU ====================
               controller.addJavaScriptHandler(
@@ -612,7 +595,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
 
-              // ==================== HANDLER: PDF PATH AL (OPFS İÇİN) ====================
+              // ==================== HANDLER: PDF PATH AL ====================
               controller.addJavaScriptHandler(
                 handlerName: 'getPdfPath',
                 callback: (args) async {
@@ -620,7 +603,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     String sourcePath = args[0];
                     String fileName = args.length > 1 ? args[1] : sourcePath.split('/').last;
                     
-                    debugPrint("📄 PDF path istendi: $fileName");
+                    debugPrint("📄 PDF path istendi (IndexedDB için): $fileName");
                     
                     final tempPath = await _copyPdfToTemp(sourcePath, fileName);
                     
@@ -664,14 +647,14 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 callback: (args) async {
                   try {
                     String filePath = args[0];
-                    debugPrint("📖 PDF dosyası okunuyor: $filePath");
+                    debugPrint("📖 PDF dosyası okunuyor (IndexedDB için): $filePath");
                     
                     final file = File(filePath);
                     
                     if (await file.exists()) {
                       final bytes = await file.readAsBytes();
                       final sizeInMB = bytes.length / (1024 * 1024);
-                      debugPrint("✅ PDF okundu: ${sizeInMB.toStringAsFixed(2)} MB");
+                      debugPrint("✅ PDF okundu: ${sizeInMB.toStringAsFixed(2)} MB - IndexedDB'ye gönderiliyor");
                       
                       return bytes;
                     } else {
@@ -693,7 +676,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
 
-              // ==================== HANDLER: PAYLAŞ (PATH İLE) ====================
+              // ==================== HANDLER: PAYLAŞ ====================
               controller.addJavaScriptHandler(
                 handlerName: 'sharePdf',
                 callback: (args) async {
@@ -717,7 +700,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
 
-              // ==================== HANDLER: YAZDIR (PATH İLE) ====================
+              // ==================== HANDLER: YAZDIR ====================
               controller.addJavaScriptHandler(
                 handlerName: 'printPdf',
                 callback: (args) async {
@@ -754,7 +737,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
 
-              // ==================== HANDLER: İNDİR (PATH İLE) ====================
+              // ==================== HANDLER: İNDİR ====================
               controller.addJavaScriptHandler(
                 handlerName: 'downloadPdf',
                 callback: (args) async {
@@ -820,15 +803,37 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
 
-              // ==================== HANDLER: OPFS DESTEK KONTROLÜ ====================
+              // ==================== HANDLER: INDEXEDDB DESTEK KONTROLÜ ====================
               controller.addJavaScriptHandler(
-                handlerName: 'checkOPFSSupport',
+                handlerName: 'checkIndexedDBSupport',
                 callback: (args) async {
-                  debugPrint("✅ OPFS desteği aktif");
+                  debugPrint("✅ IndexedDB desteği kontrolü");
                   return true;
                 },
               );
-              
+
+              // ==================== HANDLER: STORAGE BİLGİSİ ====================
+              controller.addJavaScriptHandler(
+                handlerName: 'getStorageInfo',
+                callback: (args) async {
+                  try {
+                    final tempDir = await getTemporaryDirectory();
+                    final appDir = await getApplicationDocumentsDirectory();
+                    
+                    return jsonEncode({
+                      'tempDir': tempDir.path,
+                      'appDir': appDir.path,
+                      'indexedDBSupported': true,
+                      'maxPdfSize': 100, // MB
+                      'storageType': 'indexeddb-arraybuffer'
+                    });
+                  } catch (e) {
+                    debugPrint("❌ Storage bilgisi hatası: $e");
+                    return "{}";
+                  }
+                },
+              );
+
               // ==================== HANDLER: UYGULAMA DURUMU ====================
               controller.addJavaScriptHandler(
                 handlerName: 'getAppStatus',
@@ -839,7 +844,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     'storageAvailable': await _checkStoragePermission(),
                     'tempDir': (await getTemporaryDirectory()).path,
                     'appDir': (await getApplicationDocumentsDirectory()).path,
-                    'opfsSupported': true,
+                    'indexedDBSupported': true,
+                    'storageMode': 'indexeddb-arraybuffer',
                     'packageName': _packageInfo.packageName,
                     'appVersion': _packageInfo.version,
                   });
@@ -866,29 +872,40 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               // İzin durumunu kontrol et
               await _checkAndUpdatePermissionStatus();
               
-              // OPFS'i başlat
+              // IndexedDB'yi başlat
               await controller.evaluateJavascript(source: """
                 (async function() {
                   try {
-                    if (typeof navigator.storage !== 'undefined' && navigator.storage.getDirectory) {
-                      console.log("✅ OPFS aktif - initialize ediliyor");
-                      
-                      // index.html için
-                      if (typeof pdfManager !== 'undefined' && pdfManager.init) {
-                        const success = await pdfManager.init();
-                        console.log("📦 Index OPFS Manager: " + (success ? "Başarılı" : "Başarısız"));
-                      }
-                      
-                      // viewer.html için
-                      if (typeof viewerPdfManager !== 'undefined' && viewerPdfManager.init) {
-                        const success = await viewerPdfManager.init();
-                        console.log("📦 Viewer OPFS Manager: " + (success ? "Başarılı" : "Başarısız"));
-                      }
-                    } else {
-                      console.log("⚠️ OPFS desteklenmiyor, IndexedDB fallback kullanılacak");
+                    console.log("📦 IndexedDB başlatılıyor...");
+                    
+                    if (typeof indexedDB === 'undefined') {
+                      console.error("❌ IndexedDB desteklenmiyor!");
+                      return;
                     }
+                    
+                    // index.html için
+                    if (typeof pdfManager !== 'undefined' && pdfManager.init) {
+                      const success = await pdfManager.init();
+                      console.log("📦 Index IndexedDB Manager: " + (success ? "✅ Başarılı" : "❌ Başarısız"));
+                      
+                      if (success) {
+                        const info = await pdfManager.getStorageInfo();
+                        if (info) {
+                          console.log("💾 Storage kullanımı: " + info.usedMB + " MB / " + info.quotaMB + " MB");
+                        }
+                      }
+                    }
+                    
+                    // viewer.html için
+                    if (typeof viewerPdfManager !== 'undefined' && viewerPdfManager.init) {
+                      const success = await viewerPdfManager.init();
+                      console.log("📦 Viewer IndexedDB Manager: " + (success ? "✅ Başarılı" : "❌ Başarısız"));
+                    }
+                    
+                    console.log("✅ IndexedDB hazır (ArrayBuffer mode)");
+                    
                   } catch (e) {
-                    console.error("❌ OPFS başlatma hatası:", e);
+                    console.error("❌ IndexedDB başlatma hatası:", e);
                   }
                 })();
               """);
