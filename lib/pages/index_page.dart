@@ -25,10 +25,8 @@ class _IndexPageState extends State<IndexPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-
     _pdfService = PDFService();
     _permissionService = PermissionService();
-
     debugPrint("🏠 Index Page başlatıldı");
   }
 
@@ -42,7 +40,6 @@ class _IndexPageState extends State<IndexPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      debugPrint("📱 Index: Uygulama geri döndü");
       _checkAndUpdatePermissionStatus();
     }
   }
@@ -52,7 +49,6 @@ class _IndexPageState extends State<IndexPage>
 
     await webViewController!.evaluateJavascript(source: '''
       (function () {
-        console.log("📱 Index: İzin durumu güncelleniyor");
         if (typeof onAndroidResume === 'function') {
           onAndroidResume();
         }
@@ -64,13 +60,9 @@ class _IndexPageState extends State<IndexPage>
   }
 
   Future<void> _navigateToViewer(String pdfName) async {
-    debugPrint("🔄 Viewer'a geçiş yapılıyor: $pdfName");
-
     if (!mounted) return;
 
     await Navigator.pushNamed(context, '/viewer');
-
-    debugPrint("🔙 Viewer'dan geri dönüldü, index yenileniyor");
     _checkAndUpdatePermissionStatus();
   }
 
@@ -93,24 +85,19 @@ class _IndexPageState extends State<IndexPage>
                   const Duration(seconds: 2)) {
             _lastBackPressTime = now;
 
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Çıkmak için tekrar basın'),
-                  duration: Duration(seconds: 2),
-                  backgroundColor: Colors.black87,
-                ),
-              );
-            }
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Çıkmak için tekrar basın'),
+                duration: Duration(seconds: 2),
+              ),
+            );
             return false;
           }
           return true;
         }
-
         return false;
       },
       child: Scaffold(
-        backgroundColor: Colors.white,
         body: SafeArea(
           bottom: false,
           child: InAppWebView(
@@ -134,11 +121,7 @@ class _IndexPageState extends State<IndexPage>
                 UnmodifiableListView<UserScript>([
               UserScript(
                 source: '''
-                  console.log("🏠 Index Page - IndexedDB Mode");
-                  window.activeBlobUrls = window.activeBlobUrls || [];
-
                   window.navigateToViewer = function (pdfName) {
-                    console.log("📄 Viewer'a geçiliyor:", pdfName);
                     window.flutter_inappwebview
                       .callHandler('navigateToViewer', pdfName);
                   };
@@ -149,14 +132,13 @@ class _IndexPageState extends State<IndexPage>
             ]),
             onWebViewCreated: (controller) {
               webViewController = controller;
-              debugPrint("🌐 Index WebView oluşturuldu");
 
               controller.addJavaScriptHandler(
                 handlerName: 'navigateToViewer',
                 callback: (args) async {
-                  final pdfName =
-                      args.isNotEmpty ? args[0] : "belge.pdf";
-                  await _navigateToViewer(pdfName);
+                  await _navigateToViewer(
+                    args.isNotEmpty ? args[0] : "belge.pdf",
+                  );
                 },
               );
 
@@ -198,12 +180,6 @@ class _IndexPageState extends State<IndexPage>
               );
 
               controller.addJavaScriptHandler(
-                handlerName: 'openSettingsForPermission',
-                callback: (_) =>
-                    _permissionService.openAppSettings(),
-              );
-
-              controller.addJavaScriptHandler(
                 handlerName: 'sharePdf',
                 callback: (args) =>
                     _pdfService.sharePdf(
@@ -234,26 +210,6 @@ class _IndexPageState extends State<IndexPage>
             },
             onLoadStop: (controller, _) async {
               await _checkAndUpdatePermissionStatus();
-
-              await controller.evaluateJavascript(source: '''
-                (async function () {
-                  try {
-                    if (typeof pdfManager !== 'undefined' &&
-                        pdfManager.init) {
-                      await pdfManager.init();
-                      console.log("✅ Index: IndexedDB başlatıldı");
-                    }
-                  } catch (e) {
-                    console.error(
-                      "❌ Index: IndexedDB hatası:",
-                      e
-                    );
-                  }
-                })();
-              ''');
-            },
-            onConsoleMessage: (_, message) {
-              debugPrint("🏠 INDEX JS: ${message.message}");
             },
           ),
         ),
