@@ -81,6 +81,7 @@ class _ViewerPageState extends State<ViewerPage> {
               databaseEnabled: true,
               cacheEnabled: true,
               hardwareAcceleration: true,
+              mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
             ),
             initialUserScripts: UnmodifiableListView<UserScript>([
               UserScript(
@@ -88,7 +89,6 @@ class _ViewerPageState extends State<ViewerPage> {
                   console.log("📄 Viewer Page - IndexedDB Mode");
                   window.activeBlobUrls = window.activeBlobUrls || [];
                   
-                  // Index'e dön
                   window.goBackToIndex = function() {
                     window.flutter_inappwebview.callHandler('goBackToIndex');
                   };
@@ -100,7 +100,6 @@ class _ViewerPageState extends State<ViewerPage> {
               webViewController = controller;
               debugPrint("🌐 Viewer WebView oluşturuldu");
 
-              // Index'e dön
               controller.addJavaScriptHandler(
                 handlerName: 'goBackToIndex',
                 callback: (args) async {
@@ -108,7 +107,6 @@ class _ViewerPageState extends State<ViewerPage> {
                 },
               );
 
-              // PDF path al
               controller.addJavaScriptHandler(
                 handlerName: 'getPdfPath',
                 callback: (args) async {
@@ -118,7 +116,6 @@ class _ViewerPageState extends State<ViewerPage> {
                 },
               );
 
-              // Dosya oku
               controller.addJavaScriptHandler(
                 handlerName: 'readPdfFile',
                 callback: (args) async {
@@ -126,7 +123,6 @@ class _ViewerPageState extends State<ViewerPage> {
                 },
               );
 
-              // Paylaş
               controller.addJavaScriptHandler(
                 handlerName: 'sharePdf',
                 callback: (args) async {
@@ -134,7 +130,6 @@ class _ViewerPageState extends State<ViewerPage> {
                 },
               );
 
-              // Yazdır
               controller.addJavaScriptHandler(
                 handlerName: 'printPdf',
                 callback: (args) async {
@@ -142,7 +137,6 @@ class _ViewerPageState extends State<ViewerPage> {
                 },
               );
 
-              // İndir
               controller.addJavaScriptHandler(
                 handlerName: 'downloadPdf',
                 callback: (args) async {
@@ -151,7 +145,6 @@ class _ViewerPageState extends State<ViewerPage> {
               );
             },
             onLoadStop: (controller, url) async {
-              // IndexedDB başlat
               await controller.evaluateJavascript(source: """
                 (async function() {
                   try {
@@ -159,7 +152,6 @@ class _ViewerPageState extends State<ViewerPage> {
                       await viewerPdfManager.init();
                       console.log("✅ Viewer: IndexedDB başlatıldı");
                       
-                      // PDF'i yükle
                       if (typeof loadPdfIntoViewer === 'function') {
                         await loadPdfIntoViewer();
                       }
