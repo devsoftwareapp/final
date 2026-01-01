@@ -7,12 +7,10 @@ import 'dart:io';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Android için WebView debugging aktif
   if (Platform.isAndroid) {
     await InAppWebViewController.setWebContentsDebuggingEnabled(true);
   }
   
-  // Status bar ve Navigation bar ayarları
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -23,12 +21,6 @@ void main() async {
       systemNavigationBarDividerColor: Colors.transparent,
     ),
   );
-  
-  // Ekran yönelimi ayarı (opsiyonel - gerekirse aktif et)
-  // await SystemChrome.setPreferredOrientations([
-  //   DeviceOrientation.portraitUp,
-  //   DeviceOrientation.portraitDown,
-  // ]);
   
   runApp(const MyApp());
 }
@@ -81,7 +73,8 @@ class MyApp extends StatelessWidget {
           ),
         ),
         
-        cardTheme: CardTheme(
+        // ✅ CardTheme yerine CardThemeData
+        cardTheme: CardThemeData(
           color: const Color(0xFFE8E8E8),
           elevation: 2,
           shadowColor: Colors.black.withOpacity(0.1),
@@ -113,7 +106,8 @@ class MyApp extends StatelessWidget {
           elevation: 8,
         ),
         
-        dialogTheme: DialogTheme(
+        // ✅ DialogTheme yerine DialogThemeData
+        dialogTheme: DialogThemeData(
           backgroundColor: const Color(0xFFE8E8E8),
           elevation: 8,
           shape: RoundedRectangleBorder(
@@ -175,7 +169,8 @@ class MyApp extends StatelessWidget {
           ),
         ),
         
-        cardTheme: CardTheme(
+        // ✅ CardTheme yerine CardThemeData
+        cardTheme: CardThemeData(
           color: const Color(0xFF1E293B),
           elevation: 2,
           shadowColor: Colors.black.withOpacity(0.3),
@@ -207,7 +202,8 @@ class MyApp extends StatelessWidget {
           elevation: 8,
         ),
         
-        dialogTheme: DialogTheme(
+        // ✅ DialogTheme yerine DialogThemeData
+        dialogTheme: DialogThemeData(
           backgroundColor: const Color(0xFF1E293B),
           elevation: 8,
           shape: RoundedRectangleBorder(
@@ -230,17 +226,13 @@ class MyApp extends StatelessWidget {
         ),
       ),
       
-      // ==================== THEME MODE ====================
-      themeMode: ThemeMode.system, // Sistem temasını takip eder
-      
-      // ==================== HOME PAGE ====================
+      themeMode: ThemeMode.system,
       home: const IndexPage(),
       
-      // ==================== DEBUG ====================
       builder: (context, child) {
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(
-            textScaler: const TextScaler.linear(1.0), // Font scaling disable
+            textScaler: const TextScaler.linear(1.0),
           ),
           child: child!,
         );
@@ -248,5 +240,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
-
