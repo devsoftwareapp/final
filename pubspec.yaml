@@ -1,5 +1,5 @@
 name: pdfreader
-description: "PDF Reader with IndexedDB Support"
+description: "PDF Reader"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,39 +9,20 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
-  # UI
   cupertino_icons: ^1.0.8
-  
-  # WebView
   flutter_inappwebview: ^6.1.5
-  
-  # File & Path
+  url_launcher: ^6.3.2
+  permission_handler: ^12.0.1
   path_provider: ^2.1.5
   file_picker: ^10.3.8
-  
-  # Permissions
-  permission_handler: ^12.0.1
-  app_settings: ^7.0.0
-  
-  # Share & Print
-  share_plus: ^12.0.1
-  printing: ^5.12.3
-  
-  # Network & Connectivity
-  url_launcher: ^6.3.2
+  shared_preferences: ^2.2.2
   dio: ^5.3.0
   connectivity_plus: ^5.0.0
-  
-  # Storage & Preferences
-  shared_preferences: ^2.2.2
-  
-  # File Operations
   open_file: ^3.5.10
-  
-  # Device Info
-  package_info_plus: ^9.0.0
-  device_info_plus: ^10.1.2  # ✅ EKLENDI (EKSİKTİ)
+  app_settings: ^7.0.0
+  printing: ^5.12.3
+  share_plus: ^12.0.1
+  package_info_plus: ^9.0.0  # Versiyonu güncellendi
 
 dev_dependencies:
   flutter_test:
@@ -53,27 +34,29 @@ flutter:
   
   # Tüm asset'ler
   assets:
-    # Build klasörü
+    # assets/build klasörü
     - assets/build/
     
-    # Web klasörü (tüm içerik)
+    
+    
+    # Tüm web klasörünü ekle
     - assets/web/
     
-    # Web ana dosyaları
+    # Web ana dosyaları (ek güvenlik için)
     - assets/web/fonts/MaterialSymbolsRounded.woff2
     - assets/web/index.html
+    - assets/web/img/
     - assets/web/viewer.html
     - assets/web/viewer.css
     - assets/web/viewer.mjs
+  
     
-    # Images
-    - assets/web/img/
+    # Images klasörü
     - assets/web/images/
-    
-    # Locale ana dosyası
     - assets/web/locale/locale.json
+
     
-    # Tüm locale klasörleri
+    # Tüm locale klasörleri - tam liste
     - assets/web/locale/af/
     - assets/web/locale/ar/
     - assets/web/locale/ast/
@@ -171,5 +154,3 @@ flutter:
     - assets/web/locale/xh/
     - assets/web/locale/zh-CN/
     - assets/web/locale/zh-TW/
-
-
