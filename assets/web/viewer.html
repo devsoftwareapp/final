@@ -1333,9 +1333,7 @@
           
           
           
- 
-<script>
-
+          <script>
 // =============================================================================
 // VIEWER INDEXEDDB PDF MANAGER - ARRAYBUFFER KULLANIMI
 // =============================================================================
@@ -1379,7 +1377,6 @@ class ViewerIndexedDBPdfManager {
             let usingIndexedDB = sessionStorage.getItem('usingIndexedDB') === 'true';
             let pdfName = sessionStorage.getItem('currentPdfName');
             
-            // ✅ Session storage boşsa, local storage'dan al
             if (!usingIndexedDB || !pdfName) {
                 console.log("⚠️ Session storage boş, local storage kontrol ediliyor...");
                 
@@ -1401,7 +1398,6 @@ class ViewerIndexedDBPdfManager {
             console.log(`📄 PDF verisi aranıyor: ${pdfName}`);
             console.log(`📊 Depo türü: IndexedDB=${usingIndexedDB}`);
             
-            // ✅ IndexedDB'den ArrayBuffer olarak al
             if (usingIndexedDB && this.isInitialized) {
                 console.log("📂 IndexedDB'den ArrayBuffer yükleniyor...");
                 return await this.getFromIndexedDB(pdfName);
@@ -1458,9 +1454,8 @@ class ViewerIndexedDBPdfManager {
         const sizeInMB = result.size / (1024 * 1024);
         console.log(`✅ IndexedDB'den bulundu: ${pdfName} (${sizeInMB.toFixed(2)} MB)`);
         
-        // ✅ ArrayBuffer olarak döndür (Blob URL yerine)
         resolve({
-            data: result.data, // ArrayBuffer
+            data: result.data,
             name: pdfName,
             isBlob: false,
             isArrayBuffer: true,
@@ -1709,7 +1704,6 @@ async function loadPdfIntoViewer() {
             
             showLoadingIndicator();
             
-            // ✅ ArrayBuffer'ı direkt kullan
             if (pdfInfo.isArrayBuffer && pdfInfo.data instanceof ArrayBuffer) {
                 console.log("📦 ArrayBuffer kullanılıyor");
                 
@@ -1808,7 +1802,11 @@ function hideLoadingIndicator() {
 
 function goBackToIndex() {
     cleanupBeforeExit();
-    window.location.href = 'index.html';
+    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+        window.flutter_inappwebview.callHandler('goBackToIndex');
+    } else {
+        window.location.href = 'index.html';
+    }
 }
 
 function cleanupBeforeExit() {
@@ -1823,14 +1821,14 @@ function cleanupBeforeExit() {
             }
         }
         
-        console.log("✅ Viewer temizlendi, index.html'ye yönlendiriliyor...");
+        console.log("✅ Viewer temizlendi");
     } catch (error) {
         console.error("❌ Çıkış temizleme hatası:", error);
     }
 }
 
 // =============================================================================
-// NATIVE & BROWSER FONKSİYONLAR
+// NATIVE & BROWSER FONKSİYONLAR - GÜNCELLENDİ (Flutter iletişimi için)
 // =============================================================================
 
 async function sharePDF() {
@@ -1842,19 +1840,23 @@ async function sharePDF() {
 
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         try {
+            console.log("📤 Flutter'a PDF paylaşım isteği gönderiliyor");
+            
+            // PDF'i base64'e çevir
             const arrayBuffer = pdfInfo.data;
+            const uint8Array = new Uint8Array(arrayBuffer);
             
-            let binary = '';
-            const bytes = new Uint8Array(arrayBuffer);
-            const chunkSize = 0x8000;
+            // Blob oluştur ve URL yarat
+            const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+            const blobUrl = URL.createObjectURL(blob);
             
-            for (let i = 0; i < bytes.length; i += chunkSize) {
-                const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-                binary += String.fromCharCode.apply(null, chunk);
-            }
+            console.log("📄 PDF boyutu:", (arrayBuffer.byteLength / 1024 / 1024).toFixed(2), "MB");
             
-            const base64 = "data:application/pdf;base64," + btoa(binary);
-            window.flutter_inappwebview.callHandler('sharePdf', base64, pdfInfo.name);
+            // Flutter handler'ı çağır
+            window.flutter_inappwebview.callHandler('handleSharePdf', {
+                fileName: pdfInfo.name,
+                fileSize: arrayBuffer.byteLength
+            });
             
         } catch (e) {
             console.error("❌ Paylaşma hatası:", e);
@@ -1884,19 +1886,17 @@ async function downloadPDF() {
 
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         try {
+            console.log("💾 Flutter'a PDF indirme isteği gönderiliyor");
+            
             const arrayBuffer = pdfInfo.data;
             
-            let binary = '';
-            const bytes = new Uint8Array(arrayBuffer);
-            const chunkSize = 0x8000;
+            console.log("📄 PDF boyutu:", (arrayBuffer.byteLength / 1024 / 1024).toFixed(2), "MB");
             
-            for (let i = 0; i < bytes.length; i += chunkSize) {
-                const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-                binary += String.fromCharCode.apply(null, chunk);
-            }
-            
-            const base64 = "data:application/pdf;base64," + btoa(binary);
-            window.flutter_inappwebview.callHandler('downloadPdf', base64, pdfInfo.name);
+            // Flutter handler'ı çağır
+            window.flutter_inappwebview.callHandler('handleDownloadPdf', {
+                fileName: pdfInfo.name,
+                fileSize: arrayBuffer.byteLength
+            });
             
         } catch (e) {
             console.error("❌ İndirme hatası:", e);
@@ -1929,19 +1929,17 @@ async function printWithWebShare() {
 
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         try {
+            console.log("🖨️ Flutter'a PDF yazdırma isteği gönderiliyor");
+            
             const arrayBuffer = pdfInfo.data;
             
-            let binary = '';
-            const bytes = new Uint8Array(arrayBuffer);
-            const chunkSize = 0x8000;
+            console.log("📄 PDF boyutu:", (arrayBuffer.byteLength / 1024 / 1024).toFixed(2), "MB");
             
-            for (let i = 0; i < bytes.length; i += chunkSize) {
-                const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-                binary += String.fromCharCode.apply(null, chunk);
-            }
-            
-            const base64 = "data:application/pdf;base64," + btoa(binary);
-            window.flutter_inappwebview.callHandler('printPdf', base64, pdfInfo.name);
+            // Flutter handler'ı çağır
+            window.flutter_inappwebview.callHandler('handlePrintPdf', {
+                fileName: pdfInfo.name,
+                fileSize: arrayBuffer.byteLength
+            });
             
         } catch (e) {
             console.error("❌ Yazdırma hatası:", e);
@@ -1985,6 +1983,28 @@ function startClassicPrint() {
         window.PDFViewerApplication.print();
     } else {
         window.print();
+    }
+}
+
+// =============================================================================
+// PDF VERİ TRANSFERİ FONKSİYONLARI
+// =============================================================================
+
+async function getPdfArrayBuffer() {
+    try {
+        const pdfInfo = await getUpdatedPdfData();
+        if (!pdfInfo || !pdfInfo.data) {
+            console.error("❌ PDF verisi alınamadı");
+            return null;
+        }
+        
+        console.log("📦 PDF ArrayBuffer hazırlanıyor:", 
+                   (pdfInfo.data.byteLength / 1024 / 1024).toFixed(2), "MB");
+        
+        return pdfInfo.data;
+    } catch (error) {
+        console.error("❌ PDF ArrayBuffer alınırken hata:", error);
+        return null;
     }
 }
 
@@ -2038,156 +2058,63 @@ document.addEventListener('visibilitychange', function() {
 });
 
 // =============================================================================
-// FULLSCREEN SUPPORT
+// FLUTTER COMMUNICATION FUNCTIONS
 // =============================================================================
 
-function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {
-            console.log(`Fullscreen hatası: ${err.message}`);
-        });
-    } else {
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
-        }
-    }
-}
-
-document.addEventListener('fullscreenchange', function() {
-    if (document.fullscreenElement) {
-        document.body.classList.add('fullscreen');
-    } else {
-        document.body.classList.remove('fullscreen');
-    }
-});
-
-// =============================================================================
-// ERROR HANDLING
-// =============================================================================
-
-window.addEventListener('error', function(e) {
-    console.error('❌ Global hata:', e.error);
-});
-
-if (window.PDFViewerApplication) {
-    window.PDFViewerApplication.eventBus.on('error', function(evt) {
-        console.error('❌ PDF.js hatası:', evt);
-    });
-}
-
-// =============================================================================
-// PERFORMANCE OPTIMIZATIONS
-// =============================================================================
-
-let lastPageRendered = 0;
-const pageRenderDelay = 100;
-
-function optimizePageRendering() {
-    if (window.PDFViewerApplication && window.PDFViewerApplication.pdfViewer) {
-        const currentPage = window.PDFViewerApplication.pdfViewer.currentPageNumber;
-        const now = Date.now();
+// Flutter'dan PDF verisi almak için
+window.receivePdfArrayBuffer = async function(arrayBuffer, fileName) {
+    try {
+        console.log("📦 Flutter'dan PDF ArrayBuffer alındı:", 
+                   (arrayBuffer.byteLength / 1024 / 1024).toFixed(2), "MB");
         
-        if (now - lastPageRendered > pageRenderDelay) {
-            lastPageRendered = now;
-            updatePageIndicator(currentPage);
-        }
-    }
-}
-
-function updatePageIndicator(page) {
-    const pageIndicator = document.getElementById('currentPageIndicator');
-    if (pageIndicator) {
-        const totalPages = window.PDFViewerApplication.pagesCount || 0;
-        pageIndicator.textContent = `Sayfa ${page} / ${totalPages}`;
-    }
-}
-
-if (window.PDFViewerApplication) {
-    window.PDFViewerApplication.eventBus.on('pagechanging', optimizePageRendering);
-}
-
-// =============================================================================
-// FLUTTER COMMUNICATION
-// =============================================================================
-
-if (window.flutter_inappwebview) {
-    window.addEventListener('flutterInAppWebViewPlatformReady', function(event) {
-        console.log('✅ Flutter WebView hazır');
-    });
-}
-
-// =============================================================================
-// MOBILE-SPECIFIC FEATURES
-// =============================================================================
-
-let touchStartX = 0;
-let touchEndX = 0;
-
-document.addEventListener('touchstart', function(e) {
-    touchStartX = e.changedTouches[0].screenX;
-}, { passive: true });
-
-document.addEventListener('touchend', function(e) {
-    touchEndX = e.changedTouches[0].screenX;
-    handleSwipeGesture();
-}, { passive: true });
-
-function handleSwipeGesture() {
-    const swipeThreshold = 100;
-    const swipeRight = touchEndX - touchStartX > swipeThreshold;
-    
-    if (swipeRight && touchStartX < 50) {
-        goBackToIndex();
-    }
-}
-
-function adjustForStatusBar() {
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    
-    if (isMobile) {
-        const customToolbar = document.getElementById('customToolbar');
-        if (customToolbar) {
-            customToolbar.style.paddingTop = 'env(safe-area-inset-top)';
-            customToolbar.style.height = 'calc(35px + env(safe-area-inset-top))';
-        }
-    }
-}
-
-window.addEventListener('load', adjustForStatusBar);
-window.addEventListener('resize', adjustForStatusBar);
-
-// =============================================================================
-// BACK BUTTON HANDLER FOR ANDROID WEBVIEW
-// =============================================================================
-
-let viewerBackPressedTime = 0;
-
-window.viewerBackPressed = function() {
-    const now = Date.now();
-    
-    if (viewerBackPressedTime + 2000 > now) {
-        cleanupBeforeExit();
-        return 'exit_viewer';
-    } else {
-        viewerBackPressedTime = now;
+        // IndexedDB'ye kaydet
+        await viewerPdfManager.saveUpdatedPdf(arrayBuffer);
         
-        const backButton = document.getElementById('customBackButton');
-        if (backButton) {
-            backButton.click();
-        } else {
-            goBackToIndex();
+        // PDF'i yeniden yükle
+        if (window.PDFViewerApplication) {
+            PDFViewerApplication.open({ 
+                data: new Uint8Array(arrayBuffer),
+                originalUrl: fileName 
+            }).then(() => {
+                console.log("✅ PDF güncellendi ve yeniden yüklendi");
+            });
         }
         
+        return true;
+    } catch (error) {
+        console.error("❌ PDF güncelleme hatası:", error);
         return false;
     }
 };
 
-console.log("✅ Viewer IndexedDB ArrayBuffer Version Loaded");
+// Flutter için genel iletişim fonksiyonu
+window.flutterCommunication = {
+    getPdfData: async function() {
+        return await getUpdatedPdfData();
+    },
+    
+    getPdfArrayBuffer: async function() {
+        return await getPdfArrayBuffer();
+    },
+    
+    getPdfInfo: async function() {
+        const pdfInfo = await getUpdatedPdfData();
+        if (pdfInfo) {
+            return {
+                name: pdfInfo.name,
+                size: pdfInfo.size,
+                method: pdfInfo.method
+            };
+        }
+        return null;
+    }
+};
+
+console.log("✅ Viewer IndexedDB ArrayBuffer Version Loaded - Flutter Integrated");
 
 </script>
-
-
-
+          
+          
           
 
              <!-- ozel toolbar -->
