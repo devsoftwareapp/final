@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'pages/index_pages.dart';
+import 'pages/viewer_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +29,9 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.red,
       ),
       home: const IndexPage(),
+      routes: {
+        '/viewer': (_) => const ViewerPage(),
+      },
     );
   }
 }
