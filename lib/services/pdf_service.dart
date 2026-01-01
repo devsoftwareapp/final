@@ -8,7 +8,6 @@ import 'package:printing/printing.dart';
 class PDFService {
   final Map<String, String> _tempFiles = {};
 
-  // Temp dosyaları temizle
   Future<void> cleanupTempFiles() async {
     for (var path in _tempFiles.values) {
       try {
@@ -23,7 +22,6 @@ class PDFService {
     _tempFiles.clear();
   }
 
-  // PDF listesi
   Future<String> listPdfFiles() async {
     List<Map<String, dynamic>> pdfFiles = [];
     
@@ -88,7 +86,6 @@ class PDFService {
     }
   }
 
-  // PDF path al
   Future<String?> getPdfPath(String sourcePath, String fileName) async {
     try {
       final sourceFile = File(sourcePath);
@@ -107,7 +104,6 @@ class PDFService {
     }
   }
 
-  // Dosya oku
   Future<dynamic> readPdfFile(String filePath) async {
     try {
       final file = File(filePath);
@@ -120,7 +116,6 @@ class PDFService {
     return null;
   }
 
-  // Paylaş
   Future<void> sharePdf(String filePath, String? fileName) async {
     try {
       final file = File(filePath);
@@ -135,7 +130,6 @@ class PDFService {
     }
   }
 
-  // Yazdır
   Future<void> printPdf(BuildContext context, String filePath, String? fileName) async {
     try {
       final file = File(filePath);
@@ -156,7 +150,6 @@ class PDFService {
     }
   }
 
-  // İndir
   Future<void> downloadPdf(BuildContext context, String sourcePath, String? fileName) async {
     try {
       final sourceFile = File(sourcePath);
