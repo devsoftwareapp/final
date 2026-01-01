@@ -1,5 +1,5 @@
 name: pdfreader
-description: "PDF Reader"
+description: "PDF Reader with IndexedDB Support"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,20 +9,39 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  
+  # UI
   cupertino_icons: ^1.0.8
+  
+  # WebView
   flutter_inappwebview: ^6.1.5
-  url_launcher: ^6.3.2
-  permission_handler: ^12.0.1
+  
+  # File & Path
   path_provider: ^2.1.5
   file_picker: ^10.3.8
-  shared_preferences: ^2.2.2
+  
+  # Permissions
+  permission_handler: ^12.0.1
+  app_settings: ^7.0.0
+  
+  # Share & Print
+  share_plus: ^12.0.1
+  printing: ^5.12.3
+  
+  # Network & Connectivity
+  url_launcher: ^6.3.2
   dio: ^5.3.0
   connectivity_plus: ^5.0.0
+  
+  # Storage & Preferences
+  shared_preferences: ^2.2.2
+  
+  # File Operations
   open_file: ^3.5.10
-  app_settings: ^7.0.0
-  printing: ^5.12.3
-  share_plus: ^12.0.1
-  package_info_plus: ^9.0.0  # Versiyonu güncellendi
+  
+  # Device Info
+  package_info_plus: ^9.0.0
+  device_info_plus: ^10.1.2  # ✅ EKLENDI (EKSİKTİ)
 
 dev_dependencies:
   flutter_test:
@@ -34,29 +53,27 @@ flutter:
   
   # Tüm asset'ler
   assets:
-    # assets/build klasörü
+    # Build klasörü
     - assets/build/
     
-    
-    
-    # Tüm web klasörünü ekle
+    # Web klasörü (tüm içerik)
     - assets/web/
     
-    # Web ana dosyaları (ek güvenlik için)
+    # Web ana dosyaları
     - assets/web/fonts/MaterialSymbolsRounded.woff2
     - assets/web/index.html
-    - assets/web/img/
     - assets/web/viewer.html
     - assets/web/viewer.css
     - assets/web/viewer.mjs
-  
     
-    # Images klasörü
+    # Images
+    - assets/web/img/
     - assets/web/images/
-    - assets/web/locale/locale.json
-
     
-    # Tüm locale klasörleri - tam liste
+    # Locale ana dosyası
+    - assets/web/locale/locale.json
+    
+    # Tüm locale klasörleri
     - assets/web/locale/af/
     - assets/web/locale/ar/
     - assets/web/locale/ast/
@@ -154,3 +171,5 @@ flutter:
     - assets/web/locale/xh/
     - assets/web/locale/zh-CN/
     - assets/web/locale/zh-TW/
+
+
