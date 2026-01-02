@@ -1528,6 +1528,7 @@
 
 <script>
 
+
 // =============================================================================
 // 1. INDEXEDDB PDF MANAGER - ANDROID WEBVIEW UYUMLU
 // =============================================================================
@@ -1542,7 +1543,7 @@ class IndexedDBPdfManager {
 
     async init() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, 1);
+            const request = indexedDB.open(this.dbName, 2); // Version 2'ye güncellendi
             
             request.onerror = () => {
                 console.error("❌ IndexedDB açılamadı");
@@ -1558,14 +1559,34 @@ class IndexedDBPdfManager {
             
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
-                if (!db.objectStoreNames.contains(this.storeName)) {
+                const oldVersion = event.oldVersion;
+                
+                if (oldVersion < 1) {
+                    // İlk versiyon
                     db.createObjectStore(this.storeName, { keyPath: 'id' });
+                }
+                
+                if (oldVersion < 2) {
+                    // Path alanını eklemek için store'u recreate et
+                    const store = event.currentTarget.transaction.objectStore(this.storeName);
+                    const allRequest = store.getAll();
+                    
+                    allRequest.onsuccess = () => {
+                        const allData = allRequest.result;
+                        db.deleteObjectStore(this.storeName);
+                        const newStore = db.createObjectStore(this.storeName, { keyPath: 'id' });
+                        
+                        // Eski verileri geri yükle
+                        allData.forEach(item => {
+                            newStore.put(item);
+                        });
+                    };
                 }
             };
         });
     }
 
-    async savePdfToIndexedDB(file, fileName = null) {
+    async savePdfToIndexedDB(file, fileName = null, filePath = null) {
         try {
             if (!this.isInitialized) {
                 await this.init();
@@ -1586,7 +1607,8 @@ class IndexedDBPdfManager {
                     name: pdfName,
                     data: arrayBuffer,
                     size: file.size,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    filePath: filePath || null
                 };
                 
                 const request = store.put(fileData);
@@ -1597,7 +1619,8 @@ class IndexedDBPdfManager {
                         name: pdfName,
                         data: arrayBuffer,
                         size: file.size,
-                        timestamp: Date.now()
+                        timestamp: Date.now(),
+                        filePath: filePath || null
                     };
                     
                     const currentRequest = store.put(currentData);
@@ -1713,6 +1736,39 @@ class IndexedDBPdfManager {
         }
     }
 
+    async checkIfPdfExists(filePath) {
+        try {
+            if (!this.isInitialized) {
+                await this.init();
+            }
+
+            return new Promise((resolve) => {
+                const transaction = this.db.transaction([this.storeName], 'readonly');
+                const store = transaction.objectStore(this.storeName);
+                const request = store.openCursor();
+                let exists = false;
+                
+                request.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        if (cursor.value.filePath === filePath && cursor.value.id !== 'current') {
+                            exists = true;
+                        }
+                        cursor.continue();
+                    } else {
+                        resolve(exists);
+                    }
+                };
+                
+                request.onerror = () => resolve(false);
+            });
+            
+        } catch (error) {
+            console.error("❌ PDF kontrol hatası:", error);
+            return false;
+        }
+    }
+
     cleanup() {
         const blobUrl = sessionStorage.getItem('currentPdfBlobUrl');
         if (blobUrl) {
@@ -1737,33 +1793,23 @@ class IndexedDBPdfManager {
             return new Promise((resolve, reject) => {
                 const transaction = this.db.transaction([this.storeName], 'readonly');
                 const store = transaction.objectStore(this.storeName);
-                const request = store.getAllKeys();
+                const request = store.openCursor();
+                const files = [];
                 
                 request.onsuccess = (e) => {
-                    const keys = e.target.result.filter(key => key !== 'current');
-                    const files = [];
-                    
-                    let processed = 0;
-                    keys.forEach(key => {
-                        const getRequest = store.get(key);
-                        getRequest.onsuccess = (event) => {
-                            const result = event.target.result;
-                            if (result) {
-                                files.push({
-                                    name: result.name,
-                                    size: result.size,
-                                    timestamp: result.timestamp
-                                });
-                            }
-                            processed++;
-                            if (processed === keys.length) {
-                                resolve(files);
-                            }
-                        };
-                    });
-                    
-                    if (keys.length === 0) {
-                        resolve([]);
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        if (cursor.value.id !== 'current') {
+                            files.push({
+                                name: cursor.value.name,
+                                size: cursor.value.size,
+                                timestamp: cursor.value.timestamp,
+                                filePath: cursor.value.filePath || null
+                            });
+                        }
+                        cursor.continue();
+                    } else {
+                        resolve(files);
                     }
                 };
                 
@@ -2066,7 +2112,20 @@ function loadData() {
   });
   renderList('favoritesList', sortedFavorites, 'favorites');
   
-  const allDeviceFiles = [...devicePDFs, ...importedFiles.filter(f => !f.path || !f.path.startsWith('/'))];
+  // Cihaz PDF'lerini unique hale getir (path'e göre)
+  const uniqueDevicePDFs = [];
+  const seenPaths = new Set();
+  
+  devicePDFs.forEach(pdf => {
+    if (pdf.fullPath && !seenPaths.has(pdf.fullPath)) {
+      seenPaths.add(pdf.fullPath);
+      uniqueDevicePDFs.push(pdf);
+    } else if (!pdf.fullPath) {
+      uniqueDevicePDFs.push(pdf);
+    }
+  });
+  
+  const allDeviceFiles = [...uniqueDevicePDFs, ...importedFiles.filter(f => !f.path || !f.path.startsWith('/'))];
   renderList('deviceList', allDeviceFiles, 'device');
   
   checkPermissionAndUpdateUI();
@@ -2088,7 +2147,7 @@ function renderList(listId, files, listType) {
         let html = '';
         files.forEach(file => {
             const metaText = getMetaText(file, listType);
-            html += createCard(file.name, file.size, metaText, file.isFavorite, file.id, listType);
+            html += createCard(file.name, file.size, metaText, file.isFavorite, file.id, listType, file.filePath || file.fullPath);
         });
         list.innerHTML = html;
         attachLongPressEvents();
@@ -2110,6 +2169,16 @@ function getMetaText(file, listType) {
         }
     }
     
+    if (listType === 'device') {
+        if (file.uploadDate) {
+            const date = new Date(file.uploadDate);
+            const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
+            return `${file.size} • ${dateStr}`;
+        }
+        
+        return `${file.size} • ${file.date || 'Bilinmeyen tarih'}`;
+    }
+    
     if (file.uploadDate) {
         const date = new Date(file.uploadDate);
         const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
@@ -2119,7 +2188,7 @@ function getMetaText(file, listType) {
     return `${file.size} • ${file.date || 'Bilinmeyen tarih'}`;
 }
 
-function createCard(name, size, meta, isFavorite, id, listType) {
+function createCard(name, size, meta, isFavorite, id, listType, filePath = null) {
   const MAX_LENGTH = 30;
   const truncatedName = name.length > MAX_LENGTH 
       ? name.substring(0, MAX_LENGTH) + '...' 
@@ -2129,6 +2198,16 @@ function createCard(name, size, meta, isFavorite, id, listType) {
   const bgColor = theme === 'dark' ? 'var(--pdf-color-bg)' : '#E53935';
   const textColor = theme === 'dark' ? 'var(--pdf-color-text)' : '#E53935';
   const fillStar = isFavorite ? 1 : 0;
+  
+  // Dosya konumu için kısaltılmış path
+  let fileLocation = '';
+  if (listType === 'device' && filePath) {
+    const pathParts = filePath.split('/');
+    if (pathParts.length > 2) {
+      const folderName = pathParts[pathParts.length - 2];
+      fileLocation = `📁 ${folderName}`;
+    }
+  }
 
   const pdfIconSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 64 64">
@@ -2155,6 +2234,7 @@ function createCard(name, size, meta, isFavorite, id, listType) {
        data-favorite="${isFavorite ? 'true' : 'false'}"
        data-id="${id}"
        data-list-type="${listType}"
+       data-file-path="${filePath || ''}"
        onclick="handleCardClick(this, '${name}', ${id})">
     
     <div class="selection-checkbox" onclick="event.stopPropagation(); toggleCardSelection(${id})"></div>
@@ -2165,6 +2245,7 @@ function createCard(name, size, meta, isFavorite, id, listType) {
     <div class="card-details">
         <h3 class="card-title">${truncatedName}</h3>
         <div class="card-meta">${meta}</div>
+        ${fileLocation ? `<div class="card-meta" style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">${fileLocation}</div>` : ''}
     </div>
     <div class="card-actions">
         <button class="icon-button favorite-btn" 
@@ -2179,8 +2260,6 @@ function createCard(name, size, meta, isFavorite, id, listType) {
     </div>
   </div>`;
 }
-
-
 
 // =============================================================================
 // 7. FILE HANDLING - INDEXEDDB
@@ -2319,7 +2398,7 @@ async function openPdfFile(fileData, name) {
                             const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
                             const file = new File([blob], pdfName, { type: 'application/pdf' });
                             
-                            const result = await pdfManager.savePdfToIndexedDB(file);
+                            const result = await pdfManager.savePdfToIndexedDB(file, pdfName, fileData.fullPath);
                             
                             if (result.success) {
                                 const pdfUrl = await pdfManager.getCurrentPdfUrl();
@@ -2376,13 +2455,8 @@ function formatBytes(bytes, decimals = 1) {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 }
 
-
-
-
-
-
 // =============================================================================
-// 8. PERMISSION FUNCTIONS
+// 8. PERMISSION FUNCTIONS - GÜNCELLENDİ (DOĞRUDAN AYARLARA)
 // =============================================================================
 
 function showPermissionModal() {
@@ -2398,16 +2472,31 @@ function closePermissionModal() {
 function openSettingsForPermission() {
     closePermissionModal();
     
+    console.log("🔧 DOĞRUDAN DOSYA ERİŞİMİ AYARLARI AÇILIYOR...");
+    
+    // Android için doğrudan dosya erişim izni sayfasına yönlendir
     if (typeof window.flutter_inappwebview !== 'undefined') {
-        window.flutter_inappwebview.callHandler('openSettingsForPermission');
-    } else if (typeof Android !== 'undefined' && Android.openSettings) {
-        Android.openSettings();
+        window.flutter_inappwebview.callHandler('openFileAccessSettings');
+    } else if (typeof Android !== 'undefined' && Android.openFileAccessSettings) {
+        Android.openFileAccessSettings();
     } else {
-        console.log("Ayarlar açılıyor...");
-        setTimeout(() => {
-            setTimeout(scanDeviceForPDFs, 2000);
-        }, 500);
+        // WebView için intent
+        try {
+            const intentUri = 'intent:#Intent;action=android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION;package=com.android.settings;end';
+            window.location.href = intentUri;
+        } catch (e) {
+            console.error("❌ Intent açılamadı:", e);
+            alert("Lütfen cihaz ayarlarından dosya erişim izni verin.");
+        }
     }
+    
+    // 2 saniye sonra izni kontrol et
+    setTimeout(async () => {
+        const hasPermission = await checkAndroidPermission();
+        if (hasPermission) {
+            scanDeviceForPDFs();
+        }
+    }, 2000);
 }
 
 function requestStoragePermission() {
@@ -2437,8 +2526,17 @@ async function scanDeviceForPDFs() {
         
         devicePDFs = [];
         let nextId = 1000;
+        const seenPaths = new Set();
         
-        pdfFiles.forEach(fileInfo => {
+        for (const fileInfo of pdfFiles) {
+            // Aynı path'teki dosyaları kontrol et
+            const alreadyExists = await pdfManager.checkIfPdfExists(fileInfo.path);
+            if (alreadyExists || seenPaths.has(fileInfo.path)) {
+                console.log(`⏭️  Zaten listede: ${fileInfo.name}`);
+                continue;
+            }
+            
+            seenPaths.add(fileInfo.path);
             const sizeFormatted = fileInfo.size ? formatBytes(fileInfo.size) : '0 KB';
             const date = new Date(fileInfo.modified);
             const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
@@ -2452,9 +2550,10 @@ async function scanDeviceForPDFs() {
                 isFavorite: false,
                 path: fileInfo.path,
                 fullPath: fileInfo.path,
-                source: 'device'
+                source: 'device',
+                filePath: fileInfo.path
             });
-        });
+        }
         
         checkPermissionAndUpdateUI();
         loadData();
@@ -2492,7 +2591,7 @@ async function checkPermissionAndUpdateUI() {
 }
 
 // =============================================================================
-// 9. SELECTION MODE
+// 9. SELECTION MODE - GÜNCELLENDİ (UZUN BASMA İYİLEŞTİRMESİ)
 // =============================================================================
 
 function enterSelectionMode() {
@@ -2579,19 +2678,16 @@ async function shareSelectedCards() {
     
     if (selectedFiles.length > 0) {
         if (typeof window.flutter_inappwebview !== 'undefined') {
-            // Base64 ile paylaş
             for (const file of selectedFiles) {
                 try {
                     let base64Data = null;
                     
                     if (file.source === 'imported' && file.indexedDBSaved) {
-                        // IndexedDB'den al
                         const blob = await pdfManager.getPdfFromIndexedDB(file.name);
                         if (blob) {
                             base64Data = await blobToBase64(blob);
                         }
                     } else if (file.source === 'device' && file.fullPath) {
-                        // Cihazdan oku
                         const tempPath = await window.flutter_inappwebview.callHandler('getPdfPath', file.fullPath, file.name);
                         if (tempPath) {
                             const pdfBytes = await window.flutter_inappwebview.callHandler('readPdfFile', tempPath);
@@ -2634,7 +2730,6 @@ async function printSelectedCards() {
     
     if (selectedFiles.length > 0) {
         if (typeof window.flutter_inappwebview !== 'undefined') {
-            // Base64 ile yazdır
             for (const file of selectedFiles) {
                 try {
                     let base64Data = null;
@@ -2718,36 +2813,77 @@ function toggleFavorite(button, cardId) {
 }
 
 // =============================================================================
-// 11. LONG PRESS
+// 11. LONG PRESS - GÜNCELLENDİ (KARARLI BASMA)
 // =============================================================================
 
 let longPressTimer;
 let isLongPress = false;
+let touchStartTime = 0;
+let touchStartX = 0;
+let touchStartY = 0;
 
 function attachLongPressEvents() {
     const cards = document.querySelectorAll('.card');
+    
     cards.forEach(card => {
+        // Touch start - basma başlangıcı
         card.addEventListener('touchstart', (e) => {
             if (e.target.closest('.icon-button')) {
                 clearTimeout(longPressTimer);
                 return;
             }
             
+            touchStartTime = Date.now();
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
             isLongPress = false;
+            
             longPressTimer = setTimeout(() => {
+                // Uzun basma algılandı
                 isLongPress = true;
                 if (navigator.vibrate) navigator.vibrate(50);
+                
                 const cardId = parseInt(card.dataset.id);
                 toggleCardSelection(cardId);
-            }, 500);
+            }, 500); // 500ms uzun basma süresi
         }, {passive: true});
 
-        card.addEventListener('touchend', () => {
-            clearTimeout(longPressTimer);
+        // Touch move - parmak hareket ederse
+        card.addEventListener('touchmove', (e) => {
+            const currentX = e.touches[0].clientX;
+            const currentY = e.touches[0].clientY;
+            const moveThreshold = 10;
+            
+            // Parmak çok hareket ederse uzun basmayı iptal et
+            if (Math.abs(currentX - touchStartX) > moveThreshold || 
+                Math.abs(currentY - touchStartY) > moveThreshold) {
+                clearTimeout(longPressTimer);
+            }
         });
 
-        card.addEventListener('touchmove', () => {
+        // Touch end - basma bitti
+        card.addEventListener('touchend', () => {
+            const touchDuration = Date.now() - touchStartTime;
+            
+            // Eğer uzun basma algılandıysa, normal tıklama işlemini engelle
+            if (isLongPress) {
+                isLongPress = false;
+                return;
+            }
+            
+            // Kısa basma ise timer'ı temizle
             clearTimeout(longPressTimer);
+            
+            // 200ms'den kısa basma normal tıklamadır
+            if (touchDuration < 200) {
+                isLongPress = false;
+            }
+        });
+        
+        // Touch cancel - basma iptal edildi
+        card.addEventListener('touchcancel', () => {
+            clearTimeout(longPressTimer);
+            isLongPress = false;
         });
     });
 }
@@ -3078,10 +3214,29 @@ function attachEvents() {
     tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab, true)));
     navItems.forEach(n => n.addEventListener('click', () => switchNav(n.dataset.nav)));
     
+    // FAB - PDF AÇ İŞLEMİ İÇİN İZİN MODALI
     fabButton.addEventListener('click', (e) => {
         e.stopPropagation();
         fabMenu.classList.toggle('show');
     });
+    
+    // PDF Aç butonu için izin kontrolü
+    document.querySelector('.fab-item').addEventListener('click', (e) => {
+        e.stopPropagation();
+        fabMenu.classList.remove('show');
+        
+        // İzin kontrolü yap
+        checkAndroidPermission().then(hasPermission => {
+            if (hasPermission) {
+                // İzin varsa normal dosya seçiciyi aç
+                pdfFileInput.click();
+            } else {
+                // İzin yoksa izin modalını göster
+                showPermissionModal();
+            }
+        });
+    });
+    
     document.addEventListener('click', () => fabMenu.classList.remove('show'));
     
     document.getElementById('menuBtn').addEventListener('click', () => {
@@ -3236,7 +3391,14 @@ function sendHelpEmail(e) {
 
 function handleFabAction(action) {
   if (action === 'open_pdf') {
-      pdfFileInput.click();
+      // İzin kontrolü yap
+      checkAndroidPermission().then(hasPermission => {
+          if (hasPermission) {
+              pdfFileInput.click();
+          } else {
+              showPermissionModal();
+          }
+      });
   }
   fabMenu.classList.remove('show');
 }
@@ -3342,7 +3504,42 @@ window.showPermissionModal = showPermissionModal;
 window.closePermissionModal = closePermissionModal;
 window.openSettingsForPermission = openSettingsForPermission;
 
-console.log("✅ PDF Reader - IndexedDB Version Loaded (Base64 Support)");
+console.log("✅ PDF Reader - Güncellenmiş Versiyon Yüklendi");
+
+// =============================================================================
+// 20. THEME PREFERENCE
+// =============================================================================
+
+function setThemePreference(theme) {
+    const themeOptions = document.querySelectorAll('.theme-option');
+    themeOptions.forEach(option => {
+        option.classList.remove('active');
+        if (option.dataset.themeVal === theme) {
+            option.classList.add('active');
+        }
+    });
+    
+    if (theme === 'device') {
+        // Cihaz temasını kullan
+        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.setAttribute('data-theme', systemPrefersDark ? 'dark' : 'light');
+    } else {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+    
+    localStorage.setItem('themePreference', theme);
+}
+
+// Sayfa yüklendiğinde tema tercihini yükle
+document.addEventListener('DOMContentLoaded', () => {
+    const savedTheme = localStorage.getItem('themePreference');
+    if (savedTheme) {
+        setThemePreference(savedTheme);
+    }
+});
+
+
+
 
 </script>
 
