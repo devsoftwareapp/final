@@ -1332,8 +1332,7 @@
           <!-- ozel toolbar -->
           
           
-          
- 
+     
 <script>
 
 // =============================================================================
@@ -1830,7 +1829,7 @@ function cleanupBeforeExit() {
 }
 
 // =============================================================================
-// NATIVE & BROWSER FONKSİYONLAR
+// NATIVE & BROWSER FONKSİYONLAR - ARRAYBUFFER → BASE64 DÖNÜŞÜMLERİ
 // =============================================================================
 
 async function sharePDF() {
@@ -1842,23 +1841,23 @@ async function sharePDF() {
 
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         try {
-            const arrayBuffer = pdfInfo.data;
+            console.log("📤 PDF paylaşılıyor (Flutter - Base64)...");
             
-            let binary = '';
-            const bytes = new Uint8Array(arrayBuffer);
-            const chunkSize = 0x8000;
+            // ArrayBuffer'ı base64'e çevir
+            const base64 = await arrayBufferToBase64(pdfInfo.data);
             
-            for (let i = 0; i < bytes.length; i += chunkSize) {
-                const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-                binary += String.fromCharCode.apply(null, chunk);
-            }
+            // Flutter'a base64 string gönder
+            await window.flutter_inappwebview.callHandler(
+                'sharePdfBase64', 
+                base64, 
+                pdfInfo.name
+            );
             
-            const base64 = "data:application/pdf;base64," + btoa(binary);
-            window.flutter_inappwebview.callHandler('sharePdf', base64, pdfInfo.name);
+            console.log("✅ PDF paylaşıldı");
             
         } catch (e) {
             console.error("❌ Paylaşma hatası:", e);
-            alert("PDF paylaşma hatası.");
+            alert("PDF paylaşma hatası: " + e.message);
         }
     } 
     else if (navigator.share) {
@@ -1884,26 +1883,27 @@ async function downloadPDF() {
 
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         try {
-            const arrayBuffer = pdfInfo.data;
+            console.log("💾 PDF indiriliyor (Flutter - Base64)...");
             
-            let binary = '';
-            const bytes = new Uint8Array(arrayBuffer);
-            const chunkSize = 0x8000;
+            // ArrayBuffer'ı base64'e çevir
+            const base64 = await arrayBufferToBase64(pdfInfo.data);
             
-            for (let i = 0; i < bytes.length; i += chunkSize) {
-                const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-                binary += String.fromCharCode.apply(null, chunk);
-            }
+            // Flutter'a base64 string gönder
+            await window.flutter_inappwebview.callHandler(
+                'downloadPdfBase64', 
+                base64, 
+                pdfInfo.name
+            );
             
-            const base64 = "data:application/pdf;base64," + btoa(binary);
-            window.flutter_inappwebview.callHandler('downloadPdf', base64, pdfInfo.name);
+            console.log("✅ PDF indirildi");
             
         } catch (e) {
             console.error("❌ İndirme hatası:", e);
-            alert("PDF indirme hatası.");
+            alert("PDF indirme hatası: " + e.message);
         }
     } 
     else {
+        // Browser fallback
         const blob = new Blob([pdfInfo.data], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -1929,27 +1929,53 @@ async function printWithWebShare() {
 
     if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
         try {
-            const arrayBuffer = pdfInfo.data;
+            console.log("🖨️ PDF yazdırılıyor (Flutter - Base64)...");
             
-            let binary = '';
-            const bytes = new Uint8Array(arrayBuffer);
-            const chunkSize = 0x8000;
+            // ArrayBuffer'ı base64'e çevir
+            const base64 = await arrayBufferToBase64(pdfInfo.data);
             
-            for (let i = 0; i < bytes.length; i += chunkSize) {
-                const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-                binary += String.fromCharCode.apply(null, chunk);
-            }
+            // Flutter'a base64 string gönder
+            await window.flutter_inappwebview.callHandler(
+                'printPdfBase64', 
+                base64, 
+                pdfInfo.name
+            );
             
-            const base64 = "data:application/pdf;base64," + btoa(binary);
-            window.flutter_inappwebview.callHandler('printPdf', base64, pdfInfo.name);
+            console.log("✅ Yazdırma başlatıldı");
             
         } catch (e) {
             console.error("❌ Yazdırma hatası:", e);
-            alert("PDF yazdırma hatası.");
+            alert("PDF yazdırma hatası: " + e.message);
         }
     } else {
         document.getElementById('printDialogOverlay').style.display = 'flex'; 
     }
+}
+
+// ============================================================================
+// YARDIMCI FONKSİYON: ARRAYBUFFER → BASE64 DÖNÜŞÜMÜ
+// ============================================================================
+
+async function arrayBufferToBase64(buffer) {
+    return new Promise((resolve, reject) => {
+        try {
+            const blob = new Blob([buffer], { type: 'application/pdf' });
+            const reader = new FileReader();
+            
+            reader.onloadend = () => {
+                // "data:application/pdf;base64,..." formatını al
+                resolve(reader.result);
+            };
+            
+            reader.onerror = () => {
+                reject(new Error("Base64 dönüşüm hatası"));
+            };
+            
+            reader.readAsDataURL(blob);
+        } catch (e) {
+            reject(e);
+        }
+    });
 }
 
 function hidePrintDialog() { 
@@ -2182,13 +2208,11 @@ window.viewerBackPressed = function() {
     }
 };
 
-console.log("✅ Viewer IndexedDB ArrayBuffer Version Loaded");
+console.log("✅ Viewer IndexedDB ArrayBuffer + Base64 Version Loaded");
 
 </script>
 
 
-
-          
 
              <!-- ozel toolbar -->
                 <!-- ozel toolbar -->
