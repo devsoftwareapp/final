@@ -774,17 +774,70 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     String base64Data = args[0];
                     String fileName = args.length > 1 ? args[1] : "document.pdf";
                     
-                    debugPrint("📤 PDF paylaşılıyor (base64): $fileName");
+                    debugPrint("📤 PDF paylaşılıyor (base64 - UPDATED VERSION): $fileName");
+                    
+                    // ✅ Base64 kontrolü - boş mu?
+                    if (base64Data.isEmpty || base64Data.length < 100) {
+                      debugPrint("❌ Base64 verisi geçersiz veya boş");
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('❌ PDF verisi geçersiz'),
+                            backgroundColor: Colors.red,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                      return;
+                    }
                     
                     final cleanBase64 = base64Data.replaceFirst(
                       RegExp(r'data:application/pdf;base64,'), 
                       ''
                     );
-                    final bytes = base64Decode(cleanBase64);
+                    
+                    // ✅ Decode kontrolü
+                    List<int> bytes;
+                    try {
+                      bytes = base64Decode(cleanBase64);
+                      debugPrint("✅ Base64 decode başarılı: ${bytes.length} bytes");
+                    } catch (e) {
+                      debugPrint("❌ Base64 decode hatası: $e");
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('❌ PDF verisi decode edilemedi'),
+                            backgroundColor: Colors.red,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                      return;
+                    }
+                    
+                    // ✅ Bytes kontrolü - en az 1KB olmalı
+                    if (bytes.length < 1024) {
+                      debugPrint("❌ PDF verisi çok küçük: ${bytes.length} bytes");
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('❌ PDF verisi geçersiz (çok küçük)'),
+                            backgroundColor: Colors.red,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                      return;
+                    }
                     
                     final tempDir = await getTemporaryDirectory();
                     final tempFile = File('${tempDir.path}/$fileName');
                     await tempFile.writeAsBytes(bytes);
+                    
+                    debugPrint("✅ Temp dosya oluşturuldu: ${tempFile.path}");
                     
                     final result = await Share.shareXFiles([XFile(tempFile.path)], text: fileName);
                     
@@ -794,6 +847,16 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                   } catch (e) {
                     debugPrint("❌ Paylaşma hatası (base64): $e");
+                    
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('❌ Paylaşma hatası: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
                   }
                 },
               );
@@ -812,24 +875,82 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     String base64Data = args[0];
                     String fileName = args.length > 1 ? args[1] : "document.pdf";
                     
-                    debugPrint("🖨️ PDF yazdırılıyor (base64): $fileName");
+                    debugPrint("🖨️ PDF yazdırılıyor (base64 - UPDATED VERSION): $fileName");
+                    
+                    // ✅ Base64 kontrolü
+                    if (base64Data.isEmpty || base64Data.length < 100) {
+                      debugPrint("❌ Base64 verisi geçersiz veya boş");
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('❌ PDF verisi geçersiz'),
+                            backgroundColor: Colors.red,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                      return;
+                    }
                     
                     final cleanBase64 = base64Data.replaceFirst(
                       RegExp(r'data:application/pdf;base64,'), 
                       ''
                     );
-                    final bytes = base64Decode(cleanBase64);
+                    
+                    List<int> bytes;
+                    try {
+                      bytes = base64Decode(cleanBase64);
+                      debugPrint("✅ Base64 decode başarılı: ${bytes.length} bytes");
+                    } catch (e) {
+                      debugPrint("❌ Base64 decode hatası: $e");
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('❌ PDF verisi decode edilemedi'),
+                            backgroundColor: Colors.red,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                      return;
+                    }
+                    
+                    if (bytes.length < 1024) {
+                      debugPrint("❌ PDF verisi çok küçük: ${bytes.length} bytes");
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('❌ PDF verisi geçersiz (çok küçük)'),
+                            backgroundColor: Colors.red,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                      return;
+                    }
                     
                     await Printing.layoutPdf(
-                      onLayout: (format) async => bytes,
+                      onLayout: (format) async => Uint8List.fromList(bytes),
                       name: fileName,
                     );
                     
-                    
-                    debugPrint("✅ Yazdırma tamamlandı (base64)");
+                    debugPrint("✅ Yazdırma tamamlandı (base64 - UPDATED)");
                     
                   } catch (e) {
                     debugPrint("❌ Yazdırma hatası (base64): $e");
+                    
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('❌ Yazdırma hatası: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
                   }
                 },
               );
@@ -848,13 +969,62 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     String base64Data = args[0];
                     String fileName = args.length > 1 ? args[1] : "document.pdf";
                     
-                    debugPrint("💾 PDF indiriliyor (base64): $fileName");
+                    debugPrint("💾 PDF indiriliyor (base64 - UPDATED VERSION): $fileName");
+                    
+                    // ✅ Base64 kontrolü
+                    if (base64Data.isEmpty || base64Data.length < 100) {
+                      debugPrint("❌ Base64 verisi geçersiz veya boş");
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('❌ PDF verisi geçersiz'),
+                            backgroundColor: Colors.red,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                      return;
+                    }
                     
                     final cleanBase64 = base64Data.replaceFirst(
                       RegExp(r'data:application/pdf;base64,'), 
                       ''
                     );
-                    final bytes = base64Decode(cleanBase64);
+                    
+                    List<int> bytes;
+                    try {
+                      bytes = base64Decode(cleanBase64);
+                      debugPrint("✅ Base64 decode başarılı: ${bytes.length} bytes");
+                    } catch (e) {
+                      debugPrint("❌ Base64 decode hatası: $e");
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('❌ PDF verisi decode edilemedi'),
+                            backgroundColor: Colors.red,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                      return;
+                    }
+                    
+                    if (bytes.length < 1024) {
+                      debugPrint("❌ PDF verisi çok küçük: ${bytes.length} bytes");
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('❌ PDF verisi geçersiz (çok küçük)'),
+                            backgroundColor: Colors.red,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                      return;
+                    }
                     
                     Directory? directory;
                     if (Platform.isAndroid) {
@@ -882,7 +1052,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       
                       await targetFile.writeAsBytes(bytes);
                       
-                      debugPrint("✅ PDF indirildi (base64): ${targetFile.path}");
+                      debugPrint("✅ PDF indirildi (base64 - UPDATED): ${targetFile.path}");
 
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -897,124 +1067,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                   } catch (e) {
                     debugPrint("❌ İndirme hatası (base64): $e");
-                    
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('❌ İndirme hatası: ${e.toString()}'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                },
-              );
-
-              // ==================== HANDLER: PAYLAŞ (ESKİ - PATH) ====================
-              controller.addJavaScriptHandler(
-                handlerName: 'sharePdf',
-                callback: (args) async {
-                  try {
-                    String filePath = args[0];
-                    String fileName = args.length > 1 ? args[1] : filePath.split('/').last;
-                    
-                    debugPrint("📤 PDF paylaşılıyor: $fileName");
-                    
-                    final file = File(filePath);
-                    
-                    if (await file.exists()) {
-                      await Share.shareXFiles([XFile(file.path)], text: fileName);
-                      debugPrint("✅ PDF paylaşıldı");
-                    } else {
-                      debugPrint("❌ Dosya bulunamadı: $filePath");
-                    }
-                  } catch (e) {
-                    debugPrint("❌ Paylaşma hatası: $e");
-                  }
-                },
-              );
-
-              // ==================== HANDLER: YAZDIR (ESKİ - PATH) ====================
-              controller.addJavaScriptHandler(
-                handlerName: 'printPdf',
-                callback: (args) async {
-                  try {
-                    String filePath = args[0];
-                    String fileName = args.length > 1 ? args[1] : filePath.split('/').last;
-                    
-                    debugPrint("🖨️ PDF yazdırılıyor: $fileName");
-                    
-                    final file = File(filePath);
-                    
-                    if (await file.exists()) {
-                      final bytes = await file.readAsBytes();
-                      await Printing.layoutPdf(
-                        onLayout: (format) async => bytes,
-                        name: fileName,
-                      );
-                      debugPrint("✅ Yazdırma tamamlandı");
-                    } else {
-                      debugPrint("❌ Dosya bulunamadı: $filePath");
-                    }
-                  } catch (e) {
-                    debugPrint("❌ Yazdırma hatası: $e");
-                  }
-                },
-              );
-
-              // ==================== HANDLER: İNDİR (ESKİ - PATH) ====================
-              controller.addJavaScriptHandler(
-                handlerName: 'downloadPdf',
-                callback: (args) async {
-                  try {
-                    String sourcePath = args[0];
-                    String fileName = args.length > 1 ? args[1] : sourcePath.split('/').last;
-                    
-                    debugPrint("💾 PDF indiriliyor: $fileName");
-                    
-                    final sourceFile = File(sourcePath);
-                    
-                    if (await sourceFile.exists()) {
-                      Directory? directory;
-                      if (Platform.isAndroid) {
-                        directory = Directory('/storage/emulated/0/Download');
-                        if (!await directory.exists()) {
-                          directory = Directory('/storage/emulated/0/Downloads');
-                        }
-                      } else {
-                        directory = await getApplicationDocumentsDirectory();
-                      }
-
-                      if (directory != null && await directory.exists()) {
-                        int counter = 1;
-                        String finalName = fileName;
-                        String nameWithoutExt = fileName.replaceAll('.pdf', '');
-                        File targetFile = File('${directory.path}/$finalName');
-                        
-                        while (await targetFile.exists()) {
-                          finalName = '$nameWithoutExt ($counter).pdf';
-                          targetFile = File('${directory.path}/$finalName');
-                          counter++;
-                        }
-                        
-                        await sourceFile.copy(targetFile.path);
-                        debugPrint("✅ PDF indirildi: ${targetFile.path}");
-
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('✅ İndirildi: $finalName'),
-                              backgroundColor: Colors.green,
-                              duration: const Duration(seconds: 3),
-                            ),
-                          );
-                        }
-                      }
-                    } else {
-                      debugPrint("❌ Kaynak dosya bulunamadı: $sourcePath");
-                    }
-                  } catch (e) {
-                    debugPrint("❌ İndirme hatası: $e");
                     
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
