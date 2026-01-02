@@ -56,7 +56,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   // Temp dosya takibi
   final Map<String, String> _tempFiles = {};
   
-  // ✅ ÇAĞRI TAKİBİ (Çift çağrı önleme)
+  // Çağrı takibi (Çift çağrı önleme)
   DateTime? _lastShareCall;
   DateTime? _lastPrintCall;
   DateTime? _lastDownloadCall;
@@ -358,37 +358,48 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   Future<void> _resetViewerAndGoBack() async {
     if (webViewController == null) return;
     
-    debugPrint("🔄 Viewer resetleniyor (IndexedDB cleanup)...");
+    debugPrint("🔄 Viewer resetleniyor (KAPSAMLI TEMİZLİK)...");
     
     try {
-      // IndexedDB ve storage temizliği
+      // ✅ ADIM 1: JavaScript tarafında tam temizlik
       await webViewController!.evaluateJavascript(source: """
         (async function() {
           try {
-            console.log("🗑️ Viewer IndexedDB temizleniyor...");
+            console.log("🗑️ VIEWER FULL RESET başlatılıyor...");
             
-            // IndexedDB cleanup
+            // 1. IndexedDB cleanup
             if (typeof viewerPdfManager !== 'undefined' && viewerPdfManager.cleanup) {
               await viewerPdfManager.cleanup();
               console.log("✅ IndexedDB Manager temizlendi");
             }
             
-            // Session storage temizle
-            sessionStorage.clear();
-            console.log("✅ Session storage temizlendi");
-            
-            // Local storage'daki PDF verilerini temizle
-            const keysToRemove = [];
-            for (let i = 0; i < localStorage.length; i++) {
-              const key = localStorage.key(i);
-              if (key && (key.startsWith('last') || key.includes('Pdf') || key.includes('Blob'))) {
-                keysToRemove.push(key);
+            // 2. PDFViewerApplication'ı tamamen kapat
+            if (typeof PDFViewerApplication !== 'undefined') {
+              try {
+                // PDF document'ı destroy et
+                if (PDFViewerApplication.pdfDocument) {
+                  await PDFViewerApplication.pdfDocument.destroy();
+                  PDFViewerApplication.pdfDocument = null;
+                  console.log("✅ PDF Document destroy edildi");
+                }
+                
+                // Viewer'ı kapat
+                if (PDFViewerApplication.close) {
+                  await PDFViewerApplication.close();
+                  console.log("✅ PDF Viewer kapatıldı");
+                }
+                
+                // Viewer state'ini sıfırla
+                PDFViewerApplication.pdfViewer = null;
+                PDFViewerApplication.pdfLinkService = null;
+                PDFViewerApplication.pdfHistory = null;
+                
+              } catch (e) {
+                console.log("⚠️ PDF Viewer kapatma hatası:", e);
               }
             }
-            keysToRemove.forEach(key => localStorage.removeItem(key));
-            console.log("✅ Local storage temizlendi:", keysToRemove.length, "anahtar");
             
-            // Tüm Blob URL'leri temizle
+            // 3. Tüm Blob URL'leri temizle
             if (typeof window.activeBlobUrls !== 'undefined') {
               window.activeBlobUrls.forEach(url => {
                 try {
@@ -399,24 +410,55 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               console.log("✅ Blob URL'ler temizlendi");
             }
             
-            // PDFViewerApplication'ı kapat
-            if (typeof PDFViewerApplication !== 'undefined') {
-              try {
-                if (PDFViewerApplication.pdfDocument) {
-                  await PDFViewerApplication.pdfDocument.destroy();
-                  console.log("✅ PDF Document destroy edildi");
-                }
-                if (PDFViewerApplication.close) {
-                  await PDFViewerApplication.close();
-                  console.log("✅ PDF Viewer kapatıldı");
-                }
-              } catch (e) {
-                console.log("⚠️ PDF Viewer kapatma hatası:", e);
+            // 4. Session storage temizle
+            sessionStorage.clear();
+            console.log("✅ Session storage temizlendi");
+            
+            // 5. Local storage'daki PDF verilerini temizle
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && (key.startsWith('last') || key.includes('Pdf') || key.includes('Blob') || key.includes('current'))) {
+                keysToRemove.push(key);
               }
             }
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+            console.log("✅ Local storage temizlendi:", keysToRemove.length, "anahtar");
             
-            console.log("✅ Viewer tamamen temizlendi (IndexedDB mode)");
+            // 6. Tüm event listener'ları temizle
+            if (typeof PDFViewerApplication !== 'undefined' && PDFViewerApplication.eventBus) {
+              PDFViewerApplication.eventBus._listeners = {};
+              console.log("✅ Event listener'lar temizlendi");
+            }
+            
+            // 7. Canvas ve rendering context'leri temizle
+            const canvases = document.querySelectorAll('canvas');
+            canvases.forEach(canvas => {
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+              }
+              canvas.width = 0;
+              canvas.height = 0;
+            });
+            console.log("✅ Canvas'lar temizlendi:", canvases.length, "adet");
+            
+            // 8. DOM'daki PDF container'ları temizle
+            const viewer = document.getElementById('viewer');
+            if (viewer) {
+              viewer.innerHTML = '';
+              console.log("✅ Viewer DOM temizlendi");
+            }
+            
+            // 9. Memory'yi serbest bırak
+            if (typeof window.gc === 'function') {
+              window.gc();
+              console.log("✅ Garbage collection tetiklendi");
+            }
+            
+            console.log("✅✅✅ VIEWER TAM TEMİZLİK TAMAMLANDI");
             return true;
+            
           } catch (e) {
             console.error("❌ Viewer temizleme hatası:", e);
             return false;
@@ -424,10 +466,23 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         })();
       """);
       
-      // Flutter tarafındaki temp dosyaları temizle
+      // ✅ ADIM 2: Flutter tarafındaki temp dosyaları temizle
       await _cleanupTempFiles();
       
-      // index.html'e geri dön
+      // ✅ ADIM 3: WebView state'ini reset et
+      debugPrint("🔄 WebView state sıfırlanıyor...");
+      
+      // ✅ ADIM 4: Önce boş sayfa yükle (temiz slate)
+      await webViewController!.loadUrl(
+        urlRequest: URLRequest(
+          url: WebUri("about:blank"),
+        ),
+      );
+      
+      // Kısa bir bekleme
+      await Future.delayed(const Duration(milliseconds: 200));
+      
+      // ✅ ADIM 5: index.html'i YENİDEN yükle
       await webViewController!.loadUrl(
         urlRequest: URLRequest(
           url: WebUri("file:///android_asset/flutter_assets/assets/web/index.html"),
@@ -439,26 +494,46 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         _currentUrl = 'index.html';
       });
       
-      debugPrint("✅ index.html'e geri dönüldü ve viewer resetlendi");
+      debugPrint("✅✅✅ index.html'e geri dönüldü ve viewer TAM resetlendi");
       
-      // PDF listesini yeniden yükle
-      await Future.delayed(const Duration(milliseconds: 500), () async {
-        await webViewController!.evaluateJavascript(source: """
-          (function() {
-            console.log("🔄 PDF listesi yenileniyor...");
-            if (typeof scanDeviceForPDFs === 'function') {
-              scanDeviceForPDFs();
-            }
-          })();
-        """);
+      // ✅ ADIM 6: PDF listesini yeniden yükle
+      await Future.delayed(const Duration(milliseconds: 800), () async {
+        if (webViewController != null) {
+          await webViewController!.evaluateJavascript(source: """
+            (function() {
+              console.log("🔄 PDF listesi yenileniyor...");
+              if (typeof scanDeviceForPDFs === 'function') {
+                scanDeviceForPDFs();
+              }
+              if (typeof loadData === 'function') {
+                loadData();
+              }
+            })();
+          """);
+        }
       });
       
     } catch (e) {
       debugPrint("❌ Viewer reset hatası: $e");
+      
+      // ✅ Hata olsa bile index.html'e dön
+      try {
+        await webViewController!.loadUrl(
+          urlRequest: URLRequest(
+            url: WebUri("file:///android_asset/flutter_assets/assets/web/index.html"),
+          ),
+        );
+        setState(() {
+          _isViewerOpen = false;
+          _currentUrl = 'index.html';
+        });
+      } catch (e2) {
+        debugPrint("❌ Fallback yükleme hatası: $e2");
+      }
     }
   }
 
-  // ✅ ÇAĞRI KONTROLÜ (Throttle)
+  // Çağrı kontrolü (Throttle)
   bool _canCallFunction(DateTime? lastCall) {
     if (lastCall == null) return true;
     return DateTime.now().difference(lastCall) > _callThrottle;
@@ -470,7 +545,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       onWillPop: () async {
         if (webViewController != null) {
           if (_isViewerOpen) {
-            debugPrint("⬅️ Viewer'dan geri dönülüyor...");
+            debugPrint("⬅️ Viewer'dan geri dönülüyor (RESET)...");
             await _resetViewerAndGoBack();
             return false;
           } else {
@@ -520,7 +595,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               allowUniversalAccessFromFileURLs: true,
               useHybridComposition: true,
               domStorageEnabled: true,
-              databaseEnabled: true, // IndexedDB için
+              databaseEnabled: true,
               displayZoomControls: false,
               builtInZoomControls: false,
               safeBrowsingEnabled: false,
@@ -543,17 +618,14 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   console.log("🚀 Flutter WebView başlatılıyor - IndexedDB ArrayBuffer Mode + Base64 Support");
                   console.log("📦 IndexedDB durumu:", typeof indexedDB !== 'undefined' ? 'Destekleniyor' : 'Desteklenmiyor');
                   
-                  // Blob URL takibi
                   window.activeBlobUrls = window.activeBlobUrls || [];
                   
-                  // IndexedDB kullanılabilirlik kontrolü
                   if (typeof indexedDB === 'undefined') {
                     console.error("❌ IndexedDB desteklenmiyor!");
                   } else {
                     console.log("✅ IndexedDB hazır");
                   }
                   
-                  // Android interface mock (eski kod ile uyumluluk için)
                   if (typeof Android === 'undefined') {
                     window.Android = {
                       openSettings: function() {
@@ -688,11 +760,10 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
 
-              // ==================== HANDLER: PAYLAŞ (BASE64) ✅ TEK ÇAĞRI ====================
+              // ==================== HANDLER: PAYLAŞ (BASE64) ====================
               controller.addJavaScriptHandler(
                 handlerName: 'sharePdfBase64',
                 callback: (args) async {
-                  // ✅ Çift çağrı kontrolü
                   if (!_canCallFunction(_lastShareCall)) {
                     debugPrint("⚠️ Paylaşma çağrısı çok hızlı, atlandı");
                     return;
@@ -700,43 +771,37 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   _lastShareCall = DateTime.now();
                   
                   try {
-                    String base64Data = args[0]; // "data:application/pdf;base64,..."
+                    String base64Data = args[0];
                     String fileName = args.length > 1 ? args[1] : "document.pdf";
                     
                     debugPrint("📤 PDF paylaşılıyor (base64): $fileName");
                     
-                    // Base64'ü temizle ve decode et
                     final cleanBase64 = base64Data.replaceFirst(
                       RegExp(r'data:application/pdf;base64,'), 
                       ''
                     );
                     final bytes = base64Decode(cleanBase64);
                     
-                    // Temp dosya oluştur
                     final tempDir = await getTemporaryDirectory();
                     final tempFile = File('${tempDir.path}/$fileName');
                     await tempFile.writeAsBytes(bytes);
                     
-                    // ✅ Paylaş (hata mesajı YOK)
                     final result = await Share.shareXFiles([XFile(tempFile.path)], text: fileName);
                     
                     debugPrint("✅ PDF paylaşma sonucu: ${result.status}");
                     
-                    // Temp dosyayı sil
                     await tempFile.delete();
                     
                   } catch (e) {
                     debugPrint("❌ Paylaşma hatası (base64): $e");
-                    // ✅ Kullanıcıya hata gösterme, sadece log
                   }
                 },
               );
 
-              // ==================== HANDLER: YAZDIR (BASE64) ✅ TEK ÇAĞRI ====================
+              // ==================== HANDLER: YAZDIR (BASE64) ====================
               controller.addJavaScriptHandler(
                 handlerName: 'printPdfBase64',
                 callback: (args) async {
-                  // ✅ Çift çağrı kontrolü
                   if (!_canCallFunction(_lastPrintCall)) {
                     debugPrint("⚠️ Yazdırma çağrısı çok hızlı, atlandı");
                     return;
@@ -749,33 +814,30 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                     debugPrint("🖨️ PDF yazdırılıyor (base64): $fileName");
                     
-                    // Base64'ü temizle ve decode et
                     final cleanBase64 = base64Data.replaceFirst(
                       RegExp(r'data:application/pdf;base64,'), 
                       ''
                     );
                     final bytes = base64Decode(cleanBase64);
                     
-                    // ✅ Yazdır (hata mesajı YOK)
                     await Printing.layoutPdf(
                       onLayout: (format) async => bytes,
                       name: fileName,
                     );
                     
+                    
                     debugPrint("✅ Yazdırma tamamlandı (base64)");
                     
                   } catch (e) {
                     debugPrint("❌ Yazdırma hatası (base64): $e");
-                    // ✅ Kullanıcıya hata gösterme, sadece log
                   }
                 },
               );
 
-              // ==================== HANDLER: İNDİR (BASE64) ✅ PDF Reader KLASÖRÜ + _update ====================
+              // ==================== HANDLER: İNDİR (BASE64) ====================
               controller.addJavaScriptHandler(
                 handlerName: 'downloadPdfBase64',
                 callback: (args) async {
-                  // ✅ Çift çağrı kontrolü
                   if (!_canCallFunction(_lastDownloadCall)) {
                     debugPrint("⚠️ İndirme çağrısı çok hızlı, atlandı");
                     return;
@@ -788,20 +850,16 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                     debugPrint("💾 PDF indiriliyor (base64): $fileName");
                     
-                    // Base64'ü temizle ve decode et
                     final cleanBase64 = base64Data.replaceFirst(
                       RegExp(r'data:application/pdf;base64,'), 
                       ''
                     );
                     final bytes = base64Decode(cleanBase64);
                     
-                    // ✅ Download/PDF Reader/ klasörü
                     Directory? directory;
                     if (Platform.isAndroid) {
                       directory = Directory('/storage/emulated/0/Download/PDF Reader');
-                      
-                      
-  if (!await directory.exists()) {
+                      if (!await directory.exists()) {
                         await directory.create(recursive: true);
                         debugPrint("✅ PDF Reader klasörü oluşturuldu");
                       }
@@ -810,13 +868,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     }
 
                     if (directory != null && await directory.exists()) {
-                      // ✅ Orijinal dosya adı ve uzantısı
                       String nameWithoutExt = fileName.replaceAll('.pdf', '');
                       String finalName = '${nameWithoutExt}_update.pdf';
                       
                       File targetFile = File('${directory.path}/$finalName');
                       
-                      // ✅ Aynı isimli dosya varsa _update (1), _update (2) ekle
                       int counter = 1;
                       while (await targetFile.exists()) {
                         finalName = '${nameWithoutExt}_update ($counter).pdf';
@@ -824,7 +880,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                         counter++;
                       }
                       
-                      // Dosyayı kaydet
                       await targetFile.writeAsBytes(bytes);
                       
                       debugPrint("✅ PDF indirildi (base64): ${targetFile.path}");
@@ -994,7 +1049,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       'tempDir': tempDir.path,
                       'appDir': appDir.path,
                       'indexedDBSupported': true,
-                      'maxPdfSize': 100, // MB
+                      'maxPdfSize': 100,
                       'storageType': 'indexeddb-arraybuffer-base64'
                     });
                   } catch (e) {
@@ -1025,10 +1080,32 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             onLoadStart: (controller, url) {
               final urlString = url.toString();
               debugPrint("🌐 Sayfa yükleniyor: $urlString");
+              
+              final isViewer = urlString.contains("viewer.html");
               setState(() {
-                _isViewerOpen = urlString.contains("viewer.html");
+                _isViewerOpen = isViewer;
                 _currentUrl = urlString;
               });
+              
+              if (urlString.contains("index.html") && !urlString.contains("about:blank")) {
+                debugPrint("🏠 index.html yükleniyor, son kontrol...");
+                Future.delayed(const Duration(milliseconds: 300), () async {
+                  await controller.evaluateJavascript(source: """
+                    (function() {
+                      console.log("🧹 index.html son temizlik...");
+                      
+                      if (typeof PDFViewerApplication !== 'undefined') {
+                        PDFViewerApplication = undefined;
+                      }
+                      if (typeof viewerPdfManager !== 'undefined') {
+                        viewerPdfManager = undefined;
+                      }
+                      
+                      console.log("✅ index.html temiz slate hazır");
+                    })();
+                  """);
+                });
+              }
             },
             onLoadStop: (controller, url) async {
               final urlString = url.toString();
@@ -1039,10 +1116,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 _currentUrl = urlString;
               });
               
-              // İzin durumunu kontrol et
               await _checkAndUpdatePermissionStatus();
               
-              // IndexedDB'yi başlat
               await controller.evaluateJavascript(source: """
                 (async function() {
                   try {
@@ -1053,7 +1128,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       return;
                     }
                     
-                    // index.html için
                     if (typeof pdfManager !== 'undefined' && pdfManager.init) {
                       const success = await pdfManager.init();
                       console.log("📦 Index IndexedDB Manager: " + (success ? "✅ Başarılı" : "❌ Başarısız"));
@@ -1066,7 +1140,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       }
                     }
                     
-                    // viewer.html için
                     if (typeof viewerPdfManager !== 'undefined' && viewerPdfManager.init) {
                       const success = await viewerPdfManager.init();
                       console.log("📦 Viewer IndexedDB Manager: " + (success ? "✅ Başarılı" : "❌ Başarısız"));
@@ -1128,4 +1201,3 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     );
   }
 }
-
