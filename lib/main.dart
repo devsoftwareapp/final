@@ -203,6 +203,34 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return true;
   }
 
+  // YENİ EKLENDİ: Doğrudan dosya erişim izni ayarlarına git
+  Future<void> _openFileAccessSettings() async {
+    debugPrint("⚙️ DOĞRUDAN Dosya Erişim İzni Ayarları açılıyor...");
+    try {
+      if (Platform.isAndroid) {
+        // Android için doğrudan dosya erişim izni sayfasına git
+        await AppSettings.openAppSettings(
+          type: AppSettingsType.manageAppAllFilesAccessPermission,
+        );
+        debugPrint("✅ Dosya erişim izni ayarları açıldı");
+      } else {
+        // iOS için genel ayarlar
+        await AppSettings.openAppSettings();
+        debugPrint("✅ Ayarlar açıldı (iOS)");
+      }
+    } catch (e) {
+      debugPrint("❌ Dosya erişim ayarları açma hatası: $e");
+      
+      // Fallback: Normal ayarlar
+      try {
+        await _openAppSettings();
+        debugPrint("✅ Fallback: Normal ayarlar açıldı");
+      } catch (e2) {
+        debugPrint("❌ Fallback ayarlar açma hatası: $e2");
+      }
+    }
+  }
+
   Future<void> _openAppSettings() async {
     debugPrint("⚙️ Ayarlar açılıyor...");
     try {
@@ -631,6 +659,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     window.Android = {
                       openSettings: function() {
                         window.flutter_inappwebview.callHandler('openSettingsForPermission');
+                      },
+                      openFileAccessSettings: function() {
+                        window.flutter_inappwebview.callHandler('openFileAccessSettings');
                       }
                     };
                   }
@@ -641,6 +672,31 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             onWebViewCreated: (controller) {
               webViewController = controller;
               debugPrint("🌐 WebView oluşturuldu - IndexedDB Mode + Base64 Support");
+
+              // ==================== YENİ HANDLER: DOSYA ERİŞİM AYARLARI ====================
+              controller.addJavaScriptHandler(
+                handlerName: 'openFileAccessSettings',
+                callback: (args) async {
+                  debugPrint("🔧 DOSYA ERİŞİM AYARLARI açılıyor...");
+                  await _openFileAccessSettings();
+                  
+                  // 2 saniye sonra izin kontrolü yap
+                  Future.delayed(const Duration(seconds: 2), () async {
+                    final hasPermission = await _checkStoragePermission();
+                    debugPrint("🔒 İzin durumu (ayarlardan sonra): $hasPermission");
+                    
+                    if (hasPermission) {
+                      // İzin verilmişse PDF'leri tara
+                      try {
+                        final pdfFiles = await _listPdfFiles();
+                        debugPrint("📋 PDF taraması tamamlandı: ${pdfFiles.length} dosya");
+                      } catch (e) {
+                        debugPrint("❌ PDF tarama hatası: $e");
+                      }
+                    }
+                  });
+                },
+              );
 
               // ==================== HANDLER: İZİN DURUMU ====================
               controller.addJavaScriptHandler(
