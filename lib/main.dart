@@ -61,7 +61,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initPackageInfo();
-    debugPrint("🚀 PDF Reader başlatıldı - IndexedDB ArrayBuffer Mode");
+    debugPrint("🚀 PDF Reader başlatıldı - IndexedDB ArrayBuffer Mode + Base64 Support");
   }
 
   Future<void> _initPackageInfo() async {
@@ -528,7 +528,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             initialUserScripts: UnmodifiableListView<UserScript>([
               UserScript(
                 source: """
-                  console.log("🚀 Flutter WebView başlatılıyor - IndexedDB ArrayBuffer Mode");
+                  console.log("🚀 Flutter WebView başlatılıyor - IndexedDB ArrayBuffer Mode + Base64 Support");
                   console.log("📦 IndexedDB durumu:", typeof indexedDB !== 'undefined' ? 'Destekleniyor' : 'Desteklenmiyor');
                   
                   // Blob URL takibi
@@ -555,7 +555,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             ]),
             onWebViewCreated: (controller) {
               webViewController = controller;
-              debugPrint("🌐 WebView oluşturuldu - IndexedDB Mode");
+              debugPrint("🌐 WebView oluşturuldu - IndexedDB Mode + Base64 Support");
 
               // ==================== HANDLER: İZİN DURUMU ====================
               controller.addJavaScriptHandler(
@@ -676,7 +676,164 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
 
-              // ==================== HANDLER: PAYLAŞ ====================
+              // ==================== HANDLER: PAYLAŞ (BASE64) - YENİ ====================
+              controller.addJavaScriptHandler(
+                handlerName: 'sharePdfBase64',
+                callback: (args) async {
+                  try {
+                    String base64Data = args[0]; // "data:application/pdf;base64,..."
+                    String fileName = args.length > 1 ? args[1] : "document.pdf";
+                    
+                    debugPrint("📤 PDF paylaşılıyor (base64): $fileName");
+                    
+                    // Base64'ü temizle ve decode et
+                    final cleanBase64 = base64Data.replaceFirst(
+                      RegExp(r'data:application/pdf;base64,'), 
+                      ''
+                    );
+                    final bytes = base64Decode(cleanBase64);
+                    
+                    // Temp dosya oluştur
+                    final tempDir = await getTemporaryDirectory();
+                    final tempFile = File('${tempDir.path}/$fileName');
+                    await tempFile.writeAsBytes(bytes);
+                    
+                    // Paylaş
+                    await Share.shareXFiles([XFile(tempFile.path)], text: fileName);
+                    
+                    debugPrint("✅ PDF paylaşıldı (base64)");
+                    
+                    // Temp dosyayı sil
+                    await tempFile.delete();
+                    
+                  } catch (e) {
+                    debugPrint("❌ Paylaşma hatası (base64): $e");
+                    
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('❌ Paylaşma hatası: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+              );
+
+              // ==================== HANDLER: YAZDIR (BASE64) - YENİ ====================
+              controller.addJavaScriptHandler(
+                handlerName: 'printPdfBase64',
+                callback: (args) async {
+                  try {
+                    String base64Data = args[0];
+                    String fileName = args.length > 1 ? args[1] : "document.pdf";
+                    
+                    debugPrint("🖨️ PDF yazdırılıyor (base64): $fileName");
+                    
+                    // Base64'ü temizle ve decode et
+                    final cleanBase64 = base64Data.replaceFirst(
+                      RegExp(r'data:application/pdf;base64,'), 
+                      ''
+                    );
+                    final bytes = base64Decode(cleanBase64);
+                    
+                    // Yazdır
+                    await Printing.layoutPdf(
+                      onLayout: (format) async => bytes,
+                      name: fileName,
+                    );
+                    
+                    debugPrint("✅ Yazdırma tamamlandı (base64)");
+                    
+                  } catch (e) {
+                    debugPrint("❌ Yazdırma hatası (base64): $e");
+                    
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('❌ Yazdırma hatası: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+              );
+
+              // ==================== HANDLER: İNDİR (BASE64) - YENİ ====================
+              controller.addJavaScriptHandler(
+                handlerName: 'downloadPdfBase64',
+                callback: (args) async {
+                  try {
+                    String base64Data = args[0];
+                    String fileName = args.length > 1 ? args[1] : "document.pdf";
+                    
+                    debugPrint("💾 PDF indiriliyor (base64): $fileName");
+                    
+                    // Base64'ü temizle ve decode et
+                    final cleanBase64 = base64Data.replaceFirst(
+                      RegExp(r'data:application/pdf;base64,'), 
+                      ''
+                    );
+                    final bytes = base64Decode(cleanBase64);
+                    
+                    // Download klasörünü bul
+                    Directory? directory;
+                    if (Platform.isAndroid) {
+                      directory = Directory('/storage/emulated/0/Download');
+                      if (!await directory.exists()) {
+                        directory = Directory('/storage/emulated/0/Downloads');
+                      }
+                    } else {
+                      directory = await getApplicationDocumentsDirectory();
+                    }
+
+                    if (directory != null && await directory.exists()) {
+                      // Aynı isimli dosya varsa (1), (2) ekle
+                      int counter = 1;
+                      String finalName = fileName;
+                      String nameWithoutExt = fileName.replaceAll('.pdf', '');
+                      File targetFile = File('${directory.path}/$finalName');
+                      
+                      while (await targetFile.exists()) {
+                        finalName = '$nameWithoutExt ($counter).pdf';
+                        targetFile = File('${directory.path}/$finalName');
+                        counter++;
+                      }
+                      
+                      // Dosyayı kaydet
+                      await targetFile.writeAsBytes(bytes);
+                      
+                      debugPrint("✅ PDF indirildi (base64): ${targetFile.path}");
+
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('✅ İndirildi: $finalName'),
+                            backgroundColor: Colors.green,
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                      }
+                    }
+                    
+                  } catch (e) {
+                    debugPrint("❌ İndirme hatası (base64): $e");
+                    
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('❌ İndirme hatası: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+              );
+
+              // ==================== HANDLER: PAYLAŞ (ESKİ - PATH) ====================
               controller.addJavaScriptHandler(
                 handlerName: 'sharePdf',
                 callback: (args) async {
@@ -700,7 +857,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
 
-              // ==================== HANDLER: YAZDIR ====================
+              // ==================== HANDLER: YAZDIR (ESKİ - PATH) ====================
               controller.addJavaScriptHandler(
                 handlerName: 'printPdf',
                 callback: (args) async {
@@ -737,7 +894,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
 
-              // ==================== HANDLER: İNDİR ====================
+              // ==================== HANDLER: İNDİR (ESKİ - PATH) ====================
               controller.addJavaScriptHandler(
                 handlerName: 'downloadPdf',
                 callback: (args) async {
@@ -825,7 +982,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       'appDir': appDir.path,
                       'indexedDBSupported': true,
                       'maxPdfSize': 100, // MB
-                      'storageType': 'indexeddb-arraybuffer'
+                      'storageType': 'indexeddb-arraybuffer-base64'
                     });
                   } catch (e) {
                     debugPrint("❌ Storage bilgisi hatası: $e");
@@ -845,7 +1002,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     'tempDir': (await getTemporaryDirectory()).path,
                     'appDir': (await getApplicationDocumentsDirectory()).path,
                     'indexedDBSupported': true,
-                    'storageMode': 'indexeddb-arraybuffer',
+                    'storageMode': 'indexeddb-arraybuffer-base64',
                     'packageName': _packageInfo.packageName,
                     'appVersion': _packageInfo.version,
                   });
@@ -902,7 +1059,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       console.log("📦 Viewer IndexedDB Manager: " + (success ? "✅ Başarılı" : "❌ Başarısız"));
                     }
                     
-                    console.log("✅ IndexedDB hazır (ArrayBuffer mode)");
+                    console.log("✅ IndexedDB hazır (ArrayBuffer + Base64 mode)");
                     
                   } catch (e) {
                     console.error("❌ IndexedDB başlatma hatası:", e);
