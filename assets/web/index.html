@@ -2180,6 +2180,8 @@ function createCard(name, size, meta, isFavorite, id, listType) {
   </div>`;
 }
 
+
+
 // =============================================================================
 // 7. FILE HANDLING - INDEXEDDB
 // =============================================================================
@@ -2279,16 +2281,13 @@ async function openPdfFile(fileData, name) {
         if (fileData.source === 'imported' && fileData.indexedDBSaved === true) {
             console.log("📂 PDF IndexedDB'den açılıyor...");
             
-            // IndexedDB'den blob URL al
             const pdfUrl = await pdfManager.getCurrentPdfUrl();
             
             if (pdfUrl) {
-                // ✅ Session storage'a kaydet
                 sessionStorage.setItem('currentPdfBlobUrl', pdfUrl);
                 sessionStorage.setItem('currentPdfName', pdfName);
                 sessionStorage.setItem('usingIndexedDB', 'true');
                 
-                // ✅ Local storage'a da yedekle (sayfalar arası geçişte kaybolmaması için)
                 localStorage.setItem('lastPdfBlobUrl', pdfUrl);
                 localStorage.setItem('lastPdfName', pdfName);
                 localStorage.setItem('lastPdfMethod', 'indexeddb');
@@ -2298,7 +2297,6 @@ async function openPdfFile(fileData, name) {
                 console.log("  - PDF Adı:", pdfName);
                 console.log("  - Method: IndexedDB");
                 
-                // ✅ Kısa bir gecikme ile viewer'ı aç
                 setTimeout(() => {
                     window.location.href = 'viewer.html';
                 }, 100);
@@ -2369,7 +2367,6 @@ async function openPdfFile(fileData, name) {
     }
 }
 
-
 function formatBytes(bytes, decimals = 1) {
     if (!+bytes) return '0 Bytes';
     const k = 1024;
@@ -2378,6 +2375,11 @@ function formatBytes(bytes, decimals = 1) {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 }
+
+
+
+
+
 
 // =============================================================================
 // 8. PERMISSION FUNCTIONS
@@ -2559,7 +2561,7 @@ function deselectAllCards() {
     updateSelectionCount();
 }
 
-function shareSelectedCards() {
+async function shareSelectedCards() {
     if (selectedCards.size === 0) {
         console.log('Lütfen paylaşmak için öğe seçin.');
         return;
@@ -2577,20 +2579,44 @@ function shareSelectedCards() {
     
     if (selectedFiles.length > 0) {
         if (typeof window.flutter_inappwebview !== 'undefined') {
-            const filePaths = selectedFiles.map(f => f.fullPath || '').filter(p => p);
-            if (filePaths.length > 0) {
-                window.flutter_inappwebview.callHandler('sharePdf', filePaths.join('||'));
+            // Base64 ile paylaş
+            for (const file of selectedFiles) {
+                try {
+                    let base64Data = null;
+                    
+                    if (file.source === 'imported' && file.indexedDBSaved) {
+                        // IndexedDB'den al
+                        const blob = await pdfManager.getPdfFromIndexedDB(file.name);
+                        if (blob) {
+                            base64Data = await blobToBase64(blob);
+                        }
+                    } else if (file.source === 'device' && file.fullPath) {
+                        // Cihazdan oku
+                        const tempPath = await window.flutter_inappwebview.callHandler('getPdfPath', file.fullPath, file.name);
+                        if (tempPath) {
+                            const pdfBytes = await window.flutter_inappwebview.callHandler('readPdfFile', tempPath);
+                            if (pdfBytes) {
+                                const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
+                                base64Data = await blobToBase64(blob);
+                            }
+                        }
+                    }
+                    
+                    if (base64Data) {
+                        await window.flutter_inappwebview.callHandler('sharePdfBase64', base64Data, file.name);
+                        console.log(`✅ ${file.name} paylaşıldı`);
+                    }
+                } catch (e) {
+                    console.error(`❌ ${file.name} paylaşma hatası:`, e);
+                }
             }
-        } else if (typeof Android !== 'undefined' && Android.shareFiles) {
-            const fileData = selectedFiles.map(f => f.base64 || f.fullPath || '');
-            Android.shareFiles(fileData.join('||'));
         } else {
-            console.log(`${selectedFiles.length} dosya paylaşım panosuna kopyalandı.`);
+            console.log(`${selectedFiles.length} dosya paylaşım için hazırlandı.`);
         }
     }
 }
 
-function printSelectedCards() {
+async function printSelectedCards() {
     if (selectedCards.size === 0) {
         console.log('Lütfen yazdırmak için öğe seçin.');
         return;
@@ -2608,23 +2634,37 @@ function printSelectedCards() {
     
     if (selectedFiles.length > 0) {
         if (typeof window.flutter_inappwebview !== 'undefined') {
-            const filePaths = selectedFiles.map(f => f.fullPath || '').filter(p => p);
-            if (filePaths.length > 0) {
-                window.flutter_inappwebview.callHandler('printPdf', filePaths.join('||'));
+            // Base64 ile yazdır
+            for (const file of selectedFiles) {
+                try {
+                    let base64Data = null;
+                    
+                    if (file.source === 'imported' && file.indexedDBSaved) {
+                        const blob = await pdfManager.getPdfFromIndexedDB(file.name);
+                        if (blob) {
+                            base64Data = await blobToBase64(blob);
+                        }
+                    } else if (file.source === 'device' && file.fullPath) {
+                        const tempPath = await window.flutter_inappwebview.callHandler('getPdfPath', file.fullPath, file.name);
+                        if (tempPath) {
+                            const pdfBytes = await window.flutter_inappwebview.callHandler('readPdfFile', tempPath);
+                            if (pdfBytes) {
+                                const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
+                                base64Data = await blobToBase64(blob);
+                            }
+                        }
+                    }
+                    
+                    if (base64Data) {
+                        await window.flutter_inappwebview.callHandler('printPdfBase64', base64Data, file.name);
+                        console.log(`✅ ${file.name} yazdırıldı`);
+                    }
+                } catch (e) {
+                    console.error(`❌ ${file.name} yazdırma hatası:`, e);
+                }
             }
-        } else if (typeof Android !== 'undefined' && Android.printFiles) {
-            const fileData = selectedFiles.map(f => f.base64 || f.fullPath || '');
-            Android.printFiles(fileData.join('||'));
         } else {
-            const printWindow = window.open('', '_blank');
-            printWindow.document.write('<html><head><title>Yazdır</title></head><body>');
-            printWindow.document.write('<h1>Seçili PDF Dosyaları</h1>');
-            selectedFiles.forEach(file => {
-                printWindow.document.write(`<p><strong>${file.name}</strong> - ${file.size}</p>`);
-            });
-            printWindow.document.write('</body></html>');
-            printWindow.document.close();
-            printWindow.print();
+            console.log(`${selectedFiles.length} dosya yazdırma için hazırlandı.`);
         }
     }
 }
@@ -2735,85 +2775,135 @@ function closeContextMenu() {
     contextSheet.classList.remove('show');
 }
 
-function handleContextAction(action) {
+async function handleContextAction(action) {
     closeContextMenu();
-    setTimeout(() => {
-        const cardId = currentContextFile.cardId;
-        const name = currentContextFile.name;
-        
-        switch(action) {
-            case 'rename':
-                const newName = prompt(`"${name}" için yeni ad girin:`, name);
-                if (newName && newName.trim() && newName !== name) {
-                    [recentFiles, importedFiles, devicePDFs, favoriteFiles].forEach(fileList => {
-                        const fileIndex = fileList.findIndex(f => f.id === cardId);
-                        if (fileIndex > -1) {
-                            fileList[fileIndex].name = newName.trim();
-                        }
-                    });
-                    
-                    saveRecentToStorage();
-                    saveFavoritesToStorage();
-                    loadData();
-                }
-                break;
-                
-            case 'share':
-                let fileToShare = null;
-                [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
-                    const file = fileList.find(f => f.id === cardId);
-                    if (file && !fileToShare) fileToShare = file;
+    
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    const cardId = currentContextFile.cardId;
+    const name = currentContextFile.name;
+    
+    switch(action) {
+        case 'rename':
+            const newName = prompt(`"${name}" için yeni ad girin:`, name);
+            if (newName && newName.trim() && newName !== name) {
+                [recentFiles, importedFiles, devicePDFs, favoriteFiles].forEach(fileList => {
+                    const fileIndex = fileList.findIndex(f => f.id === cardId);
+                    if (fileIndex > -1) {
+                        fileList[fileIndex].name = newName.trim();
+                    }
                 });
                 
-                if (fileToShare) {
-                    if (typeof window.flutter_inappwebview !== 'undefined' && fileToShare.fullPath) {
-                        window.flutter_inappwebview.callHandler('sharePdf', fileToShare.fullPath, fileToShare.name);
-                    } else if (fileToShare.base64) {
-                        if (typeof Android !== 'undefined' && Android.shareFile) {
-                            Android.shareFile(fileToShare.base64, fileToShare.name);
-                        }
-                    }
-                }
-                break;
-                
-            case 'print':
-                let fileToPrint = null;
-                [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
-                    const file = fileList.find(f => f.id === cardId);
-                    if (file && !fileToPrint) fileToPrint = file;
-                });
-                
-                if (fileToPrint) {
-                    if (typeof window.flutter_inappwebview !== 'undefined' && fileToPrint.fullPath) {
-                        window.flutter_inappwebview.callHandler('printPdf', fileToPrint.fullPath, fileToPrint.name);
-                    } else if (typeof Android !== 'undefined' && Android.printFile) {
-                        if (fileToPrint.base64) {
-                            Android.printFile(fileToPrint.base64);
-                        } else if (fileToPrint.fullPath) {
-                            Android.printFileByPath(fileToPrint.fullPath);
-                        }
-                    }
-                }
-                break;
-                
-            case 'delete':
-                if(confirm(`"${name}" dosyasını silmek istediğinize emin misiniz?`)) {
-                    recentFiles = recentFiles.filter(f => f.id !== cardId);
-                    importedFiles = importedFiles.filter(f => f.id !== cardId);
-                    devicePDFs = devicePDFs.filter(f => f.id !== cardId);
-                    favoriteFiles = favoriteFiles.filter(f => f.id !== cardId);
+                saveRecentToStorage();
+                saveFavoritesToStorage();
+                loadData();
+            }
+            break;
+            
+        case 'share':
+            let fileToShare = null;
+            [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
+                const file = fileList.find(f => f.id === cardId);
+                if (file && !fileToShare) fileToShare = file;
+            });
+            
+            if (fileToShare && typeof window.flutter_inappwebview !== 'undefined') {
+                try {
+                    let base64Data = null;
                     
-                    saveRecentToStorage();
-                    saveFavoritesToStorage();
-                    loadData();
+                    if (fileToShare.source === 'imported' && fileToShare.indexedDBSaved) {
+                        const blob = await pdfManager.getPdfFromIndexedDB(fileToShare.name);
+                        if (blob) {
+                            base64Data = await blobToBase64(blob);
+                        }
+                    } else if (fileToShare.source === 'device' && fileToShare.fullPath) {
+                        const tempPath = await window.flutter_inappwebview.callHandler('getPdfPath', fileToShare.fullPath, fileToShare.name);
+                        if (tempPath) {
+                            const pdfBytes = await window.flutter_inappwebview.callHandler('readPdfFile', tempPath);
+                            if (pdfBytes) {
+                                const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
+                                base64Data = await blobToBase64(blob);
+                            }
+                        }
+                    }
+                    
+                    if (base64Data) {
+                        await window.flutter_inappwebview.callHandler('sharePdfBase64', base64Data, fileToShare.name);
+                        console.log(`✅ ${fileToShare.name} paylaşıldı`);
+                    }
+                } catch (e) {
+                    console.error('❌ Paylaşma hatası:', e);
                 }
-                break;
-        }
-    }, 300);
+            }
+            break;
+            
+        case 'print':
+            let fileToPrint = null;
+            [recentFiles, importedFiles, devicePDFs].forEach(fileList => {
+                const file = fileList.find(f => f.id === cardId);
+                if (file && !fileToPrint) fileToPrint = file;
+            });
+            
+            if (fileToPrint && typeof window.flutter_inappwebview !== 'undefined') {
+                try {
+                    let base64Data = null;
+                    
+                    if (fileToPrint.source === 'imported' && fileToPrint.indexedDBSaved) {
+                        const blob = await pdfManager.getPdfFromIndexedDB(fileToPrint.name);
+                        if (blob) {
+                            base64Data = await blobToBase64(blob);
+                        }
+                    } else if (fileToPrint.source === 'device' && fileToPrint.fullPath) {
+                        const tempPath = await window.flutter_inappwebview.callHandler('getPdfPath', fileToPrint.fullPath, fileToPrint.name);
+                        if (tempPath) {
+                            const pdfBytes = await window.flutter_inappwebview.callHandler('readPdfFile', tempPath);
+                            if (pdfBytes) {
+                                const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
+                                base64Data = await blobToBase64(blob);
+                            }
+                        }
+                    }
+                    
+                    if (base64Data) {
+                        await window.flutter_inappwebview.callHandler('printPdfBase64', base64Data, fileToPrint.name);
+                        console.log(`✅ ${fileToPrint.name} yazdırıldı`);
+                    }
+                } catch (e) {
+                    console.error('❌ Yazdırma hatası:', e);
+                }
+            }
+            break;
+            
+        case 'delete':
+            if(confirm(`"${name}" dosyasını silmek istediğinize emin misiniz?`)) {
+                recentFiles = recentFiles.filter(f => f.id !== cardId);
+                importedFiles = importedFiles.filter(f => f.id !== cardId);
+                devicePDFs = devicePDFs.filter(f => f.id !== cardId);
+                favoriteFiles = favoriteFiles.filter(f => f.id !== cardId);
+                
+                saveRecentToStorage();
+                saveFavoritesToStorage();
+                loadData();
+            }
+            break;
+    }
 }
 
 // =============================================================================
-// 13. SEARCH
+// 13. HELPER: BLOB TO BASE64
+// =============================================================================
+
+async function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+
+// =============================================================================
+// 14. SEARCH
 // =============================================================================
 
 function triggerSearch() {
@@ -2849,7 +2939,7 @@ function triggerSearch() {
 }
 
 // =============================================================================
-// 14. TOOLS
+// 15. TOOLS
 // =============================================================================
 
 function loadTools() {
@@ -2876,7 +2966,7 @@ function openToolPage(page) {
 }
 
 // =============================================================================
-// 15. EVENTS
+// 16. EVENTS
 // =============================================================================
 
 function attachEvents() {
@@ -3028,7 +3118,7 @@ function attachEvents() {
 }
 
 // =============================================================================
-// 16. NAVIGATION
+// 17. NAVIGATION
 // =============================================================================
 
 function switchTab(id, isClickOrNav = false) {
@@ -3152,7 +3242,7 @@ function handleFabAction(action) {
 }
 
 // =============================================================================
-// 17. ANDROID
+// 18. ANDROID
 // =============================================================================
 
 function onAndroidResume() {
@@ -3224,7 +3314,7 @@ window.androidBackPressed = function() {
 };
 
 // =============================================================================
-// 18. GLOBAL FUNCTIONS
+// 19. GLOBAL FUNCTIONS
 // =============================================================================
 
 window.sendHelpEmail = sendHelpEmail;
@@ -3252,7 +3342,7 @@ window.showPermissionModal = showPermissionModal;
 window.closePermissionModal = closePermissionModal;
 window.openSettingsForPermission = openSettingsForPermission;
 
-console.log("✅ PDF Reader - IndexedDB Version Loaded");
+console.log("✅ PDF Reader - IndexedDB Version Loaded (Base64 Support)");
 
 </script>
 
