@@ -55,6 +55,12 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   
   // Temp dosya takibi
   final Map<String, String> _tempFiles = {};
+  
+  // ✅ ÇAĞRI TAKİBİ (Çift çağrı önleme)
+  DateTime? _lastShareCall;
+  DateTime? _lastPrintCall;
+  DateTime? _lastDownloadCall;
+  final Duration _callThrottle = const Duration(milliseconds: 500);
 
   @override
   void initState() {
@@ -452,6 +458,12 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
+  // ✅ ÇAĞRI KONTROLÜ (Throttle)
+  bool _canCallFunction(DateTime? lastCall) {
+    if (lastCall == null) return true;
+    return DateTime.now().difference(lastCall) > _callThrottle;
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -676,10 +688,17 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
 
-              // ==================== HANDLER: PAYLAŞ (BASE64) - YENİ ====================
+              // ==================== HANDLER: PAYLAŞ (BASE64) ✅ TEK ÇAĞRI ====================
               controller.addJavaScriptHandler(
                 handlerName: 'sharePdfBase64',
                 callback: (args) async {
+                  // ✅ Çift çağrı kontrolü
+                  if (!_canCallFunction(_lastShareCall)) {
+                    debugPrint("⚠️ Paylaşma çağrısı çok hızlı, atlandı");
+                    return;
+                  }
+                  _lastShareCall = DateTime.now();
+                  
                   try {
                     String base64Data = args[0]; // "data:application/pdf;base64,..."
                     String fileName = args.length > 1 ? args[1] : "document.pdf";
@@ -698,33 +717,32 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     final tempFile = File('${tempDir.path}/$fileName');
                     await tempFile.writeAsBytes(bytes);
                     
-                    // Paylaş
-                    await Share.shareXFiles([XFile(tempFile.path)], text: fileName);
+                    // ✅ Paylaş (hata mesajı YOK)
+                    final result = await Share.shareXFiles([XFile(tempFile.path)], text: fileName);
                     
-                    debugPrint("✅ PDF paylaşıldı (base64)");
+                    debugPrint("✅ PDF paylaşma sonucu: ${result.status}");
                     
                     // Temp dosyayı sil
                     await tempFile.delete();
                     
                   } catch (e) {
                     debugPrint("❌ Paylaşma hatası (base64): $e");
-                    
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('❌ Paylaşma hatası: ${e.toString()}'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
+                    // ✅ Kullanıcıya hata gösterme, sadece log
                   }
                 },
               );
 
-              // ==================== HANDLER: YAZDIR (BASE64) - YENİ ====================
+              // ==================== HANDLER: YAZDIR (BASE64) ✅ TEK ÇAĞRI ====================
               controller.addJavaScriptHandler(
                 handlerName: 'printPdfBase64',
                 callback: (args) async {
+                  // ✅ Çift çağrı kontrolü
+                  if (!_canCallFunction(_lastPrintCall)) {
+                    debugPrint("⚠️ Yazdırma çağrısı çok hızlı, atlandı");
+                    return;
+                  }
+                  _lastPrintCall = DateTime.now();
+                  
                   try {
                     String base64Data = args[0];
                     String fileName = args.length > 1 ? args[1] : "document.pdf";
@@ -738,7 +756,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     );
                     final bytes = base64Decode(cleanBase64);
                     
-                    // Yazdır
+                    // ✅ Yazdır (hata mesajı YOK)
                     await Printing.layoutPdf(
                       onLayout: (format) async => bytes,
                       name: fileName,
@@ -748,23 +766,22 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                   } catch (e) {
                     debugPrint("❌ Yazdırma hatası (base64): $e");
-                    
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('❌ Yazdırma hatası: ${e.toString()}'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
+                    // ✅ Kullanıcıya hata gösterme, sadece log
                   }
                 },
               );
 
-              // ==================== HANDLER: İNDİR (BASE64) - YENİ ====================
+              // ==================== HANDLER: İNDİR (BASE64) ✅ PDF Reader KLASÖRÜ + _update ====================
               controller.addJavaScriptHandler(
                 handlerName: 'downloadPdfBase64',
                 callback: (args) async {
+                  // ✅ Çift çağrı kontrolü
+                  if (!_canCallFunction(_lastDownloadCall)) {
+                    debugPrint("⚠️ İndirme çağrısı çok hızlı, atlandı");
+                    return;
+                  }
+                  _lastDownloadCall = DateTime.now();
+                  
                   try {
                     String base64Data = args[0];
                     String fileName = args.length > 1 ? args[1] : "document.pdf";
@@ -778,26 +795,31 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     );
                     final bytes = base64Decode(cleanBase64);
                     
-                    // Download klasörünü bul
+                    // ✅ Download/PDF Reader/ klasörü
                     Directory? directory;
                     if (Platform.isAndroid) {
-                      directory = Directory('/storage/emulated/0/Download');
-                      if (!await directory.exists()) {
-                        directory = Directory('/storage/emulated/0/Downloads');
+                      directory = Directory('/storage/emulated/0/Download/PDF Reader');
+                      
+                      
+  if (!await directory.exists()) {
+                        await directory.create(recursive: true);
+                        debugPrint("✅ PDF Reader klasörü oluşturuldu");
                       }
                     } else {
                       directory = await getApplicationDocumentsDirectory();
                     }
 
                     if (directory != null && await directory.exists()) {
-                      // Aynı isimli dosya varsa (1), (2) ekle
-                      int counter = 1;
-                      String finalName = fileName;
+                      // ✅ Orijinal dosya adı ve uzantısı
                       String nameWithoutExt = fileName.replaceAll('.pdf', '');
+                      String finalName = '${nameWithoutExt}_update.pdf';
+                      
                       File targetFile = File('${directory.path}/$finalName');
                       
+                      // ✅ Aynı isimli dosya varsa _update (1), _update (2) ekle
+                      int counter = 1;
                       while (await targetFile.exists()) {
-                        finalName = '$nameWithoutExt ($counter).pdf';
+                        finalName = '${nameWithoutExt}_update ($counter).pdf';
                         targetFile = File('${directory.path}/$finalName');
                         counter++;
                       }
@@ -881,15 +903,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     }
                   } catch (e) {
                     debugPrint("❌ Yazdırma hatası: $e");
-                    
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('❌ Yazdırma hatası: ${e.toString()}'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
                   }
                 },
               );
@@ -1115,5 +1128,4 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     );
   }
 }
-
 
