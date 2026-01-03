@@ -24,7 +24,7 @@ dependencies:
   share_plus: ^12.0.1
   package_info_plus: ^9.0.0  # Versiyonu güncellendi
   dependencies:
-  crypto: ^3.0.0
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:
