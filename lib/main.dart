@@ -12,7 +12,7 @@ import 'package:printing/printing.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:crypto/crypto.dart'; // ⭐ YENİ: Hash için
+import 'package:crypto/crypto.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,10 +53,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   late PackageInfo _packageInfo;
   String _currentUrl = '';
   
-  // IndexedDB için temp dosya takibi
   final Map<String, String> _indexedDBTempFiles = {};
   
-  // Çağrı takibi (Çift çağrı önleme)
   DateTime? _lastShareCall;
   DateTime? _lastPrintCall;
   DateTime? _lastDownloadCall;
@@ -89,7 +87,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // IndexedDB için temp dosyaları temizle
   Future<void> _cleanupIndexedDBTempFiles() async {
     for (var path in _indexedDBTempFiles.values) {
       try {
@@ -105,32 +102,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     _indexedDBTempFiles.clear();
   }
 
-  Future<void> _checkAndUpdatePermissionStatus() async {
-    if (webViewController == null) return;
-    
-    final hasPermission = await _checkStoragePermission();
-    debugPrint("🔒 IndexedDB İzin durumu: $hasPermission");
-    
-    await webViewController!.evaluateJavascript(source: """
-      (function() {
-        console.log("📱 Android resume - IndexedDB izin durumu güncelleniyor");
-        if (typeof onAndroidResume === 'function') {
-          onAndroidResume();
-        }
-        if (typeof scanDeviceForPDFs === 'function') {
-          setTimeout(function() {
-            scanDeviceForPDFs();
-          }, 500);
-        }
-      })();
-    """);
-  }
-
-  // IndexedDB için permission kontrolü
   Future<bool> _checkStoragePermission() async {
     if (Platform.isAndroid) {
       try {
-        // Android 13+ için MEDIA izinleri (IndexedDB için önemli)
         final android13Permissions = await Future.wait([
           Permission.photos.status,
           Permission.videos.status,
@@ -142,14 +116,12 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           return true;
         }
         
-        // Android 11-12 için MANAGE_EXTERNAL_STORAGE
         final manageStorageStatus = await Permission.manageExternalStorage.status;
         if (manageStorageStatus.isGranted) {
           debugPrint("✅ IndexedDB: MANAGE_EXTERNAL_STORAGE izni mevcut");
           return true;
         }
         
-        // Android 10 ve altı için STORAGE
         final storageStatus = await Permission.storage.status;
         if (storageStatus.isGranted) {
           debugPrint("✅ IndexedDB: STORAGE izni mevcut");
@@ -166,13 +138,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return true;
   }
 
-  // IndexedDB için izin iste
   Future<bool> _requestStoragePermission() async {
     if (Platform.isAndroid) {
       try {
         debugPrint("🔐 IndexedDB için izin isteniyor...");
         
-        // Önce MANAGE_EXTERNAL_STORAGE dene (IndexedDB için en iyisi)
         if (await Permission.manageExternalStorage.status.isDenied) {
           final result = await Permission.manageExternalStorage.request();
           if (result.isGranted) {
@@ -186,7 +156,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           }
         }
         
-        // Normal storage iznini dene
         if (await Permission.storage.status.isDenied) {
           final result = await Permission.storage.request();
           if (result.isGranted) {
@@ -200,7 +169,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           }
         }
         
-        // Android 13+ için media izinlerini dene
         final results = await [
           Permission.photos,
           Permission.videos,
@@ -222,38 +190,31 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return true;
   }
 
-  // ✅ DOĞRUDAN Dosya Erişim İzni ayarlarına git
   Future<void> _openManageStorageSettings() async {
     debugPrint("⚙️ DOĞRUDAN Dosya Erişim İzni Ayarları açılıyor...");
     
     try {
       if (Platform.isAndroid) {
-        // Android için özel dosya erişim sayfasına git
         String packageName = _packageInfo.packageName;
         debugPrint("📦 Paket adı: $packageName");
         
-        // DOĞRUDAN uygulama özel dosya erişim ayarlarına git
         try {
-          // Intent kullanarak doğrudan aç
           final uri = Uri.parse("intent:#Intent;action=android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION;package=$packageName;end");
           
           if (await canLaunchUrl(uri)) {
             await launchUrl(uri);
             debugPrint("✅ Dosya Erişim İzni Ayarları açıldı (Intent)");
           } else {
-            // Fallback: Normal app settings
             debugPrint("⚠️ Intent açılamadı, fallback kullanılıyor");
             final fallbackUri = Uri.parse("package:$packageName");
             await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
           }
         } catch (e) {
           debugPrint("❌ Intent hatası: $e");
-          // Son çare: Genel ayarlar
           final generalSettingsUri = Uri.parse("package:$packageName");
           await launchUrl(generalSettingsUri, mode: LaunchMode.externalApplication);
         }
         
-        // Kullanıcıyı bilgilendir
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -264,7 +225,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           );
         }
         
-        // 3 saniye sonra kontrol et
         await Future.delayed(const Duration(seconds: 3));
         
         final hasPermission = await _checkStoragePermission();
@@ -280,7 +240,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           }
         }
       } else {
-        // iOS için normal ayarlar
         final settingsUri = Uri.parse('app-settings:');
         if (await canLaunchUrl(settingsUri)) {
           await launchUrl(settingsUri);
@@ -290,7 +249,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint("❌ Dosya Erişim İzni Ayarları açma hatası: $e");
       
-      // Fallback: Genel ayarlar
       try {
         String packageName = _packageInfo.packageName;
         final fallbackUri = Uri.parse("package:$packageName");
@@ -302,7 +260,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // Normal ayarları aç
   Future<void> _openAppSettings() async {
     debugPrint("⚙️ IndexedDB için genel ayarlar açılıyor...");
     try {
@@ -324,19 +281,16 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // ⭐⭐⭐ GÜNCELLENMİŞ: TEK DOSYA GÖSTERİM İÇİN PDF LİSTELEME ⭐⭐⭐
   Future<List<Map<String, dynamic>>> _listPdfFiles() async {
     List<Map<String, dynamic>> pdfFiles = [];
     try {
       if (Platform.isAndroid) {
         debugPrint("📂 TEK DOSYA MODU: PDF dosyaları taranıyor...");
         
-        // ⭐ SADECE Download klasörünü tara
         List<String> searchPaths = [
           '/storage/emulated/0/Download',
         ];
         
-        // ⭐ GERÇEK DOSYA TAKİBİ
         Set<String> seenHashes = {};
         Set<String> seenNames = {};
         
@@ -356,7 +310,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         
         debugPrint("✅ TEK DOSYA MODU: ${pdfFiles.length} benzersiz PDF bulundu");
         
-        // ⭐ DEBUG: Bulunan dosyaları listele
         for (var file in pdfFiles) {
           debugPrint("📄 ${file['name']} - ${file['sizeMB'].toStringAsFixed(2)} MB");
         }
@@ -367,7 +320,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return pdfFiles;
   }
 
-  // ⭐⭐⭐ YENİ: TEK DOSYA TARAMA FONKSİYONU ⭐⭐⭐
   Future<void> _scanDirectoryForUniquePDFs(
     Directory directory,
     List<Map<String, dynamic>> pdfFiles,
@@ -384,13 +336,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             final stat = await entity.stat();
             final sizeInMB = stat.size / (1024 * 1024);
             
-            // Boyut limiti
             if (sizeInMB > 50) {
               debugPrint("⚠️ Büyük dosya atlandı: ${entity.path}");
               continue;
             }
             
-            // ⭐ DOSYA ADI KONTROLÜ (aynı isimli dosya)
             final fileName = entity.path.split('/').last;
             final nameSizeKey = '${fileName}_${stat.size}';
             
@@ -399,14 +349,12 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               continue;
             }
             
-            // ⭐ DOSYA HASH'İ HESAPLA
             final fileHash = await _calculateFileHash(entity, stat);
             if (seenHashes.contains(fileHash)) {
               debugPrint("⏭️ Aynı hash atlandı: $fileName");
               continue;
             }
             
-            // ⭐ DOSYA İÇERİĞİNİ KONTROL ET (opsiyonel)
             final contentHash = await _calculateContentHash(entity);
             final fullHash = '${fileHash}_$contentHash';
             
@@ -415,19 +363,17 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               continue;
             }
             
-            // ⭐ SET'LERE EKLE
             seenHashes.add(fileHash);
             seenHashes.add(fullHash);
             seenNames.add(nameSizeKey);
             
-            // ⭐ DOSYA BİLGİLERİNİ EKLE
             pdfFiles.add({
               'path': entity.path,
               'name': fileName,
               'size': stat.size,
               'sizeMB': sizeInMB,
               'modified': stat.modified.toIso8601String(),
-              'hash': fullHash,  // TAM HASH
+              'hash': fullHash,
               'deviceOnly': true,
               'uniqueKey': fullHash,
             });
@@ -437,7 +383,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           } catch (e) {
             debugPrint("⚠️ Dosya bilgisi alınamadı: ${entity.path} - $e");
           }
-        } else if (entity is Directory && depth < 2) { // ⭐ MAKSIMUM 2 SEVIYE
+        } else if (entity is Directory && depth < 2) {
           final dirName = entity.path.split('/').last.toLowerCase();
           if (!dirName.startsWith('.') && 
               dirName != 'android' && 
@@ -455,26 +401,21 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // ⭐ DOSYA HASH'İ HESAPLA (stat bilgilerinden)
   Future<String> _calculateFileHash(File file, FileStat stat) async {
     try {
-      // Dosya stat bilgilerinden hash oluştur
       final statHash = '${file.path}_${stat.size}_${stat.modified.millisecondsSinceEpoch}';
       final digest = md5.convert(utf8.encode(statHash));
       return digest.toString();
     } catch (e) {
       debugPrint("⚠️ Stat hash hesaplanamadı: $e");
-      // Fallback: basit hash
       return '${file.path.hashCode}_${stat.size}';
     }
   }
 
-  // ⭐ DOSYA İÇERİĞİ HASH'İ HESAPLA (ilk 4KB)
   Future<String> _calculateContentHash(File file) async {
     try {
       final randomAccessFile = await file.open();
       try {
-        // İlk 4KB'ı oku
         final buffer = await randomAccessFile.read(4096);
         await randomAccessFile.close();
         
@@ -503,7 +444,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return '${(bytes / math.pow(k, i)).toStringAsFixed(dm)} ${sizes[i]}';
   }
 
-  // IndexedDB için PDF'yi temp'e kopyala
   Future<String?> _copyPdfToTempForIndexedDB(String sourcePath, String fileName) async {
     try {
       debugPrint("📋 IndexedDB için PDF temp'e kopyalanıyor: $fileName");
@@ -518,7 +458,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       final tempPath = '${tempDir.path}/indexeddb_${DateTime.now().millisecondsSinceEpoch}_$fileName';
       final tempFile = File(tempPath);
       
-      // Eski temp dosyaları temizle
       final oldFiles = await tempDir.list()
         .where((entity) => entity is File && entity.path.contains('indexeddb_'))
         .toList();
@@ -547,7 +486,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // IndexedDB için viewer reset
   Future<void> _resetViewerAndGoBackForIndexedDB() async {
     if (webViewController == null) return;
     
@@ -688,6 +626,27 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return DateTime.now().difference(lastCall) > _callThrottle;
   }
 
+  Future<void> _checkAndUpdatePermissionStatus() async {
+    if (webViewController == null) return;
+    
+    final hasPermission = await _checkStoragePermission();
+    debugPrint("🔒 IndexedDB İzin durumu: $hasPermission");
+    
+    await webViewController!.evaluateJavascript(source: """
+      (function() {
+        console.log("📱 Android resume - IndexedDB izin durumu güncelleniyor");
+        if (typeof onAndroidResume === 'function') {
+          onAndroidResume();
+        }
+        if (typeof scanDeviceForPDFs === 'function') {
+          setTimeout(function() {
+            scanDeviceForPDFs();
+          }, 500);
+        }
+      })();
+    """);
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -792,7 +751,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               webViewController = controller;
               debugPrint("🌐 TEK DOSYA MODU WebView oluşturuldu");
               
-              // ✅ DOĞRUDAN DOSYA ERİŞİM AYARLARI
               controller.addJavaScriptHandler(
                 handlerName: 'openManageStorageSettings',
                 callback: (args) async {
@@ -815,7 +773,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ==================== INDEXEDDB İZİN DURUMU ====================
               controller.addJavaScriptHandler(
                 handlerName: 'checkStoragePermission',
                 callback: (args) async {
@@ -825,7 +782,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ==================== INDEXEDDB İZİN İSTE ====================
               controller.addJavaScriptHandler(
                 handlerName: 'requestStoragePermission',
                 callback: (args) async {
@@ -836,7 +792,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ⭐⭐⭐ TEK DOSYA MODU LİSTELEME ====================
               controller.addJavaScriptHandler(
                 handlerName: 'listPdfFiles',
                 callback: (args) async {
@@ -844,7 +799,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   try {
                     final pdfFiles = await _listPdfFiles();
                     
-                    // ⭐ DEBUG BİLGİSİ
                     debugPrint("📊 TEK DOSYA MODU: ${pdfFiles.length} benzersiz PDF bulundu");
                     if (pdfFiles.isNotEmpty) {
                       for (var file in pdfFiles) {
@@ -861,7 +815,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ==================== INDEXEDDB PDF PATH AL ====================
               controller.addJavaScriptHandler(
                 handlerName: 'getPdfPath',
                 callback: (args) async {
@@ -887,7 +840,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ==================== INDEXEDDB DOSYA BOYUTU ====================
               controller.addJavaScriptHandler(
                 handlerName: 'getFileSize',
                 callback: (args) async {
@@ -907,7 +859,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ==================== INDEXEDDB DOSYA OKU ====================
               controller.addJavaScriptHandler(
                 handlerName: 'readPdfFile',
                 callback: (args) async {
@@ -932,7 +883,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ==================== INDEXEDDB AYARLARI AÇ ====================
               controller.addJavaScriptHandler(
                 handlerName: 'openSettingsForPermission',
                 callback: (args) async {
@@ -940,7 +890,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ==================== INDEXEDDB PAYLAŞ ====================
+              // ✅ GÜNCELLENMİŞ PAYLAŞMA HANDLER'I
               controller.addJavaScriptHandler(
                 handlerName: 'sharePdfBase64',
                 callback: (args) async {
@@ -956,8 +906,16 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                     debugPrint("📤 TEK DOSYA MODU PDF paylaşılıyor: $fileName");
                     
+                    // ✅ Base64 prefix kontrolü
+                    if (base64Data.startsWith('data:')) {
+                      base64Data = base64Data.split(',')[1];
+                    }
+                    
+                    // ✅ Boşluk ve yeni satırları temizle
+                    base64Data = base64Data.replaceAll(RegExp(r'\s+'), '');
+                    
                     if (base64Data.isEmpty || base64Data.length < 100) {
-                      debugPrint("❌ TEK DOSYA MODU Base64 verisi geçersiz");
+                      debugPrint("❌ TEK DOSYA MODU Base64 verisi geçersiz: ${base64Data.length} karakter");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -970,14 +928,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       return;
                     }
                     
-                    final cleanBase64 = base64Data.replaceFirst(
-                      RegExp(r'data:application/pdf;base64,'), 
-                      ''
-                    );
-                    
                     List<int> bytes;
                     try {
-                      bytes = base64Decode(cleanBase64);
+                      bytes = base64Decode(base64Data);
                       debugPrint("✅ TEK DOSYA MODU Base64 decode başarılı: ${bytes.length} bytes");
                     } catch (e) {
                       debugPrint("❌ TEK DOSYA MODU Base64 decode hatası: $e");
@@ -1032,7 +985,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ==================== INDEXEDDB YAZDIR ====================
+              // ✅ GÜNCELLENMİŞ YAZDIRMA HANDLER'I
               controller.addJavaScriptHandler(
                 handlerName: 'printPdfBase64',
                 callback: (args) async {
@@ -1048,6 +1001,14 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                     debugPrint("🖨️ TEK DOSYA MODU PDF yazdırılıyor: $fileName");
                     
+                    // ✅ Base64 prefix kontrolü
+                    if (base64Data.startsWith('data:')) {
+                      base64Data = base64Data.split(',')[1];
+                    }
+                    
+                    // ✅ Boşluk ve yeni satırları temizle
+                    base64Data = base64Data.replaceAll(RegExp(r'\s+'), '');
+                    
                     if (base64Data.isEmpty || base64Data.length < 100) {
                       debugPrint("❌ TEK DOSYA MODU Base64 verisi geçersiz");
                       if (mounted) {
@@ -1062,14 +1023,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       return;
                     }
                     
-                    final cleanBase64 = base64Data.replaceFirst(
-                      RegExp(r'data:application/pdf;base64,'), 
-                      ''
-                    );
-                    
                     List<int> bytes;
                     try {
-                      bytes = base64Decode(cleanBase64);
+                      bytes = base64Decode(base64Data);
                       debugPrint("✅ TEK DOSYA MODU Base64 decode başarılı: ${bytes.length} bytes");
                     } catch (e) {
                       debugPrint("❌ TEK DOSYA MODU Base64 decode hatası: $e");
@@ -1120,7 +1076,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ==================== INDEXEDDB İNDİR ====================
+              // ✅ GÜNCELLENMİŞ İNDİRME HANDLER'I
               controller.addJavaScriptHandler(
                 handlerName: 'downloadPdfBase64',
                 callback: (args) async {
@@ -1136,6 +1092,14 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                     debugPrint("💾 TEK DOSYA MODU PDF indiriliyor: $fileName");
                     
+                    // ✅ Base64 prefix kontrolü
+                    if (base64Data.startsWith('data:')) {
+                      base64Data = base64Data.split(',')[1];
+                    }
+                    
+                    // ✅ Boşluk ve yeni satırları temizle
+                    base64Data = base64Data.replaceAll(RegExp(r'\s+'), '');
+                    
                     if (base64Data.isEmpty || base64Data.length < 100) {
                       debugPrint("❌ TEK DOSYA MODU Base64 verisi geçersiz");
                       if (mounted) {
@@ -1150,14 +1114,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       return;
                     }
                     
-                    final cleanBase64 = base64Data.replaceFirst(
-                      RegExp(r'data:application/pdf;base64,'), 
-                      ''
-                    );
-                    
                     List<int> bytes;
                     try {
-                      bytes = base64Decode(cleanBase64);
+                      bytes = base64Decode(base64Data);
                       debugPrint("✅ TEK DOSYA MODU Base64 decode başarılı: ${bytes.length} bytes");
                     } catch (e) {
                       debugPrint("❌ TEK DOSYA MODU Base64 decode hatası: $e");
@@ -1237,7 +1196,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ==================== INDEXEDDB DESTEK KONTROLÜ ====================
               controller.addJavaScriptHandler(
                 handlerName: 'checkIndexedDBSupport',
                 callback: (args) async {
@@ -1246,7 +1204,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ==================== INDEXEDDB STORAGE BİLGİSİ ====================
               controller.addJavaScriptHandler(
                 handlerName: 'getStorageInfo',
                 callback: (args) async {
@@ -1269,7 +1226,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 },
               );
               
-              // ==================== INDEXEDDB UYGULAMA DURUMU ====================
               controller.addJavaScriptHandler(
                 handlerName: 'getAppStatus',
                 callback: (args) async {
