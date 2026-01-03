@@ -12,6 +12,7 @@ import 'package:printing/printing.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:crypto/crypto.dart'; // ⭐ YENİ: Hash için
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -221,7 +222,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return true;
   }
 
-  // ✅ DOĞRUDAN Dosya Erişim İzni ayarlarına git - GÜNCELLENDİ
+  // ✅ DOĞRUDAN Dosya Erişim İzni ayarlarına git
   Future<void> _openManageStorageSettings() async {
     debugPrint("⚙️ DOĞRUDAN Dosya Erişim İzni Ayarları açılıyor...");
     
@@ -330,18 +331,12 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       if (Platform.isAndroid) {
         debugPrint("📂 TEK DOSYA MODU: PDF dosyaları taranıyor...");
         
-        // ⭐ SADECE Download klasörünü tara (diğerlerini KAPAT)
+        // ⭐ SADECE Download klasörünü tara
         List<String> searchPaths = [
           '/storage/emulated/0/Download',
-          // '/storage/emulated/0/Documents',  // GEÇİCİ KAPALI
-          // '/storage/emulated/0/DCIM',       // GEÇİCİ KAPALI
-          // '/storage/emulated/0',            // ANA DİZİN - KAPALI
-          // '/sdcard/Download',               // KAPALI
-          // '/storage/emulated/0/Android/media', // KAPALI
         ];
         
-        // ⭐ GERÇEK DOSYA TAKİBİ (inode + hash)
-        Set<int> seenInodes = {};
+        // ⭐ GERÇEK DOSYA TAKİBİ
         Set<String> seenHashes = {};
         Set<String> seenNames = {};
         
@@ -349,7 +344,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           try {
             final directory = Directory(path);
             if (await directory.exists()) {
-              await _scanDirectoryForUniquePDFs(directory, pdfFiles, seenInodes, seenHashes, seenNames);
+              await _scanDirectoryForUniquePDFs(directory, pdfFiles, seenHashes, seenNames, 0);
             } else {
               debugPrint("⚠️ Dizin mevcut değil: $path");
             }
@@ -363,7 +358,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         
         // ⭐ DEBUG: Bulunan dosyaları listele
         for (var file in pdfFiles) {
-          debugPrint("📄 ${file['name']} - ${file['sizeMB'].toStringAsFixed(2)} MB - ${file['realPath']}");
+          debugPrint("📄 ${file['name']} - ${file['sizeMB'].toStringAsFixed(2)} MB");
         }
       }
     } catch (e) {
@@ -376,9 +371,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   Future<void> _scanDirectoryForUniquePDFs(
     Directory directory,
     List<Map<String, dynamic>> pdfFiles,
-    Set<int> seenInodes,
     Set<String> seenHashes,
     Set<String> seenNames,
+    int depth,
   ) async {
     try {
       final contents = directory.list(recursive: false);
@@ -395,21 +390,12 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               continue;
             }
             
-            // ⭐ GERÇEK DOSYA YOLUNU AL (symlink'leri çöz)
-            final realPath = await _getRealPath(entity.path);
-            
             // ⭐ DOSYA ADI KONTROLÜ (aynı isimli dosya)
             final fileName = entity.path.split('/').last;
             final nameSizeKey = '${fileName}_${stat.size}';
             
             if (seenNames.contains(nameSizeKey)) {
               debugPrint("⏭️ Aynı isim+boyut atlandı: $fileName");
-              continue;
-            }
-            
-            // ⭐ INODE KONTROLÜ (aynı fiziksel dosya)
-            if (seenInodes.contains(stat.ino)) {
-              debugPrint("⏭️ Aynı inode atlandı: $fileName (inode: ${stat.ino})");
               continue;
             }
             
@@ -420,23 +406,30 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               continue;
             }
             
+            // ⭐ DOSYA İÇERİĞİNİ KONTROL ET (opsiyonel)
+            final contentHash = await _calculateContentHash(entity);
+            final fullHash = '${fileHash}_$contentHash';
+            
+            if (seenHashes.contains(fullHash)) {
+              debugPrint("⏭️ Aynı içerik atlandı: $fileName");
+              continue;
+            }
+            
             // ⭐ SET'LERE EKLE
-            seenInodes.add(stat.ino);
             seenHashes.add(fileHash);
+            seenHashes.add(fullHash);
             seenNames.add(nameSizeKey);
             
             // ⭐ DOSYA BİLGİLERİNİ EKLE
             pdfFiles.add({
               'path': entity.path,
-              'realPath': realPath, // GERÇEK PATH
               'name': fileName,
               'size': stat.size,
               'sizeMB': sizeInMB,
               'modified': stat.modified.toIso8601String(),
-              'inode': stat.ino, // INODE NUMARASI
-              'hash': fileHash,  // DOSYA HASH'İ
+              'hash': fullHash,  // TAM HASH
               'deviceOnly': true,
-              'uniqueKey': fileHash, // BENZERSİZ ANAHTAR
+              'uniqueKey': fullHash,
             });
             
             debugPrint("✅ Eklendi: $fileName (${sizeInMB.toStringAsFixed(2)} MB)");
@@ -444,8 +437,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           } catch (e) {
             debugPrint("⚠️ Dosya bilgisi alınamadı: ${entity.path} - $e");
           }
-        } else if (entity is Directory) {
-          // ⭐ ALT KLASÖRLERE GİRME (sadece 1 seviye)
+        } else if (entity is Directory && depth < 2) { // ⭐ MAKSIMUM 2 SEVIYE
           final dirName = entity.path.split('/').last.toLowerCase();
           if (!dirName.startsWith('.') && 
               dirName != 'android' && 
@@ -454,10 +446,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               !dirName.contains('temp') &&
               !dirName.contains('system')) {
             
-            // Sadece Download klasörü içinde 1 seviye alt klasöre in
-            if (directory.path.contains('Download')) {
-              await _scanDirectoryForUniquePDFs(entity, pdfFiles, seenInodes, seenHashes, seenNames);
-            }
+            await _scanDirectoryForUniquePDFs(entity, pdfFiles, seenHashes, seenNames, depth + 1);
           }
         }
       }
@@ -466,45 +455,42 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // ⭐ GERÇEK PATH'İ AL (symlink kontrolü)
-  Future<String> _getRealPath(String path) async {
+  // ⭐ DOSYA HASH'İ HESAPLA (stat bilgilerinden)
+  Future<String> _calculateFileHash(File file, FileStat stat) async {
     try {
-      final file = File(path);
-      if (await file.exists()) {
-        final resolved = await file.resolveSymbolicLinks();
-        debugPrint("🔗 Symlink çözüldü: $path -> $resolved");
-        return resolved;
-      }
-      return path;
+      // Dosya stat bilgilerinden hash oluştur
+      final statHash = '${file.path}_${stat.size}_${stat.modified.millisecondsSinceEpoch}';
+      final digest = md5.convert(utf8.encode(statHash));
+      return digest.toString();
     } catch (e) {
-      return path;
+      debugPrint("⚠️ Stat hash hesaplanamadı: $e");
+      // Fallback: basit hash
+      return '${file.path.hashCode}_${stat.size}';
     }
   }
 
-  // ⭐ DOSYA HASH'İ HESAPLA
-  Future<String> _calculateFileHash(File file, FileStat stat) async {
+  // ⭐ DOSYA İÇERİĞİ HASH'İ HESAPLA (ilk 4KB)
+  Future<String> _calculateContentHash(File file) async {
     try {
-      // Karmaşık hash: inode + size + modified time + ilk 1KB içeriği
-      final fileHash = '${stat.ino}_${stat.size}_${stat.modified.millisecondsSinceEpoch}';
-      
-      // ⭐ İSTEĞE BAĞLI: İlk 1KB'ı oku ve hash'e ekle (daha kesin)
+      final randomAccessFile = await file.open();
       try {
-        final randomAccessFile = await file.open();
-        final first1KB = await randomAccessFile.read(1024);
+        // İlk 4KB'ı oku
+        final buffer = await randomAccessFile.read(4096);
         await randomAccessFile.close();
         
-        if (first1KB.isNotEmpty) {
-          final contentHash = first1KB.hashCode;
-          return '${fileHash}_$contentHash';
+        if (buffer.isNotEmpty) {
+          final digest = md5.convert(buffer);
+          return digest.toString();
+        } else {
+          return 'empty';
         }
       } catch (e) {
-        debugPrint("⚠️ İlk 1KB okunamadı: $e");
+        await randomAccessFile.close();
+        return 'error_${e.hashCode}';
       }
-      
-      return fileHash;
     } catch (e) {
-      // Fallback: sadece path hash
-      return '${file.path.hashCode}_${stat.size}';
+      debugPrint("⚠️ İçerik hash hesaplanamadı: $e");
+      return 'read_error';
     }
   }
 
@@ -934,7 +920,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       final bytes = await file.readAsBytes();
                       final sizeInMB = bytes.length / (1024 * 1024);
                       debugPrint("✅ TEK DOSYA MODU PDF okundu: ${sizeInMB.toStringAsFixed(2)} MB");
-                      // Uint8List olarak döndür
                       return bytes;
                     } else {
                       debugPrint("❌ TEK DOSYA MODU Dosya bulunamadı: $filePath");
