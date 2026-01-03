@@ -2503,6 +2503,8 @@ function requestStoragePermission() {
     showPermissionModal();
 }
 
+
+
 async function scanDeviceForPDFs() {
     try {
         const hasPermission = await checkAndroidPermission();
@@ -2524,15 +2526,31 @@ async function scanDeviceForPDFs() {
             }
         }
         
-        devicePDFs = [];
+        // YENİ: Eski devicePDFs'leri sakla ama sadece device kaynaklı olanları
+        const oldDevicePDFs = devicePDFs.filter(file => file.source === 'device');
+        devicePDFs = [...oldDevicePDFs]; // Sadece device dosyalarını koru
+        
         let nextId = 1000;
         const seenPaths = new Set();
         
+        // Mevcut devicePDFs'teki path'leri seenPaths'a ekle
+        devicePDFs.forEach(file => {
+            if (file.fullPath) {
+                seenPaths.add(file.fullPath);
+            }
+        });
+        
         for (const fileInfo of pdfFiles) {
             // Aynı path'teki dosyaları kontrol et
-            const alreadyExists = await pdfManager.checkIfPdfExists(fileInfo.path);
-            if (alreadyExists || seenPaths.has(fileInfo.path)) {
-                console.log(`⏭️  Zaten listede: ${fileInfo.name}`);
+            if (seenPaths.has(fileInfo.path)) {
+                console.log(`⏭️  Zaten listede (path): ${fileInfo.name}`);
+                continue;
+            }
+            
+            // IndexedDB'de kontrol et (sadece imported dosyalar için)
+            const alreadyInDB = await pdfManager.checkIfPdfExists(fileInfo.path);
+            if (alreadyInDB) {
+                console.log(`⏭️  IndexedDB'de zaten var: ${fileInfo.name}`);
                 continue;
             }
             
@@ -2551,9 +2569,22 @@ async function scanDeviceForPDFs() {
                 path: fileInfo.path,
                 fullPath: fileInfo.path,
                 source: 'device',
-                filePath: fileInfo.path
+                filePath: fileInfo.path,
+                // YENİ: Benzersiz kontrol için hash ekle
+                uniqueKey: `${fileInfo.path}_${fileInfo.size}_${fileInfo.modified}`
             });
         }
+        
+        // YENİ: Yinelenen dosyaları temizle (uniqueKey'e göre)
+        devicePDFs = removeDuplicatesByKey(devicePDFs, 'uniqueKey');
+        
+        // YENİ: importedFiles ile karşılaştır, aynı dosyaları çıkar
+        devicePDFs = devicePDFs.filter(deviceFile => {
+            return !importedFiles.some(importedFile => 
+                importedFile.name === deviceFile.name && 
+                importedFile.size === deviceFile.size
+            );
+        });
         
         checkPermissionAndUpdateUI();
         loadData();
@@ -2562,6 +2593,20 @@ async function scanDeviceForPDFs() {
         console.error('Device scan error:', e);
         checkPermissionAndUpdateUI();
     }
+}
+
+// YENİ: Yardımcı fonksiyon - Benzersiz dosyaları filtrele
+function removeDuplicatesByKey(array, key) {
+    const seen = new Set();
+    return array.filter(item => {
+        const keyValue = item[key];
+        if (seen.has(keyValue)) {
+            console.log(`⏭️  Yinelenen kaldırıldı: ${item.name}`);
+            return false;
+        }
+        seen.add(keyValue);
+        return true;
+    });
 }
 
 async function checkAndroidPermission() {
@@ -2589,6 +2634,8 @@ async function checkPermissionAndUpdateUI() {
         if (deviceList) deviceList.style.display = 'grid';
     }
 }
+
+
 
 // =============================================================================
 // 9. SELECTION MODE - GÜNCELLENDİ (UZUN BASMA İYİLEŞTİRMESİ)
