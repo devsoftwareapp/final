@@ -4,23 +4,20 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:printing/printing.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:app_settings/app_settings.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
   if (Platform.isAndroid) {
     await InAppWebViewController.setWebContentsDebuggingEnabled(true);
   }
-  
   runApp(const MyApp());
 }
 
@@ -160,7 +157,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         
         debugPrint("❌ IndexedDB: Hiçbir izin mevcut değil");
         return false;
-        
       } catch (e) {
         debugPrint("❌ IndexedDB izin kontrol hatası: $e");
         return false;
@@ -182,7 +178,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             debugPrint("✅ IndexedDB: MANAGE_EXTERNAL_STORAGE izni verildi");
             return true;
           }
-          
           if (result.isPermanentlyDenied) {
             debugPrint("⚠️ IndexedDB: MANAGE_EXTERNAL_STORAGE kalıcı reddedildi");
             await _openManageStorageSettings();
@@ -197,7 +192,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             debugPrint("✅ IndexedDB: STORAGE izni verildi");
             return true;
           }
-          
           if (result.isPermanentlyDenied) {
             debugPrint("⚠️ IndexedDB: STORAGE kalıcı reddedildi");
             await _openManageStorageSettings();
@@ -219,7 +213,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
         
         debugPrint("❌ IndexedDB: Hiçbir izin verilmedi");
         return false;
-        
       } catch (e) {
         debugPrint("❌ IndexedDB izin isteği hatası: $e");
         return false;
@@ -228,14 +221,47 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     return true;
   }
 
-  // ✅ DOĞRUDAN Dosya Erişim İzni ayarlarına git
+  // ✅ DOĞRUDAN Dosya Erişim İzni ayarlarına git - GÜNCELLENDİ
   Future<void> _openManageStorageSettings() async {
     debugPrint("⚙️ DOĞRUDAN Dosya Erişim İzni Ayarları açılıyor...");
+    
     try {
       if (Platform.isAndroid) {
-        // DOĞRUDAN Manage Storage Settings'e git
-        await AppSettings.openAppSettings(type: AppSettingsType.manageStorage);
-        debugPrint("✅ Dosya Erişim İzni Ayarları açıldı");
+        // Android için özel dosya erişim sayfasına git
+        // Android 11+ için MANAGE_APP_ALL_FILES_ACCESS_PERMISSION
+        // Android 10- için MANAGE_EXTERNAL_STORAGE
+        
+        String packageName = _packageInfo.packageName;
+        debugPrint("📦 Paket adı: $packageName");
+        
+        // DOĞRUDAN uygulama özel dosya erişim ayarlarına git
+        String settingsUri = '';
+        
+        // Android 11+ (API 30 ve üzeri)
+        if (Platform.isAndroid) {
+          try {
+            // Doğrudan dosya erişim izni sayfasına git
+            settingsUri = "package:$packageName";
+            
+            // Intent kullanarak doğrudan aç
+            final uri = Uri.parse("intent:#Intent;action=android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION;package=$packageName;end");
+            
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri);
+              debugPrint("✅ Dosya Erişim İzni Ayarları açıldı (Intent)");
+            } else {
+              // Fallback: Normal app settings
+              debugPrint("⚠️ Intent açılamadı, fallback kullanılıyor");
+              final fallbackUri = Uri.parse("package:$packageName");
+              await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
+            }
+          } catch (e) {
+            debugPrint("❌ Intent hatası: $e");
+            // Son çare: Genel ayarlar
+            final generalSettingsUri = Uri.parse("package:$packageName");
+            await launchUrl(generalSettingsUri, mode: LaunchMode.externalApplication);
+          }
+        }
         
         // Kullanıcıyı bilgilendir
         if (mounted) {
@@ -247,16 +273,38 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             ),
           );
         }
+        
+        // 3 saniye sonra kontrol et
+        await Future.delayed(const Duration(seconds: 3));
+        
+        final hasPermission = await _checkStoragePermission();
+        if (hasPermission) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✅ İzin verildi! PDF\'ler yükleniyor...'),
+                duration: Duration(seconds: 3),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        }
       } else {
-        await AppSettings.openAppSettings();
-        debugPrint("✅ Ayarlar açıldı (iOS)");
+        // iOS için normal ayarlar
+        final settingsUri = Uri.parse('app-settings:');
+        if (await canLaunchUrl(settingsUri)) {
+          await launchUrl(settingsUri);
+          debugPrint("✅ Ayarlar açıldı (iOS)");
+        }
       }
     } catch (e) {
       debugPrint("❌ Dosya Erişim İzni Ayarları açma hatası: $e");
       
       // Fallback: Genel ayarlar
       try {
-        await AppSettings.openAppSettings();
+        String packageName = _packageInfo.packageName;
+        final fallbackUri = Uri.parse("package:$packageName");
+        await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
         debugPrint("✅ Fallback ayarlar açıldı");
       } catch (e2) {
         debugPrint("❌ Fallback ayarlar açma hatası: $e2");
@@ -264,19 +312,19 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
+  // Normal ayarları aç
   Future<void> _openAppSettings() async {
     debugPrint("⚙️ IndexedDB için genel ayarlar açılıyor...");
     try {
-      if (Platform.isAndroid) {
-        await AppSettings.openAppSettings();
+      String packageName = _packageInfo.packageName;
+      final settingsUri = Uri.parse("package:$packageName");
+      
+      if (await canLaunchUrl(settingsUri)) {
+        await launchUrl(settingsUri, mode: LaunchMode.externalApplication);
         debugPrint("✅ IndexedDB: Genel ayarlar açıldı");
-      } else {
-        await AppSettings.openAppSettings();
-        debugPrint("✅ IndexedDB: Ayarlar açıldı");
       }
     } catch (e) {
       debugPrint("❌ IndexedDB ayarlar açma hatası: $e");
-      
       try {
         await openAppSettings();
         debugPrint("✅ IndexedDB: Ayarlar açıldı (fallback)");
@@ -289,7 +337,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
   // IndexedDB için PDF dosyalarını listele - ✅ UNIQUE PATH KONTROLÜ EKLENDI
   Future<List<Map<String, dynamic>>> _listPdfFiles() async {
     List<Map<String, dynamic>> pdfFiles = [];
-    
     try {
       if (Platform.isAndroid) {
         debugPrint("📂 IndexedDB için PDF dosyaları taranıyor...");
@@ -305,7 +352,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           '/storage/emulated/0/Android/media',
           '/storage/emulated/0/Android/data',
         ];
-
+        
         int totalFound = 0;
         Set<String> uniquePaths = {}; // ✅ UNIQUE PATH KONTROLÜ
         
@@ -329,13 +376,12 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint("❌ IndexedDB PDF listeleme hatası: $e");
     }
-    
     return pdfFiles;
   }
 
   // IndexedDB için recursive tarama - ✅ UNIQUE PATH KONTROLÜ EKLENDI
   Future<void> _scanDirectoryRecursiveForIndexedDB(
-    Directory directory, 
+    Directory directory,
     List<Map<String, dynamic>> pdfFiles,
     Set<String> uniquePaths // ✅ UNIQUE PATH SET'İ
   ) async {
@@ -371,7 +417,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               'sizeMB': sizeInMB,
               'indexedDBReady': true,
             });
-            
           } catch (e) {
             debugPrint("⚠️ IndexedDB dosya bilgisi alınamadı: ${entity.path}");
           }
@@ -379,8 +424,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           final dirName = entity.path.split('/').last.toLowerCase();
           if (!dirName.startsWith('.') && 
               dirName != 'android' && 
-              dirName != 'lost+found' &&
-              !dirName.contains('cache') &&
+              dirName != 'lost+found' && 
+              !dirName.contains('cache') && 
               !dirName.contains('temp')) {
             await _scanDirectoryRecursiveForIndexedDB(entity, pdfFiles, uniquePaths);
           }
@@ -417,8 +462,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       
       // Eski temp dosyaları temizle
       final oldFiles = await tempDir.list()
-          .where((entity) => entity is File && entity.path.contains('indexeddb_'))
-          .toList();
+        .where((entity) => entity is File && entity.path.contains('indexeddb_'))
+        .toList();
       
       for (var file in oldFiles) {
         try {
@@ -438,7 +483,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       
       debugPrint("✅ IndexedDB: PDF temp'e kopyalandı: $tempPath");
       return tempPath;
-      
     } catch (e) {
       debugPrint("❌ IndexedDB temp kopyalama hatası: $e");
       return null;
@@ -450,7 +494,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     if (webViewController == null) return;
     
     debugPrint("🔄 IndexedDB Viewer resetleniyor...");
-    
     try {
       await webViewController!.evaluateJavascript(source: """
         (async function() {
@@ -474,16 +517,13 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   PDFViewerApplication.pdfDocument = null;
                   console.log("✅ IndexedDB PDF Document destroy edildi");
                 }
-                
                 if (PDFViewerApplication.close) {
                   await PDFViewerApplication.close();
                   console.log("✅ IndexedDB PDF Viewer kapatıldı");
                 }
-                
                 PDFViewerApplication.pdfViewer = null;
                 PDFViewerApplication.pdfLinkService = null;
                 PDFViewerApplication.pdfHistory = null;
-                
               } catch (e) {
                 console.log("⚠️ IndexedDB PDF Viewer kapatma hatası:", e);
               }
@@ -514,7 +554,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             
             console.log("✅✅✅ INDEXEDDB TAM TEMİZLİK TAMAMLANDI");
             return true;
-            
           } catch (e) {
             console.error("❌ IndexedDB Viewer temizleme hatası:", e);
             return false;
@@ -525,7 +564,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       await _cleanupIndexedDBTempFiles();
       
       debugPrint("🔄 IndexedDB WebView state sıfırlanıyor...");
-      
       await webViewController!.loadUrl(
         urlRequest: URLRequest(
           url: WebUri("about:blank"),
@@ -569,10 +607,8 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
           """);
         }
       });
-      
     } catch (e) {
       debugPrint("❌ IndexedDB Viewer reset hatası: $e");
-      
       try {
         await webViewController!.loadUrl(
           urlRequest: URLRequest(
@@ -613,7 +649,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               if (_lastBackPressTime == null || 
                   now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
                 _lastBackPressTime = now;
-                
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -623,13 +658,10 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     ),
                   );
                 }
-                
                 return false;
               }
-              
               return true;
             }
-            
             return false;
           }
         }
@@ -701,7 +733,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             onWebViewCreated: (controller) {
               webViewController = controller;
               debugPrint("🌐 IndexedDB WebView oluşturuldu");
-
+              
               // ✅ DOĞRUDAN DOSYA ERİŞİM AYARLARI
               controller.addJavaScriptHandler(
                 handlerName: 'openManageStorageSettings',
@@ -716,7 +748,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     if (hasPermission) {
                       try {
                         final pdfFiles = await _listPdfFiles();
-                        debugPrint("📋 IndexedDB PDF taraması tamamlandı: ${pdfFiles.length} dosya");
+                        debugPrint("📋 IndexedDB PDF taraması tamamlandı: \${pdfFiles.length} dosya");
                       } catch (e) {
                         debugPrint("❌ IndexedDB PDF tarama hatası: $e");
                       }
@@ -724,7 +756,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   });
                 },
               );
-
+              
               // ==================== INDEXEDDB İZİN DURUMU ====================
               controller.addJavaScriptHandler(
                 handlerName: 'checkStoragePermission',
@@ -734,7 +766,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   return hasPermission;
                 },
               );
-
+              
               // ==================== INDEXEDDB İZİN İSTE ====================
               controller.addJavaScriptHandler(
                 handlerName: 'requestStoragePermission',
@@ -745,7 +777,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   return granted;
                 },
               );
-
+              
               // ==================== INDEXEDDB PDF LİSTESİ ====================
               controller.addJavaScriptHandler(
                 handlerName: 'listPdfFiles',
@@ -754,7 +786,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   try {
                     final pdfFiles = await _listPdfFiles();
                     final jsonResult = jsonEncode(pdfFiles);
-                    debugPrint("✅ IndexedDB PDF listesi hazır: ${pdfFiles.length} dosya");
+                    debugPrint("✅ IndexedDB PDF listesi hazır: \${pdfFiles.length} dosya");
                     return jsonResult;
                   } catch (e) {
                     debugPrint("❌ IndexedDB PDF listeleme hatası: $e");
@@ -762,7 +794,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   }
                 },
               );
-
+              
               // ==================== INDEXEDDB PDF PATH AL ====================
               controller.addJavaScriptHandler(
                 handlerName: 'getPdfPath',
@@ -788,7 +820,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   }
                 },
               );
-
+              
               // ==================== INDEXEDDB DOSYA BOYUTU ====================
               controller.addJavaScriptHandler(
                 handlerName: 'getFileSize',
@@ -796,7 +828,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   try {
                     String filePath = args[0];
                     final file = File(filePath);
-                    
                     if (await file.exists()) {
                       final stat = await file.stat();
                       final sizeFormatted = _formatFileSize(stat.size);
@@ -809,7 +840,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   return 0;
                 },
               );
-
+              
               // ==================== INDEXEDDB DOSYA OKU ====================
               controller.addJavaScriptHandler(
                 handlerName: 'readPdfFile',
@@ -819,12 +850,10 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     debugPrint("📖 IndexedDB için PDF dosyası okunuyor: $filePath");
                     
                     final file = File(filePath);
-                    
                     if (await file.exists()) {
                       final bytes = await file.readAsBytes();
                       final sizeInMB = bytes.length / (1024 * 1024);
-                      debugPrint("✅ IndexedDB PDF okundu: ${sizeInMB.toStringAsFixed(2)} MB - IndexedDB'ye gönderiliyor");
-                      
+                      debugPrint("✅ IndexedDB PDF okundu: \${sizeInMB.toStringAsFixed(2)} MB - IndexedDB'ye gönderiliyor");
                       // Uint8List olarak döndür
                       return bytes;
                     } else {
@@ -837,7 +866,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   }
                 },
               );
-
+              
               // ==================== INDEXEDDB AYARLARI AÇ ====================
               controller.addJavaScriptHandler(
                 handlerName: 'openSettingsForPermission',
@@ -845,7 +874,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   await _openAppSettings();
                 },
               );
-
+              
               // ==================== INDEXEDDB PAYLAŞ ====================
               controller.addJavaScriptHandler(
                 handlerName: 'sharePdfBase64',
@@ -864,7 +893,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                     if (base64Data.isEmpty || base64Data.length < 100) {
                       debugPrint("❌ IndexedDB Base64 verisi geçersiz");
-                      
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -885,10 +913,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     List<int> bytes;
                     try {
                       bytes = base64Decode(cleanBase64);
-                      debugPrint("✅ IndexedDB Base64 decode başarılı: ${bytes.length} bytes");
+                      debugPrint("✅ IndexedDB Base64 decode başarılı: \${bytes.length} bytes");
                     } catch (e) {
                       debugPrint("❌ IndexedDB Base64 decode hatası: $e");
-                      
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -902,8 +929,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     }
                     
                     if (bytes.length < 1024) {
-                      debugPrint("❌ IndexedDB PDF verisi çok küçük: ${bytes.length} bytes");
-                      
+                      debugPrint("❌ IndexedDB PDF verisi çok küçük: \${bytes.length} bytes");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -917,24 +943,21 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     }
                     
                     final tempDir = await getTemporaryDirectory();
-                    final tempFile = File('${tempDir.path}/share_$fileName');
+                    final tempFile = File('\${tempDir.path}/share_\$fileName');
                     await tempFile.writeAsBytes(bytes);
                     
-                    debugPrint("✅ IndexedDB Temp dosya oluşturuldu: ${tempFile.path}");
+                    debugPrint("✅ IndexedDB Temp dosya oluşturuldu: \${tempFile.path}");
                     
                     final result = await Share.shareXFiles([XFile(tempFile.path)], text: fileName);
-                    
-                    debugPrint("✅ IndexedDB PDF paylaşma sonucu: ${result.status}");
+                    debugPrint("✅ IndexedDB PDF paylaşma sonucu: \${result.status}");
                     
                     await tempFile.delete();
-                    
                   } catch (e) {
                     debugPrint("❌ IndexedDB Paylaşma hatası: $e");
-                    
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('❌ IndexedDB Paylaşma hatası: ${e.toString()}'),
+                          content: Text('❌ IndexedDB Paylaşma hatası: \${e.toString()}'),
                           backgroundColor: Colors.red,
                           duration: const Duration(seconds: 2),
                         ),
@@ -943,7 +966,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   }
                 },
               );
-
+              
               // ==================== INDEXEDDB YAZDIR ====================
               controller.addJavaScriptHandler(
                 handlerName: 'printPdfBase64',
@@ -962,7 +985,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                     if (base64Data.isEmpty || base64Data.length < 100) {
                       debugPrint("❌ IndexedDB Base64 verisi geçersiz");
-                      
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -983,10 +1005,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     List<int> bytes;
                     try {
                       bytes = base64Decode(cleanBase64);
-                      debugPrint("✅ IndexedDB Base64 decode başarılı: ${bytes.length} bytes");
+                      debugPrint("✅ IndexedDB Base64 decode başarılı: \${bytes.length} bytes");
                     } catch (e) {
                       debugPrint("❌ IndexedDB Base64 decode hatası: $e");
-                      
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -1000,8 +1021,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     }
                     
                     if (bytes.length < 1024) {
-                      debugPrint("❌ IndexedDB PDF verisi çok küçük: ${bytes.length} bytes");
-                      
+                      debugPrint("❌ IndexedDB PDF verisi çok küçük: \${bytes.length} bytes");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -1020,14 +1040,12 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     );
                     
                     debugPrint("✅ IndexedDB Yazdırma tamamlandı");
-                    
                   } catch (e) {
                     debugPrint("❌ IndexedDB Yazdırma hatası: $e");
-                    
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('❌ IndexedDB Yazdırma hatası: ${e.toString()}'),
+                          content: Text('❌ IndexedDB Yazdırma hatası: \${e.toString()}'),
                           backgroundColor: Colors.red,
                           duration: const Duration(seconds: 2),
                         ),
@@ -1036,7 +1054,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   }
                 },
               );
-
+              
               // ==================== INDEXEDDB İNDİR ====================
               controller.addJavaScriptHandler(
                 handlerName: 'downloadPdfBase64',
@@ -1055,7 +1073,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                     if (base64Data.isEmpty || base64Data.length < 100) {
                       debugPrint("❌ IndexedDB Base64 verisi geçersiz");
-                      
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -1076,10 +1093,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     List<int> bytes;
                     try {
                       bytes = base64Decode(cleanBase64);
-                      debugPrint("✅ IndexedDB Base64 decode başarılı: ${bytes.length} bytes");
+                      debugPrint("✅ IndexedDB Base64 decode başarılı: \${bytes.length} bytes");
                     } catch (e) {
                       debugPrint("❌ IndexedDB Base64 decode hatası: $e");
-                      
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -1093,8 +1109,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     }
                     
                     if (bytes.length < 1024) {
-                      debugPrint("❌ IndexedDB PDF verisi çok küçük: ${bytes.length} bytes");
-                      
+                      debugPrint("❌ IndexedDB PDF verisi çok küçük: \${bytes.length} bytes");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -1117,42 +1132,38 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     } else {
                       directory = await getApplicationDocumentsDirectory();
                     }
-
+                    
                     if (directory != null && await directory.exists()) {
                       String nameWithoutExt = fileName.replaceAll('.pdf', '');
-                      String finalName = '${nameWithoutExt}_indexeddb.pdf';
-                      
-                      File targetFile = File('${directory.path}/$finalName');
+                      String finalName = '\${nameWithoutExt}_indexeddb.pdf';
+                      File targetFile = File('\${directory.path}/\$finalName');
                       
                       int counter = 1;
                       while (await targetFile.exists()) {
-                        finalName = '${nameWithoutExt}_indexeddb ($counter).pdf';
-                        targetFile = File('${directory.path}/$finalName');
+                        finalName = '\${nameWithoutExt}_indexeddb (\$counter).pdf';
+                        targetFile = File('\${directory.path}/\$finalName');
                         counter++;
                       }
                       
                       await targetFile.writeAsBytes(bytes);
+                      debugPrint("✅ IndexedDB PDF indirildi: \${targetFile.path}");
                       
-                      debugPrint("✅ IndexedDB PDF indirildi: ${targetFile.path}");
-
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('✅ IndexedDB İndirildi: $finalName'),
+                            content: Text('✅ IndexedDB İndirildi: \$finalName'),
                             backgroundColor: Colors.green,
                             duration: const Duration(seconds: 3),
                           ),
                         );
                       }
                     }
-                    
                   } catch (e) {
                     debugPrint("❌ IndexedDB İndirme hatası: $e");
-                    
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('❌ IndexedDB İndirme hatası: ${e.toString()}'),
+                          content: Text('❌ IndexedDB İndirme hatası: \${e.toString()}'),
                           backgroundColor: Colors.red,
                         ),
                       );
@@ -1160,7 +1171,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   }
                 },
               );
-
+              
               // ==================== INDEXEDDB DESTEK KONTROLÜ ====================
               controller.addJavaScriptHandler(
                 handlerName: 'checkIndexedDBSupport',
@@ -1169,7 +1180,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   return true;
                 },
               );
-
+              
               // ==================== INDEXEDDB STORAGE BİLGİSİ ====================
               controller.addJavaScriptHandler(
                 handlerName: 'getStorageInfo',
@@ -1192,7 +1203,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   }
                 },
               );
-
+              
               // ==================== INDEXEDDB UYGULAMA DURUMU ====================
               controller.addJavaScriptHandler(
                 handlerName: 'getAppStatus',
@@ -1229,14 +1240,12 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   await controller.evaluateJavascript(source: """
                     (function() {
                       console.log("🧹 IndexedDB index.html son temizlik...");
-                      
                       if (typeof PDFViewerApplication !== 'undefined') {
                         PDFViewerApplication = undefined;
                       }
                       if (typeof viewerPdfManager !== 'undefined') {
                         viewerPdfManager = undefined;
                       }
-                      
                       console.log("✅ IndexedDB index.html temiz slate hazır");
                     })();
                   """);
@@ -1267,7 +1276,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     if (typeof pdfManager !== 'undefined' && pdfManager.init) {
                       const success = await pdfManager.init();
                       console.log("📦 Main IndexedDB Manager: " + (success ? "✅ Başarılı" : "❌ Başarısız"));
-                      
                       if (success) {
                         const info = await pdfManager.getStorageInfo();
                         if (info) {
@@ -1282,7 +1290,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     }
                     
                     console.log("✅ IndexedDB hazır - ArrayBuffer + Base64 mode");
-                    
                   } catch (e) {
                     console.error("❌ IndexedDB başlatma hatası:", e);
                   }
@@ -1306,7 +1313,6 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             },
             onLoadError: (controller, url, code, message) {
               debugPrint("❌ IndexedDB Yükleme hatası: $message (code: $code)");
-              
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1320,7 +1326,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               debugPrint("❌ IndexedDB HTTP hatası: $description (status: $statusCode)");
             },
             onPermissionRequest: (controller, permissionRequest) async {
-              debugPrint("🔒 IndexedDB İzin isteği: ${permissionRequest.resources}");
+              debugPrint("🔒 IndexedDB İzin isteği: \${permissionRequest.resources}");
               return PermissionResponse(
                 resources: permissionRequest.resources,
                 action: PermissionResponseAction.GRANT,
