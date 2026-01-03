@@ -66,7 +66,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initPackageInfo();
-    debugPrint("🚀 PDF Reader başlatıldı - IndexedDB Optimize Edilmiş");
+    debugPrint("🚀 PDF Reader başlatıldı - TEK DOSYA GÖSTERİM MODU");
   }
 
   Future<void> _initPackageInfo() async {
@@ -228,39 +228,28 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     try {
       if (Platform.isAndroid) {
         // Android için özel dosya erişim sayfasına git
-        // Android 11+ için MANAGE_APP_ALL_FILES_ACCESS_PERMISSION
-        // Android 10- için MANAGE_EXTERNAL_STORAGE
-        
         String packageName = _packageInfo.packageName;
         debugPrint("📦 Paket adı: $packageName");
         
         // DOĞRUDAN uygulama özel dosya erişim ayarlarına git
-        String settingsUri = '';
-        
-        // Android 11+ (API 30 ve üzeri)
-        if (Platform.isAndroid) {
-          try {
-            // Doğrudan dosya erişim izni sayfasına git
-            settingsUri = "package:$packageName";
-            
-            // Intent kullanarak doğrudan aç
-            final uri = Uri.parse("intent:#Intent;action=android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION;package=$packageName;end");
-            
-            if (await canLaunchUrl(uri)) {
-              await launchUrl(uri);
-              debugPrint("✅ Dosya Erişim İzni Ayarları açıldı (Intent)");
-            } else {
-              // Fallback: Normal app settings
-              debugPrint("⚠️ Intent açılamadı, fallback kullanılıyor");
-              final fallbackUri = Uri.parse("package:$packageName");
-              await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
-            }
-          } catch (e) {
-            debugPrint("❌ Intent hatası: $e");
-            // Son çare: Genel ayarlar
-            final generalSettingsUri = Uri.parse("package:$packageName");
-            await launchUrl(generalSettingsUri, mode: LaunchMode.externalApplication);
+        try {
+          // Intent kullanarak doğrudan aç
+          final uri = Uri.parse("intent:#Intent;action=android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION;package=$packageName;end");
+          
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri);
+            debugPrint("✅ Dosya Erişim İzni Ayarları açıldı (Intent)");
+          } else {
+            // Fallback: Normal app settings
+            debugPrint("⚠️ Intent açılamadı, fallback kullanılıyor");
+            final fallbackUri = Uri.parse("package:$packageName");
+            await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
           }
+        } catch (e) {
+          debugPrint("❌ Intent hatası: $e");
+          // Son çare: Genel ayarlar
+          final generalSettingsUri = Uri.parse("package:$packageName");
+          await launchUrl(generalSettingsUri, mode: LaunchMode.externalApplication);
         }
         
         // Kullanıcıyı bilgilendir
@@ -334,56 +323,62 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
     }
   }
 
-  // IndexedDB için PDF dosyalarını listele - ✅ UNIQUE PATH KONTROLÜ EKLENDI
+  // ⭐⭐⭐ GÜNCELLENMİŞ: TEK DOSYA GÖSTERİM İÇİN PDF LİSTELEME ⭐⭐⭐
   Future<List<Map<String, dynamic>>> _listPdfFiles() async {
     List<Map<String, dynamic>> pdfFiles = [];
     try {
       if (Platform.isAndroid) {
-        debugPrint("📂 IndexedDB için PDF dosyaları taranıyor...");
+        debugPrint("📂 TEK DOSYA MODU: PDF dosyaları taranıyor...");
         
+        // ⭐ SADECE Download klasörünü tara (diğerlerini KAPAT)
         List<String> searchPaths = [
           '/storage/emulated/0/Download',
-          '/storage/emulated/0/Documents',
-          '/storage/emulated/0/DCIM',
-          '/storage/emulated/0/Downloads',
-          '/storage/emulated/0',
-          '/sdcard/Download',
-          '/sdcard/Documents',
-          '/storage/emulated/0/Android/media',
-          '/storage/emulated/0/Android/data',
+          // '/storage/emulated/0/Documents',  // GEÇİCİ KAPALI
+          // '/storage/emulated/0/DCIM',       // GEÇİCİ KAPALI
+          // '/storage/emulated/0',            // ANA DİZİN - KAPALI
+          // '/sdcard/Download',               // KAPALI
+          // '/storage/emulated/0/Android/media', // KAPALI
         ];
         
-        int totalFound = 0;
-        Set<String> uniquePaths = {}; // ✅ UNIQUE PATH KONTROLÜ
+        // ⭐ GERÇEK DOSYA TAKİBİ (inode + hash)
+        Set<int> seenInodes = {};
+        Set<String> seenHashes = {};
+        Set<String> seenNames = {};
         
         for (String path in searchPaths) {
           try {
             final directory = Directory(path);
             if (await directory.exists()) {
-              await _scanDirectoryRecursiveForIndexedDB(directory, pdfFiles, uniquePaths);
-              totalFound = pdfFiles.length;
+              await _scanDirectoryForUniquePDFs(directory, pdfFiles, seenInodes, seenHashes, seenNames);
+            } else {
+              debugPrint("⚠️ Dizin mevcut değil: $path");
             }
           } catch (e) {
-            debugPrint("⚠️ IndexedDB dizin tarama hatası: $path - $e");
+            debugPrint("⚠️ Dizin tarama hatası: $path - $e");
             continue;
           }
         }
         
-        debugPrint("✅ IndexedDB için toplam $totalFound PDF dosyası bulundu");
-        // Boyuta göre sırala (büyükten küçüğe)
-        pdfFiles.sort((a, b) => b['size'].compareTo(a['size']));
+        debugPrint("✅ TEK DOSYA MODU: ${pdfFiles.length} benzersiz PDF bulundu");
+        
+        // ⭐ DEBUG: Bulunan dosyaları listele
+        for (var file in pdfFiles) {
+          debugPrint("📄 ${file['name']} - ${file['sizeMB'].toStringAsFixed(2)} MB - ${file['realPath']}");
+        }
       }
     } catch (e) {
-      debugPrint("❌ IndexedDB PDF listeleme hatası: $e");
+      debugPrint("❌ PDF listeleme hatası: $e");
     }
     return pdfFiles;
   }
 
-  // IndexedDB için recursive tarama - ✅ UNIQUE PATH KONTROLÜ EKLENDI
-  Future<void> _scanDirectoryRecursiveForIndexedDB(
+  // ⭐⭐⭐ YENİ: TEK DOSYA TARAMA FONKSİYONU ⭐⭐⭐
+  Future<void> _scanDirectoryForUniquePDFs(
     Directory directory,
     List<Map<String, dynamic>> pdfFiles,
-    Set<String> uniquePaths // ✅ UNIQUE PATH SET'İ
+    Set<int> seenInodes,
+    Set<String> seenHashes,
+    Set<String> seenNames,
   ) async {
     try {
       final contents = directory.list(recursive: false);
@@ -391,48 +386,125 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
       await for (var entity in contents) {
         if (entity is File && entity.path.toLowerCase().endsWith('.pdf')) {
           try {
-            // ✅ UNIQUE PATH KONTROLÜ - AYNI PDF'İ İKİNCİ KEZ EKLEME
-            if (uniquePaths.contains(entity.path)) {
-              debugPrint("⚠️ Duplicate atlandı: ${entity.path}");
-              continue;
-            }
-            
             final stat = await entity.stat();
             final sizeInMB = stat.size / (1024 * 1024);
             
-            // IndexedDB için boyut limiti (50MB - güvenli limit)
+            // Boyut limiti
             if (sizeInMB > 50) {
-              debugPrint("⚠️ IndexedDB: Büyük dosya atlandı: ${entity.path} (${sizeInMB.toStringAsFixed(2)} MB)");
+              debugPrint("⚠️ Büyük dosya atlandı: ${entity.path}");
               continue;
             }
             
-            // ✅ UNIQUE PATH'İ SET'E EKLE
-            uniquePaths.add(entity.path);
+            // ⭐ GERÇEK DOSYA YOLUNU AL (symlink'leri çöz)
+            final realPath = await _getRealPath(entity.path);
             
+            // ⭐ DOSYA ADI KONTROLÜ (aynı isimli dosya)
+            final fileName = entity.path.split('/').last;
+            final nameSizeKey = '${fileName}_${stat.size}';
+            
+            if (seenNames.contains(nameSizeKey)) {
+              debugPrint("⏭️ Aynı isim+boyut atlandı: $fileName");
+              continue;
+            }
+            
+            // ⭐ INODE KONTROLÜ (aynı fiziksel dosya)
+            if (seenInodes.contains(stat.ino)) {
+              debugPrint("⏭️ Aynı inode atlandı: $fileName (inode: ${stat.ino})");
+              continue;
+            }
+            
+            // ⭐ DOSYA HASH'İ HESAPLA
+            final fileHash = await _calculateFileHash(entity, stat);
+            if (seenHashes.contains(fileHash)) {
+              debugPrint("⏭️ Aynı hash atlandı: $fileName");
+              continue;
+            }
+            
+            // ⭐ SET'LERE EKLE
+            seenInodes.add(stat.ino);
+            seenHashes.add(fileHash);
+            seenNames.add(nameSizeKey);
+            
+            // ⭐ DOSYA BİLGİLERİNİ EKLE
             pdfFiles.add({
               'path': entity.path,
-              'name': entity.path.split('/').last,
+              'realPath': realPath, // GERÇEK PATH
+              'name': fileName,
               'size': stat.size,
-              'modified': stat.modified.toIso8601String(),
               'sizeMB': sizeInMB,
-              'indexedDBReady': true,
+              'modified': stat.modified.toIso8601String(),
+              'inode': stat.ino, // INODE NUMARASI
+              'hash': fileHash,  // DOSYA HASH'İ
+              'deviceOnly': true,
+              'uniqueKey': fileHash, // BENZERSİZ ANAHTAR
             });
+            
+            debugPrint("✅ Eklendi: $fileName (${sizeInMB.toStringAsFixed(2)} MB)");
+            
           } catch (e) {
-            debugPrint("⚠️ IndexedDB dosya bilgisi alınamadı: ${entity.path}");
+            debugPrint("⚠️ Dosya bilgisi alınamadı: ${entity.path} - $e");
           }
         } else if (entity is Directory) {
+          // ⭐ ALT KLASÖRLERE GİRME (sadece 1 seviye)
           final dirName = entity.path.split('/').last.toLowerCase();
           if (!dirName.startsWith('.') && 
               dirName != 'android' && 
-              dirName != 'lost+found' && 
-              !dirName.contains('cache') && 
-              !dirName.contains('temp')) {
-            await _scanDirectoryRecursiveForIndexedDB(entity, pdfFiles, uniquePaths);
+              dirName != 'lost+found' &&
+              !dirName.contains('cache') &&
+              !dirName.contains('temp') &&
+              !dirName.contains('system')) {
+            
+            // Sadece Download klasörü içinde 1 seviye alt klasöre in
+            if (directory.path.contains('Download')) {
+              await _scanDirectoryForUniquePDFs(entity, pdfFiles, seenInodes, seenHashes, seenNames);
+            }
           }
         }
       }
     } catch (e) {
-      debugPrint("❌ IndexedDB dizin tarama hatası (${directory.path}): $e");
+      debugPrint("❌ Dizin tarama hatası (${directory.path}): $e");
+    }
+  }
+
+  // ⭐ GERÇEK PATH'İ AL (symlink kontrolü)
+  Future<String> _getRealPath(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        final resolved = await file.resolveSymbolicLinks();
+        debugPrint("🔗 Symlink çözüldü: $path -> $resolved");
+        return resolved;
+      }
+      return path;
+    } catch (e) {
+      return path;
+    }
+  }
+
+  // ⭐ DOSYA HASH'İ HESAPLA
+  Future<String> _calculateFileHash(File file, FileStat stat) async {
+    try {
+      // Karmaşık hash: inode + size + modified time + ilk 1KB içeriği
+      final fileHash = '${stat.ino}_${stat.size}_${stat.modified.millisecondsSinceEpoch}';
+      
+      // ⭐ İSTEĞE BAĞLI: İlk 1KB'ı oku ve hash'e ekle (daha kesin)
+      try {
+        final randomAccessFile = await file.open();
+        final first1KB = await randomAccessFile.read(1024);
+        await randomAccessFile.close();
+        
+        if (first1KB.isNotEmpty) {
+          final contentHash = first1KB.hashCode;
+          return '${fileHash}_$contentHash';
+        }
+      } catch (e) {
+        debugPrint("⚠️ İlk 1KB okunamadı: $e");
+      }
+      
+      return fileHash;
+    } catch (e) {
+      // Fallback: sadece path hash
+      return '${file.path.hashCode}_${stat.size}';
     }
   }
 
@@ -702,7 +774,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             initialUserScripts: UnmodifiableListView<UserScript>([
               UserScript(
                 source: """
-                  console.log("🚀 Flutter WebView - IndexedDB Optimize Edilmiş");
+                  console.log("🚀 Flutter WebView - TEK DOSYA GÖSTERİM MODU");
                   console.log("📦 IndexedDB durumu:", typeof indexedDB !== 'undefined' ? '✅ Destekleniyor' : '❌ Desteklenmiyor');
                   
                   window.activeBlobUrls = window.activeBlobUrls || [];
@@ -710,7 +782,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                   if (typeof indexedDB === 'undefined') {
                     console.error("❌ CRITICAL: IndexedDB desteklenmiyor!");
                   } else {
-                    console.log("✅ IndexedDB hazır - ArrayBuffer + Base64 mode");
+                    console.log("✅ IndexedDB hazır - TEK DOSYA MODU");
                   }
                   
                   if (typeof Android === 'undefined') {
@@ -732,7 +804,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             ]),
             onWebViewCreated: (controller) {
               webViewController = controller;
-              debugPrint("🌐 IndexedDB WebView oluşturuldu");
+              debugPrint("🌐 TEK DOSYA MODU WebView oluşturuldu");
               
               // ✅ DOĞRUDAN DOSYA ERİŞİM AYARLARI
               controller.addJavaScriptHandler(
@@ -748,9 +820,9 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     if (hasPermission) {
                       try {
                         final pdfFiles = await _listPdfFiles();
-                        debugPrint("📋 IndexedDB PDF taraması tamamlandı: \${pdfFiles.length} dosya");
+                        debugPrint("📋 TEK DOSYA MODU PDF taraması tamamlandı: ${pdfFiles.length} dosya");
                       } catch (e) {
-                        debugPrint("❌ IndexedDB PDF tarama hatası: $e");
+                        debugPrint("❌ PDF tarama hatası: $e");
                       }
                     }
                   });
@@ -762,7 +834,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 handlerName: 'checkStoragePermission',
                 callback: (args) async {
                   final hasPermission = await _checkStoragePermission();
-                  debugPrint("🔒 IndexedDB İzin kontrolü: $hasPermission");
+                  debugPrint("🔒 TEK DOSYA MODU İzin kontrolü: $hasPermission");
                   return hasPermission;
                 },
               );
@@ -771,25 +843,33 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               controller.addJavaScriptHandler(
                 handlerName: 'requestStoragePermission',
                 callback: (args) async {
-                  debugPrint("🔐 IndexedDB için izin isteniyor...");
+                  debugPrint("🔐 TEK DOSYA MODU için izin isteniyor...");
                   final granted = await _requestStoragePermission();
-                  debugPrint("🔐 IndexedDB İzin sonucu: $granted");
+                  debugPrint("🔐 TEK DOSYA MODU İzin sonucu: $granted");
                   return granted;
                 },
               );
               
-              // ==================== INDEXEDDB PDF LİSTESİ ====================
+              // ⭐⭐⭐ TEK DOSYA MODU LİSTELEME ====================
               controller.addJavaScriptHandler(
                 handlerName: 'listPdfFiles',
                 callback: (args) async {
-                  debugPrint("📋 IndexedDB PDF listesi istendi");
+                  debugPrint("📋 TEK DOSYA MODU PDF listesi istendi");
                   try {
                     final pdfFiles = await _listPdfFiles();
+                    
+                    // ⭐ DEBUG BİLGİSİ
+                    debugPrint("📊 TEK DOSYA MODU: ${pdfFiles.length} benzersiz PDF bulundu");
+                    if (pdfFiles.isNotEmpty) {
+                      for (var file in pdfFiles) {
+                        debugPrint("   📄 ${file['name']} - ${_formatFileSize(file['size'] as int)}");
+                      }
+                    }
+                    
                     final jsonResult = jsonEncode(pdfFiles);
-                    debugPrint("✅ IndexedDB PDF listesi hazır: \${pdfFiles.length} dosya");
                     return jsonResult;
                   } catch (e) {
-                    debugPrint("❌ IndexedDB PDF listeleme hatası: $e");
+                    debugPrint("❌ TEK DOSYA MODU PDF listeleme hatası: $e");
                     return "[]";
                   }
                 },
@@ -803,19 +883,19 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     String sourcePath = args[0];
                     String fileName = args.length > 1 ? args[1] : sourcePath.split('/').last;
                     
-                    debugPrint("📄 IndexedDB için PDF path istendi: $fileName");
+                    debugPrint("📄 TEK DOSYA MODU için PDF path istendi: $fileName");
                     
                     final tempPath = await _copyPdfToTempForIndexedDB(sourcePath, fileName);
                     
                     if (tempPath != null) {
-                      debugPrint("✅ IndexedDB PDF path hazır: $tempPath");
+                      debugPrint("✅ TEK DOSYA MODU PDF path hazır: $tempPath");
                       return tempPath;
                     } else {
-                      debugPrint("❌ IndexedDB PDF path alınamadı");
+                      debugPrint("❌ TEK DOSYA MODU PDF path alınamadı");
                       return null;
                     }
                   } catch (e) {
-                    debugPrint("❌ IndexedDB PDF path hatası: $e");
+                    debugPrint("❌ TEK DOSYA MODU PDF path hatası: $e");
                     return null;
                   }
                 },
@@ -831,11 +911,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     if (await file.exists()) {
                       final stat = await file.stat();
                       final sizeFormatted = _formatFileSize(stat.size);
-                      debugPrint("📏 IndexedDB Dosya boyutu: $sizeFormatted");
+                      debugPrint("📏 TEK DOSYA MODU Dosya boyutu: $sizeFormatted");
                       return stat.size;
                     }
                   } catch (e) {
-                    debugPrint("❌ IndexedDB Dosya boyutu alma hatası: $e");
+                    debugPrint("❌ TEK DOSYA MODU Dosya boyutu alma hatası: $e");
                   }
                   return 0;
                 },
@@ -847,21 +927,21 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 callback: (args) async {
                   try {
                     String filePath = args[0];
-                    debugPrint("📖 IndexedDB için PDF dosyası okunuyor: $filePath");
+                    debugPrint("📖 TEK DOSYA MODU için PDF dosyası okunuyor: $filePath");
                     
                     final file = File(filePath);
                     if (await file.exists()) {
                       final bytes = await file.readAsBytes();
                       final sizeInMB = bytes.length / (1024 * 1024);
-                      debugPrint("✅ IndexedDB PDF okundu: \${sizeInMB.toStringAsFixed(2)} MB - IndexedDB'ye gönderiliyor");
+                      debugPrint("✅ TEK DOSYA MODU PDF okundu: ${sizeInMB.toStringAsFixed(2)} MB");
                       // Uint8List olarak döndür
                       return bytes;
                     } else {
-                      debugPrint("❌ IndexedDB Dosya bulunamadı: $filePath");
+                      debugPrint("❌ TEK DOSYA MODU Dosya bulunamadı: $filePath");
                       return null;
                     }
                   } catch (e) {
-                    debugPrint("❌ IndexedDB Dosya okuma hatası: $e");
+                    debugPrint("❌ TEK DOSYA MODU Dosya okuma hatası: $e");
                     return null;
                   }
                 },
@@ -880,7 +960,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 handlerName: 'sharePdfBase64',
                 callback: (args) async {
                   if (!_canCallFunction(_lastShareCall)) {
-                    debugPrint("⚠️ IndexedDB Paylaşma çağrısı çok hızlı, atlandı");
+                    debugPrint("⚠️ TEK DOSYA MODU Paylaşma çağrısı çok hızlı, atlandı");
                     return;
                   }
                   _lastShareCall = DateTime.now();
@@ -889,14 +969,14 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     String base64Data = args[0];
                     String fileName = args.length > 1 ? args[1] : "document.pdf";
                     
-                    debugPrint("📤 IndexedDB PDF paylaşılıyor: $fileName");
+                    debugPrint("📤 TEK DOSYA MODU PDF paylaşılıyor: $fileName");
                     
                     if (base64Data.isEmpty || base64Data.length < 100) {
-                      debugPrint("❌ IndexedDB Base64 verisi geçersiz");
+                      debugPrint("❌ TEK DOSYA MODU Base64 verisi geçersiz");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('❌ IndexedDB PDF verisi geçersiz'),
+                            content: Text('❌ PDF verisi geçersiz'),
                             backgroundColor: Colors.red,
                             duration: Duration(seconds: 2),
                           ),
@@ -913,13 +993,13 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     List<int> bytes;
                     try {
                       bytes = base64Decode(cleanBase64);
-                      debugPrint("✅ IndexedDB Base64 decode başarılı: \${bytes.length} bytes");
+                      debugPrint("✅ TEK DOSYA MODU Base64 decode başarılı: ${bytes.length} bytes");
                     } catch (e) {
-                      debugPrint("❌ IndexedDB Base64 decode hatası: $e");
+                      debugPrint("❌ TEK DOSYA MODU Base64 decode hatası: $e");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('❌ IndexedDB PDF verisi decode edilemedi'),
+                            content: Text('❌ PDF verisi decode edilemedi'),
                             backgroundColor: Colors.red,
                             duration: Duration(seconds: 2),
                           ),
@@ -929,11 +1009,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     }
                     
                     if (bytes.length < 1024) {
-                      debugPrint("❌ IndexedDB PDF verisi çok küçük: \${bytes.length} bytes");
+                      debugPrint("❌ TEK DOSYA MODU PDF verisi çok küçük: ${bytes.length} bytes");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('❌ IndexedDB PDF verisi geçersiz (çok küçük)'),
+                            content: Text('❌ PDF verisi geçersiz (çok küçük)'),
                             backgroundColor: Colors.red,
                             duration: Duration(seconds: 2),
                           ),
@@ -943,21 +1023,21 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     }
                     
                     final tempDir = await getTemporaryDirectory();
-                    final tempFile = File('\${tempDir.path}/share_\$fileName');
+                    final tempFile = File('${tempDir.path}/share_$fileName');
                     await tempFile.writeAsBytes(bytes);
                     
-                    debugPrint("✅ IndexedDB Temp dosya oluşturuldu: \${tempFile.path}");
+                    debugPrint("✅ TEK DOSYA MODU Temp dosya oluşturuldu: ${tempFile.path}");
                     
                     final result = await Share.shareXFiles([XFile(tempFile.path)], text: fileName);
-                    debugPrint("✅ IndexedDB PDF paylaşma sonucu: \${result.status}");
+                    debugPrint("✅ TEK DOSYA MODU PDF paylaşma sonucu: ${result.status}");
                     
                     await tempFile.delete();
                   } catch (e) {
-                    debugPrint("❌ IndexedDB Paylaşma hatası: $e");
+                    debugPrint("❌ TEK DOSYA MODU Paylaşma hatası: $e");
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('❌ IndexedDB Paylaşma hatası: \${e.toString()}'),
+                          content: Text('❌ Paylaşma hatası: ${e.toString()}'),
                           backgroundColor: Colors.red,
                           duration: const Duration(seconds: 2),
                         ),
@@ -972,7 +1052,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 handlerName: 'printPdfBase64',
                 callback: (args) async {
                   if (!_canCallFunction(_lastPrintCall)) {
-                    debugPrint("⚠️ IndexedDB Yazdırma çağrısı çok hızlı, atlandı");
+                    debugPrint("⚠️ TEK DOSYA MODU Yazdırma çağrısı çok hızlı, atlandı");
                     return;
                   }
                   _lastPrintCall = DateTime.now();
@@ -981,14 +1061,14 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     String base64Data = args[0];
                     String fileName = args.length > 1 ? args[1] : "document.pdf";
                     
-                    debugPrint("🖨️ IndexedDB PDF yazdırılıyor: $fileName");
+                    debugPrint("🖨️ TEK DOSYA MODU PDF yazdırılıyor: $fileName");
                     
                     if (base64Data.isEmpty || base64Data.length < 100) {
-                      debugPrint("❌ IndexedDB Base64 verisi geçersiz");
+                      debugPrint("❌ TEK DOSYA MODU Base64 verisi geçersiz");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('❌ IndexedDB PDF verisi geçersiz'),
+                            content: Text('❌ PDF verisi geçersiz'),
                             backgroundColor: Colors.red,
                             duration: Duration(seconds: 2),
                           ),
@@ -1005,13 +1085,13 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     List<int> bytes;
                     try {
                       bytes = base64Decode(cleanBase64);
-                      debugPrint("✅ IndexedDB Base64 decode başarılı: \${bytes.length} bytes");
+                      debugPrint("✅ TEK DOSYA MODU Base64 decode başarılı: ${bytes.length} bytes");
                     } catch (e) {
-                      debugPrint("❌ IndexedDB Base64 decode hatası: $e");
+                      debugPrint("❌ TEK DOSYA MODU Base64 decode hatası: $e");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('❌ IndexedDB PDF verisi decode edilemedi'),
+                            content: Text('❌ PDF verisi decode edilemedi'),
                             backgroundColor: Colors.red,
                             duration: Duration(seconds: 2),
                           ),
@@ -1021,11 +1101,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     }
                     
                     if (bytes.length < 1024) {
-                      debugPrint("❌ IndexedDB PDF verisi çok küçük: \${bytes.length} bytes");
+                      debugPrint("❌ TEK DOSYA MODU PDF verisi çok küçük: ${bytes.length} bytes");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('❌ IndexedDB PDF verisi geçersiz (çok küçük)'),
+                            content: Text('❌ PDF verisi geçersiz (çok küçük)'),
                             backgroundColor: Colors.red,
                             duration: Duration(seconds: 2),
                           ),
@@ -1039,13 +1119,13 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       name: fileName,
                     );
                     
-                    debugPrint("✅ IndexedDB Yazdırma tamamlandı");
+                    debugPrint("✅ TEK DOSYA MODU Yazdırma tamamlandı");
                   } catch (e) {
-                    debugPrint("❌ IndexedDB Yazdırma hatası: $e");
+                    debugPrint("❌ TEK DOSYA MODU Yazdırma hatası: $e");
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('❌ IndexedDB Yazdırma hatası: \${e.toString()}'),
+                          content: Text('❌ Yazdırma hatası: ${e.toString()}'),
                           backgroundColor: Colors.red,
                           duration: const Duration(seconds: 2),
                         ),
@@ -1060,7 +1140,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                 handlerName: 'downloadPdfBase64',
                 callback: (args) async {
                   if (!_canCallFunction(_lastDownloadCall)) {
-                    debugPrint("⚠️ IndexedDB İndirme çağrısı çok hızlı, atlandı");
+                    debugPrint("⚠️ TEK DOSYA MODU İndirme çağrısı çok hızlı, atlandı");
                     return;
                   }
                   _lastDownloadCall = DateTime.now();
@@ -1069,14 +1149,14 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     String base64Data = args[0];
                     String fileName = args.length > 1 ? args[1] : "document.pdf";
                     
-                    debugPrint("💾 IndexedDB PDF indiriliyor: $fileName");
+                    debugPrint("💾 TEK DOSYA MODU PDF indiriliyor: $fileName");
                     
                     if (base64Data.isEmpty || base64Data.length < 100) {
-                      debugPrint("❌ IndexedDB Base64 verisi geçersiz");
+                      debugPrint("❌ TEK DOSYA MODU Base64 verisi geçersiz");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('❌ IndexedDB PDF verisi geçersiz'),
+                            content: Text('❌ PDF verisi geçersiz'),
                             backgroundColor: Colors.red,
                             duration: Duration(seconds: 2),
                           ),
@@ -1093,13 +1173,13 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     List<int> bytes;
                     try {
                       bytes = base64Decode(cleanBase64);
-                      debugPrint("✅ IndexedDB Base64 decode başarılı: \${bytes.length} bytes");
+                      debugPrint("✅ TEK DOSYA MODU Base64 decode başarılı: ${bytes.length} bytes");
                     } catch (e) {
-                      debugPrint("❌ IndexedDB Base64 decode hatası: $e");
+                      debugPrint("❌ TEK DOSYA MODU Base64 decode hatası: $e");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('❌ IndexedDB PDF verisi decode edilemedi'),
+                            content: Text('❌ PDF verisi decode edilemedi'),
                             backgroundColor: Colors.red,
                             duration: Duration(seconds: 2),
                           ),
@@ -1109,11 +1189,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     }
                     
                     if (bytes.length < 1024) {
-                      debugPrint("❌ IndexedDB PDF verisi çok küçük: \${bytes.length} bytes");
+                      debugPrint("❌ TEK DOSYA MODU PDF verisi çok küçük: ${bytes.length} bytes");
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('❌ IndexedDB PDF verisi geçersiz (çok küçük)'),
+                            content: Text('❌ PDF verisi geçersiz (çok küçük)'),
                             backgroundColor: Colors.red,
                             duration: Duration(seconds: 2),
                           ),
@@ -1127,7 +1207,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       directory = Directory('/storage/emulated/0/Download/PDF Reader');
                       if (!await directory.exists()) {
                         await directory.create(recursive: true);
-                        debugPrint("✅ IndexedDB PDF Reader klasörü oluşturuldu");
+                        debugPrint("✅ TEK DOSYA MODU PDF Reader klasörü oluşturuldu");
                       }
                     } else {
                       directory = await getApplicationDocumentsDirectory();
@@ -1135,23 +1215,23 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                     if (directory != null && await directory.exists()) {
                       String nameWithoutExt = fileName.replaceAll('.pdf', '');
-                      String finalName = '\${nameWithoutExt}_indexeddb.pdf';
-                      File targetFile = File('\${directory.path}/\$finalName');
+                      String finalName = '${nameWithoutExt}_tekmodu.pdf';
+                      File targetFile = File('${directory.path}/$finalName');
                       
                       int counter = 1;
                       while (await targetFile.exists()) {
-                        finalName = '\${nameWithoutExt}_indexeddb (\$counter).pdf';
-                        targetFile = File('\${directory.path}/\$finalName');
+                        finalName = '${nameWithoutExt}_tekmodu ($counter).pdf';
+                        targetFile = File('${directory.path}/$finalName');
                         counter++;
                       }
                       
                       await targetFile.writeAsBytes(bytes);
-                      debugPrint("✅ IndexedDB PDF indirildi: \${targetFile.path}");
+                      debugPrint("✅ TEK DOSYA MODU PDF indirildi: ${targetFile.path}");
                       
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('✅ IndexedDB İndirildi: \$finalName'),
+                            content: Text('✅ İndirildi: $finalName'),
                             backgroundColor: Colors.green,
                             duration: const Duration(seconds: 3),
                           ),
@@ -1159,11 +1239,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       }
                     }
                   } catch (e) {
-                    debugPrint("❌ IndexedDB İndirme hatası: $e");
+                    debugPrint("❌ TEK DOSYA MODU İndirme hatası: $e");
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('❌ IndexedDB İndirme hatası: \${e.toString()}'),
+                          content: Text('❌ İndirme hatası: ${e.toString()}'),
                           backgroundColor: Colors.red,
                         ),
                       );
@@ -1176,7 +1256,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               controller.addJavaScriptHandler(
                 handlerName: 'checkIndexedDBSupport',
                 callback: (args) async {
-                  debugPrint("✅ IndexedDB desteği kontrolü: DESTEKLENİYOR");
+                  debugPrint("✅ TEK DOSYA MODU IndexedDB desteği kontrolü: DESTEKLENİYOR");
                   return true;
                 },
               );
@@ -1194,11 +1274,11 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                       'appDir': appDir.path,
                       'indexedDBSupported': true,
                       'maxPdfSize': 50,
-                      'storageType': 'indexeddb-arraybuffer-base64-optimized',
+                      'storageType': 'indexeddb-tek-dosya-modu',
                       'storagePath': tempDir.path,
                     });
                   } catch (e) {
-                    debugPrint("❌ IndexedDB Storage bilgisi hatası: $e");
+                    debugPrint("❌ TEK DOSYA MODU Storage bilgisi hatası: $e");
                     return "{}";
                   }
                 },
@@ -1215,18 +1295,19 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     'tempDir': (await getTemporaryDirectory()).path,
                     'appDir': (await getApplicationDocumentsDirectory()).path,
                     'indexedDBSupported': true,
-                    'storageMode': 'indexeddb-arraybuffer-base64-optimized',
+                    'storageMode': 'indexeddb-tek-dosya-modu',
                     'packageName': _packageInfo.packageName,
                     'appVersion': _packageInfo.version,
-                    'indexedDBVersion': '2.0',
+                    'indexedDBVersion': '3.0-tek-dosya',
                     'maxFileSizeMB': 50,
+                    'scanMode': 'single-file-no-duplicates',
                   });
                 },
               );
             },
             onLoadStart: (controller, url) {
               final urlString = url.toString();
-              debugPrint("🌐 IndexedDB Sayfa yükleniyor: $urlString");
+              debugPrint("🌐 TEK DOSYA MODU Sayfa yükleniyor: $urlString");
               
               final isViewer = urlString.contains("viewer.html");
               setState(() {
@@ -1235,18 +1316,18 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               });
               
               if (urlString.contains("index.html") && !urlString.contains("about:blank")) {
-                debugPrint("🏠 IndexedDB index.html yükleniyor");
+                debugPrint("🏠 TEK DOSYA MODU index.html yükleniyor");
                 Future.delayed(const Duration(milliseconds: 300), () async {
                   await controller.evaluateJavascript(source: """
                     (function() {
-                      console.log("🧹 IndexedDB index.html son temizlik...");
+                      console.log("🧹 TEK DOSYA MODU index.html son temizlik...");
                       if (typeof PDFViewerApplication !== 'undefined') {
                         PDFViewerApplication = undefined;
                       }
                       if (typeof viewerPdfManager !== 'undefined') {
                         viewerPdfManager = undefined;
                       }
-                      console.log("✅ IndexedDB index.html temiz slate hazır");
+                      console.log("✅ TEK DOSYA MODU index.html temiz slate hazır");
                     })();
                   """);
                 });
@@ -1254,7 +1335,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             },
             onLoadStop: (controller, url) async {
               final urlString = url.toString();
-              debugPrint("✅ IndexedDB Sayfa yüklendi: $urlString");
+              debugPrint("✅ TEK DOSYA MODU Sayfa yüklendi: $urlString");
               
               setState(() {
                 _isViewerOpen = urlString.contains("viewer.html");
@@ -1266,7 +1347,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               await controller.evaluateJavascript(source: """
                 (async function() {
                   try {
-                    console.log("📦 IndexedDB başlatılıyor...");
+                    console.log("📦 TEK DOSYA MODU IndexedDB başlatılıyor...");
                     
                     if (typeof indexedDB === 'undefined') {
                       console.error("❌ CRITICAL: IndexedDB desteklenmiyor!");
@@ -1275,23 +1356,23 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
                     
                     if (typeof pdfManager !== 'undefined' && pdfManager.init) {
                       const success = await pdfManager.init();
-                      console.log("📦 Main IndexedDB Manager: " + (success ? "✅ Başarılı" : "❌ Başarısız"));
+                      console.log("📦 TEK DOSYA MODU Main IndexedDB Manager: " + (success ? "✅ Başarılı" : "❌ Başarısız"));
                       if (success) {
                         const info = await pdfManager.getStorageInfo();
                         if (info) {
-                          console.log("💾 IndexedDB Storage kullanımı: " + info.usedMB + " MB / " + info.quotaMB + " MB");
+                          console.log("💾 TEK DOSYA MODU Storage kullanımı: " + info.usedMB + " MB / " + info.quotaMB + " MB");
                         }
                       }
                     }
                     
                     if (typeof viewerPdfManager !== 'undefined' && viewerPdfManager.init) {
                       const success = await viewerPdfManager.init();
-                      console.log("📦 Viewer IndexedDB Manager: " + (success ? "✅ Başarılı" : "❌ Başarısız"));
+                      console.log("📦 TEK DOSYA MODU Viewer IndexedDB Manager: " + (success ? "✅ Başarılı" : "❌ Başarısız"));
                     }
                     
-                    console.log("✅ IndexedDB hazır - ArrayBuffer + Base64 mode");
+                    console.log("✅ TEK DOSYA MODU hazır - HER DOSYA TEK SEFER");
                   } catch (e) {
-                    console.error("❌ IndexedDB başlatma hatası:", e);
+                    console.error("❌ TEK DOSYA MODU IndexedDB başlatma hatası:", e);
                   }
                 })();
               """);
@@ -1300,33 +1381,33 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
               final message = consoleMessage.message;
               final level = consoleMessage.messageLevel;
               
-              String prefix = "📱 INDEXEDDB JS";
+              String prefix = "📱 TEK DOSYA JS";
               if (level == ConsoleMessageLevel.ERROR) {
-                prefix = "❌ INDEXEDDB JS ERROR";
+                prefix = "❌ TEK DOSYA JS ERROR";
               } else if (level == ConsoleMessageLevel.WARNING) {
-                prefix = "⚠️ INDEXEDDB JS WARN";
+                prefix = "⚠️ TEK DOSYA JS WARN";
               } else if (level == ConsoleMessageLevel.DEBUG) {
-                prefix = "🐛 INDEXEDDB JS DEBUG";
+                prefix = "🐛 TEK DOSYA JS DEBUG";
               }
               
               debugPrint("$prefix: $message");
             },
             onLoadError: (controller, url, code, message) {
-              debugPrint("❌ IndexedDB Yükleme hatası: $message (code: $code)");
+              debugPrint("❌ TEK DOSYA MODU Yükleme hatası: $message (code: $code)");
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('❌ IndexedDB Yükleme hatası: $message'),
+                    content: Text('❌ Yükleme hatası: $message'),
                     backgroundColor: Colors.red,
                   ),
                 );
               }
             },
             onLoadHttpError: (controller, url, statusCode, description) {
-              debugPrint("❌ IndexedDB HTTP hatası: $description (status: $statusCode)");
+              debugPrint("❌ TEK DOSYA MODU HTTP hatası: $description (status: $statusCode)");
             },
             onPermissionRequest: (controller, permissionRequest) async {
-              debugPrint("🔒 IndexedDB İzin isteği: \${permissionRequest.resources}");
+              debugPrint("🔒 TEK DOSYA MODU İzin isteği: ${permissionRequest.resources}");
               return PermissionResponse(
                 resources: permissionRequest.resources,
                 action: PermissionResponseAction.GRANT,
@@ -1334,7 +1415,7 @@ class _WebViewPageState extends State<WebViewPage> with WidgetsBindingObserver {
             },
             onProgressChanged: (controller, progress) {
               if (progress == 100) {
-                debugPrint("✅ IndexedDB Sayfa yükleme tamamlandı (%100)");
+                debugPrint("✅ TEK DOSYA MODU Sayfa yükleme tamamlandı (%100)");
               }
             },
           ),
