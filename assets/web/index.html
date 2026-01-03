@@ -2526,35 +2526,25 @@ async function scanDeviceForPDFs() {
             }
         }
         
-        // YENİ: Eski devicePDFs'leri sakla ama sadece device kaynaklı olanları
-        const oldDevicePDFs = devicePDFs.filter(file => file.source === 'device');
-        devicePDFs = [...oldDevicePDFs]; // Sadece device dosyalarını koru
+        // ⭐ YENİ: TÜM ESKİ DEVICE PDF'LERİNİ TEMİZLE
+        devicePDFs = [];
         
         let nextId = 1000;
-        const seenPaths = new Set();
-        
-        // Mevcut devicePDFs'teki path'leri seenPaths'a ekle
-        devicePDFs.forEach(file => {
-            if (file.fullPath) {
-                seenPaths.add(file.fullPath);
-            }
-        });
+        const seenHashes = new Set(); // ⭐ DOSYA HASH'LERİNİ TAKİP ET
         
         for (const fileInfo of pdfFiles) {
-            // Aynı path'teki dosyaları kontrol et
-            if (seenPaths.has(fileInfo.path)) {
-                console.log(`⏭️  Zaten listede (path): ${fileInfo.name}`);
+            // ⭐ YENİ: DOSYA HASH'İ AL (Flutter'dan gelmeli)
+            // Eğer Flutter dosya hash'i göndermiyorsa, kendimiz oluşturalım
+            const fileHash = fileInfo.hash || 
+                             await calculateFileHash(fileInfo.path, fileInfo.size, fileInfo.modified);
+            
+            if (seenHashes.has(fileHash)) {
+                console.log(`⏭️  Aynı hash'e sahip dosya atlandı: ${fileInfo.name}`);
                 continue;
             }
             
-            // IndexedDB'de kontrol et (sadece imported dosyalar için)
-            const alreadyInDB = await pdfManager.checkIfPdfExists(fileInfo.path);
-            if (alreadyInDB) {
-                console.log(`⏭️  IndexedDB'de zaten var: ${fileInfo.name}`);
-                continue;
-            }
+            seenHashes.add(fileHash);
             
-            seenPaths.add(fileInfo.path);
             const sizeFormatted = fileInfo.size ? formatBytes(fileInfo.size) : '0 KB';
             const date = new Date(fileInfo.modified);
             const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
@@ -2570,21 +2560,17 @@ async function scanDeviceForPDFs() {
                 fullPath: fileInfo.path,
                 source: 'device',
                 filePath: fileInfo.path,
-                // YENİ: Benzersiz kontrol için hash ekle
-                uniqueKey: `${fileInfo.path}_${fileInfo.size}_${fileInfo.modified}`
+                // ⭐ YENİ: HASH EKLE
+                fileHash: fileHash,
+                // ⭐ YENİ: REAL PATH (symlink olmayan)
+                realPath: fileInfo.realPath || fileInfo.path
             });
         }
         
-        // YENİ: Yinelenen dosyaları temizle (uniqueKey'e göre)
-        devicePDFs = removeDuplicatesByKey(devicePDFs, 'uniqueKey');
+        // ⭐ YENİ: YİNELENEN DOSYALARI SON KONTROL
+        devicePDFs = removeExactDuplicates(devicePDFs);
         
-        // YENİ: importedFiles ile karşılaştır, aynı dosyaları çıkar
-        devicePDFs = devicePDFs.filter(deviceFile => {
-            return !importedFiles.some(importedFile => 
-                importedFile.name === deviceFile.name && 
-                importedFile.size === deviceFile.size
-            );
-        });
+        console.log(`✅ Tarama tamamlandı: ${devicePDFs.length} benzersiz PDF bulundu`);
         
         checkPermissionAndUpdateUI();
         loadData();
@@ -2595,18 +2581,70 @@ async function scanDeviceForPDFs() {
     }
 }
 
-// YENİ: Yardımcı fonksiyon - Benzersiz dosyaları filtrele
-function removeDuplicatesByKey(array, key) {
-    const seen = new Set();
-    return array.filter(item => {
-        const keyValue = item[key];
-        if (seen.has(keyValue)) {
-            console.log(`⏭️  Yinelenen kaldırıldı: ${item.name}`);
-            return false;
+// ⭐ YENİ: DOSYA HASH HESAPLAMA
+async function calculateFileHash(path, size, modified) {
+    try {
+        // Basit bir hash: path + size + modified date
+        return `${path}_${size}_${modified}`.replace(/[^a-zA-Z0-9]/g, '_');
+    } catch (e) {
+        // Fallback: sadece dosya adı ve boyutu
+        const fileName = path.split('/').pop();
+        return `${fileName}_${size}`.replace(/[^a-zA-Z0-9]/g, '_');
+    }
+}
+
+// ⭐ YENİ: KESİN YİNELENME KONTROLÜ
+function removeExactDuplicates(pdfs) {
+    const uniqueMap = new Map();
+    
+    pdfs.forEach(pdf => {
+        // 1. Dosya adı + boyut kontrolü
+        const key1 = `${pdf.name}_${pdf.size}`;
+        
+        // 2. Dosya hash kontrolü
+        const key2 = pdf.fileHash;
+        
+        // 3. Real path kontrolü
+        const key3 = pdf.realPath;
+        
+        // Eğer bu key'lerden biri daha önce görüldüyse, atla
+        if (!uniqueMap.has(key1) && !uniqueMap.has(key2) && !uniqueMap.has(key3)) {
+            uniqueMap.set(key1, pdf);
+            uniqueMap.set(key2, pdf);
+            uniqueMap.set(key3, pdf);
+        } else {
+            console.log(`🗑️  KESİN yinelenen kaldırıldı: ${pdf.name} (${pdf.size})`);
         }
-        seen.add(keyValue);
-        return true;
     });
+    
+    return Array.from(uniqueMap.values()).filter((pdf, index, self) => 
+        index === self.findIndex(p => 
+            p.id === pdf.id
+        )
+    );
+}
+
+// loadData fonksiyonunu da güncelleyelim
+function loadData() {
+    const sortedRecent = [...recentFiles].sort((a, b) => {
+        return new Date(b.lastOpened || b.openedDate || 0) - new Date(a.lastOpened || a.openedDate || 0);
+    });
+    renderList('recentList', sortedRecent, 'recent');
+    
+    const sortedFavorites = [...favoriteFiles].sort((a, b) => {
+        return new Date(b.favoriteDate || 0) - new Date(a.favoriteDate || 0);
+    });
+    renderList('favoritesList', sortedFavorites, 'favorites');
+    
+    // ⭐ YENİ: SADECE DEVICE PDF'LERİ GÖSTER, IMPORTED'LARI KARIŞTIRMA
+    const onlyDevicePDFs = devicePDFs.filter(pdf => pdf.source === 'device');
+    
+    // Son yinelenen kontrol
+    const uniqueDevicePDFs = removeExactDuplicates(onlyDevicePDFs);
+    
+    renderList('deviceList', uniqueDevicePDFs, 'device');
+    
+    checkPermissionAndUpdateUI();
 }
 
 async function checkAndroidPermission() {
